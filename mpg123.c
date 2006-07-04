@@ -550,8 +550,7 @@ FALSE},
     {'f', "scale",       GLO_ARG | GLO_LONG, 0, &outscale,   0},
     {'n', "frames",      GLO_ARG | GLO_LONG, 0, &numframes,  0},
 #ifdef TERM_CONTROL
-    {'C', "control",	 GLO_INT,		     0, &param.term_ctrl, 
-TRUE},
+    {'C', "control",	 GLO_INT,		     0, &param.term_ctrl, TRUE},
 #endif
     {'b', "buffer",      GLO_ARG | GLO_LONG, 0, &param.usebuffer,  0},
     {'R', "remote",      GLO_INT,                  0, &param.remote,     
