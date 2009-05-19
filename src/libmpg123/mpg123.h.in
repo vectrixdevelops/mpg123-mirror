@@ -1,3 +1,4 @@
+
 /*
 	libmpg123: MPEG Audio Decoder library (version @PACKAGE_VERSION@)
 
@@ -383,6 +384,29 @@ EXPORT int mpg123_open_fd(mpg123_handle *mh, int fd);
  *  This works together with mpg123_decode(); you are responsible for reading and feeding the input bitstream.
  */
 EXPORT int mpg123_open_feed(mpg123_handle *mh);
+
+/******************************************************************************/
+/* raw performance interface */
+struct mpg123_raw_stream
+{
+	const unsigned char *buffer;
+	const unsigned char *bufend;
+	const unsigned char *this_frame;
+	const unsigned char *next_frame;
+	ssize_t pos;
+	ssize_t skip;
+};
+EXPORT int mpg123_open_raw(mpg123_handle *mh);
+EXPORT struct mpg123_raw_stream *mpg123_get_raw_stream(mpg123_handle *mh);
+EXPORT int mpg123_raw_reset(mpg123_handle *mh);
+EXPORT int mpg123_raw(mpg123_handle *mh, const unsigned char *in, size_t size);
+EXPORT int mpg123_decode_raw(mpg123_handle *mh, off_t *num, unsigned char **audio, size_t *bytes);
+/******************************************************************************/
+
+
+
+
+
 
 /** Closes the source, if libmpg123 opened it. */
 EXPORT int mpg123_close(mpg123_handle *mh);
