@@ -14,9 +14,15 @@
 
 /* Special case is fixed point math... which does work, but not that nice yet.  */
 #ifdef REAL_IS_FIXED
-# define REAL_PLUS_32767       ( 32767 << REAL_RADIX )
-# define REAL_MINUS_32768      ( -32768 << REAL_RADIX )
-# define REAL_TO_SHORT(x)      ((x) >> REAL_RADIX)
+static inline short idiv_signed_rounded(long x, int shift)
+{
+	x >>= (shift - 1);
+	x += (x & 1);
+	return (short)(x >> 1);
+}
+#  define REAL_PLUS_32767       ( 32767 << 15 )
+#  define REAL_MINUS_32768      ( -32768 << 15 )
+#  define REAL_TO_SHORT(x)      (idiv_signed_rounded(x, 15))
 /* This is just here for completeness, it is not used! */
 # define REAL_TO_S32(x)        (x)
 #endif
@@ -28,7 +34,7 @@
    This is nearly identical to proper rounding, just -+0.5 is rounded to 0 */
 #  if (defined REAL_IS_FLOAT) && (defined IEEE_FLOAT)
 /* this function is only available for IEEE754 single-precision values */
-static short ftoi16(float x)
+static inline short ftoi16(float x)
 {
 	union
 	{

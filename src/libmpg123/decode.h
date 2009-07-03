@@ -56,6 +56,7 @@ int synth_1to1_altivec    (real*, int, mpg123_handle*, int);
 int synth_1to1_stereo_altivec(real*, real*, mpg123_handle*);
 int synth_1to1_x86_64     (real*, int, mpg123_handle*, int);
 int synth_1to1_stereo_x86_64(real*, real*, mpg123_handle*);
+int synth_1to1_arm        (real*, int, mpg123_handle*, int);
 /* This is different, special usage in layer3.c only.
    Hence, the name... and now forget about it.
    Never use it outside that special portion of code inside layer3.c! */
@@ -212,8 +213,8 @@ void init_layer3_stuff(mpg123_handle *fr, real (*gainpow2)(mpg123_handle *fr, in
 #endif
 #ifndef NO_LAYER12
 void  init_layer12(void);
-real* init_layer12_table(mpg123_handle *fr, real *table, double m);
-void  init_layer12_stuff(mpg123_handle *fr, real* (*init_table)(mpg123_handle *fr, real *table, double m));
+real* init_layer12_table(mpg123_handle *fr, real *table, int m);
+void  init_layer12_stuff(mpg123_handle *fr, real* (*init_table)(mpg123_handle *fr, real *table, int m));
 #endif
 
 void prepare_decode_tables(void);
@@ -231,7 +232,7 @@ void make_decode_tables_mmx(mpg123_handle *fr);
 real init_layer3_gainpow2_mmx(mpg123_handle *fr, int i);
 #endif
 #ifndef NO_LAYER12
-real* init_layer12_table_mmx(mpg123_handle *fr, real *table, double m);
+real* init_layer12_table_mmx(mpg123_handle *fr, real *table, int m);
 #endif
 #endif
 

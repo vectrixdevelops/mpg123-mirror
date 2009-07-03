@@ -10,8 +10,8 @@ AC_PREREQ(2.57)
 
 dnl ############# Initialisation
 
-AC_INIT([mpg123], [1.8.0], [mpg123-devel@lists.sourceforge.net])
-LIBMPG123_VERSION=18:5:18
+AC_INIT([mpg123], [1.9.0], [mpg123-devel@lists.sourceforge.net])
+LIBMPG123_VERSION=19:0:19
 AC_SUBST(LIBMPG123_VERSION)
 
 AC_CONFIG_SRCDIR(src/mpg123.c)
@@ -111,25 +111,37 @@ else
 	AC_DEFINE(DYNAMIC_BUILD, 1, [ Define if building with dynamcally linked libmpg123])
 fi
 
-if test x"$modules" = xauto
+if test x"$modules" = xdisabled
 then
+	echo "Modules disabled, not checking for libltdl."
+else
+	have_ltdl=no
 	AC_CHECK_LIB( [ltdl], [lt_dlinit],
 		[ AC_CHECK_HEADER( [ltdl.h],
 			[
-				modules=enabled
-				LIBS="-lltdl $LIBS"
+				have_ltdl=yes
 				AC_DEFINE(HAVE_LTDL, 1, [ Define if libltdl is available ])
 			],
 			[
-				modules=disabled
 				AC_MSG_WARN([Found ltdl library but NOT the header file on your system])
 			] )
 		],
 		[
-			modules=disabled
 			AC_MSG_WARN([ltdl library not found])
 		]
 	)
+	if test x"$modules" = xenabled -a x"$have_ltdl" = xno; then
+		AC_MSG_ERROR([Modules enabled but no libltdl found! This will not work...])
+	fi
+	if test x"$modules" = xauto; then
+		if test x"$have_ltdl" = xyes; then
+			modules=enabled
+			echo "We found libltdl: Modules enabled."
+		else
+			echo "We did not find libltdl: Modules disabled."
+			modules=disabled
+		fi
+	fi
 fi
 
 if test x"$modules" = xdisabled
@@ -451,6 +463,8 @@ AC_ARG_WITH([cpu], [
   --with-cpu=x86-64       Use code optimized for x86-64 processors (AMD64 and Intel64)
   --with-cpu=x86-64_dither x86-64 code together with generic dithering (runtime selection)
   --with-cpu=altivec      Use code optimized for Altivec processors (PowerPC G4 and G5)
+  --with-cpu=ppc_nofpu    Use code optimized for PowerPC processors with fixed point arithmetic (experimental)
+  --with-cpu=arm_nofpu    Use code optimized for ARM processors with fixed point arithmetic (experimental)
 ])
 
 
@@ -470,9 +484,9 @@ fi
 
 
 case $target in
-  arm-*-linux*)
+  arm*-*-linux*)
     # check that... perhaps we are better off on arm with kernel math emulation
-    cpu_type="generic_nofpu"
+    cpu_type="arm_nofpu"
   ;;
   i386-*-linux*|i386-*-kfreebsd*-gnu)
     cpu_type="i386_fpu"
@@ -587,6 +601,19 @@ case $target in
   ;;
 esac
 
+AC_ARG_ENABLE(buffer,
+  [  --enable-buffer=[yes/no] disable audio buffer code (default uses system whitelist... proper checks later) ],
+  [
+    if test "x$enableval" = xyes
+    then
+      echo "Note: Enabling buffer per request... perhaps it will not build anyway."
+      buffer="enabled"
+    else
+      echo "Note: Disabling buffer per request."
+      buffer="disabled"
+    fi
+  ]
+)
 
 dnl Did user choose other CPU type ?
 if test "x$with_cpu" != "x"; then
@@ -594,6 +621,21 @@ if test "x$with_cpu" != "x"; then
 fi
 
 if test "x$cpu_type" = "xgeneric_nofpu"; then
+  real=disabled
+  int32=disabled
+fi
+
+if test "x$cpu_type" = "xi386_nofpu"; then
+  real=disabled
+  int32=disabled
+fi
+
+if test "x$cpu_type" = "xppc_nofpu"; then
+  real=disabled
+  int32=disabled
+fi
+
+if test "x$cpu_type" = "xarm_nofpu"; then
   real=disabled
   int32=disabled
 fi
@@ -976,7 +1018,6 @@ s_i386="dct64_i386"
 s_i486="$s_i386 synth_i486 dct64_i486"
 s_i586="$s_i386 synth_i586"
 s_i586d="$s_i386 synth_i586_dither"
-s_dither="dnoise"
 s_3dnow="$s_i386 synth_3dnow dct64_3dnow equalizer_3dnow"
 s_3dnowext="$s_i386 dct64_3dnowext dct64_mmx tabinit_mmx synth_3dnowext"
 if test "x$layer3" = "xenabled"; then
@@ -993,9 +1034,11 @@ s_x86multi="getcpuflags"
 if test "x$integers" = "xquality"; then
   s_sse="$s_sse synth_sse_accurate synth_stereo_sse_accurate"
   s_x86_64="$s_x86_64 synth_x86_64_accurate synth_stereo_x86_64_accurate"
+  s_arm="synth_arm_accurate"
 else
   s_sse="$s_sse synth_sse" # no stereo
   s_x86_64="$s_x86_64 synth_x86_64 synth_stereo_x86_64"
+  s_arm="synth_arm"
 fi
 
 dnl CPU specific compiler flags and sources
@@ -1007,7 +1050,7 @@ case $cpu_type in
   ;;
   generic_dither)
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_GENERIC_DITHER -DREAL_IS_FLOAT"
-    more_sources="$s_fpu $s_dither"
+    more_sources="$s_fpu"
     ccalign=no
   ;;
 dnl Not disabling buffer for float mode... check that this is OK now!
@@ -1019,6 +1062,16 @@ dnl Not disabling buffer for float mode... check that this is OK now!
   generic_nofpu)
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_GENERIC -DREAL_IS_FIXED"
     more_sources=
+    ccalign=no
+  ;;
+  ppc_nofpu)
+    ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_GENERIC -DOPT_PPC -DREAL_IS_FIXED"
+    more_sources=
+    ccalign=no
+  ;;
+  arm_nofpu)
+    ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_ARM -DREAL_IS_FIXED"
+    more_sources="$s_arm"
     ccalign=no
   ;;
   altivec)
@@ -1052,7 +1105,7 @@ dnl Not disabling buffer for float mode... check that this is OK now!
   ;;
   i586_dither) 
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_I586_DITHER -DREAL_IS_FLOAT"
-    more_sources="$s_fpu $s_i586d $s_dither"
+    more_sources="$s_fpu $s_i586d"
   ;;
   3dnow)
     # legacy 3dnow had the 3dnow paired with i586...
@@ -1085,7 +1138,7 @@ dnl Not disabling buffer for float mode... check that this is OK now!
  ;;
   x86_dither) 
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_MULTI -DOPT_GENERIC -DOPT_GENERIC_DITHER -DOPT_I386 -DOPT_I586 -DOPT_I586_DITHER -DOPT_MMX -DOPT_3DNOW -DOPT_3DNOWEXT -DOPT_SSE -DREAL_IS_FLOAT"
-    more_sources="$s_fpu $s_i386 $s_i586 $s_i586d $s_dither $s_mmx $s_3dnow $s_3dnowext $s_sse $s_x86multi"
+    more_sources="$s_fpu $s_i386 $s_i586 $s_i586d $s_mmx $s_3dnow $s_3dnowext $s_sse $s_x86multi"
   ;;
   x86-64) 
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_X86_64 -DREAL_IS_FLOAT"
@@ -1093,11 +1146,11 @@ dnl Not disabling buffer for float mode... check that this is OK now!
   ;;
   x86-64_dither) 
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_MULTI -DOPT_X86_64 -DOPT_GENERIC_DITHER -DREAL_IS_FLOAT"
-    more_sources="$s_fpu $s_dither $s_x86_64"
+    more_sources="$s_fpu $s_x86_64"
   ;;
   x86-64_all) # for direct comparison... undocumented actually very similar to the above because of generic code being there in the hidden anyway
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_MULTI -DOPT_X86_64 -DOPT_GENERIC -DOPT_GENERIC_DITHER -DREAL_IS_FLOAT"
-    more_sources="$s_fpu $s_dither $s_x86_64"
+    more_sources="$s_fpu $s_x86_64"
   ;;
   *)
   	AC_MSG_ERROR([Unknown CPU type '$cpu_type'])
@@ -1137,7 +1190,7 @@ fi
 dnl ############## Output module choice
 
 # The full list of supported modules to check, first come, first serve.
-check_modules="alsa oss coreaudio sndio sun win32 esd jack portaudio pulse sdl nas arts dummy"
+check_modules="alsa oss coreaudio sndio sun win32 esd jack portaudio pulse sdl nas arts openal dummy"
 # The final list.
 output_modules=
 
@@ -1305,6 +1358,33 @@ do
 				check_failed=yes
 			fi
 		;;
+		openal)
+			AC_CHECK_HEADERS([OpenAL/al.h OpenAL/alc.h AL/al.h AL/alc.h al.h alc.h])
+			if test "x${ac_cv_header_OpenAL_al_h}" = "xyes" \
+				 -a "x${ac_cv_header_OpenAL_alc_h}" = "xyes";
+			then #Mac OS X
+				output_modules="$output_modules openal"
+				OPENAL_LIBS="-framework OpenAL"
+				OPENAL_CFLAGS="-DOPENAL_SUBDIR_OPENAL"
+				HAVE_OPENAL="yes"
+			elif test "x${ac_cv_header_AL_al_h}" = "xyes" \
+				 -a "x${ac_cv_header_AL_alc_h}" = "xyes";
+			then #Linux
+				output_modules="$output_modules openal"
+				OPENAL_LIBS="-lopenal"
+				OPENAL_CFLAGS="-DOPENAL_SUBDIR_AL"
+				HAVE_OPENAL="yes"
+			elif test "x${ac_cv_header_al_h}" = "xyes" \
+				 -a "x${ac_cv_header_alc_h}" = "xyes";
+			then #Windows?
+				output_modules="$output_modules openal"
+				OPENAL_LIBS="-lopenal"
+				OPENAL_CFLAGS=""
+				HAVE_OPENAL="yes"
+			else
+				check_failed=yes
+			fi
+		;;
 # from here on only forced tests, untested code
 		hp)
 			# What's the deal with that and alib?
@@ -1370,7 +1450,7 @@ if test "x$check_forced" = xyes -a "x$check_failed" = "xyes"; then
 fi
 
 # When you extend check_modules, you should extend this:
-#for i in alsa oss coreaudio sndio sun win32 esd jack portaudio pulse sdl nas aix alib arts hp os2 sgi mint dummy; do echo $i; done |
+#for i in alsa oss coreaudio sndio sun win32 esd jack portaudio pulse sdl nas aix alib arts hp os2 sgi mint openal dummy; do echo $i; done |
 #perl -ne 'chomp; $big = uc($_); print <<EOT;
 #AC_SUBST(${big}_LIBS)
 #AC_SUBST(${big}_LDFLAGS)
@@ -1454,6 +1534,10 @@ AC_SUBST(MINT_LIBS)
 AC_SUBST(MINT_LDFLAGS)
 AC_SUBST(MINT_CFLAGS)
 AM_CONDITIONAL( [HAVE_MINT], [test "x$HAVE_MINT" = xyes] )
+AC_SUBST(OPENAL_LIBS)
+AC_SUBST(OPENAL_LDFLAGS)
+AC_SUBST(OPENAL_CFLAGS)
+AM_CONDITIONAL( [HAVE_OPENAL], [test "x$HAVE_OPENAL" = xyes] )
 AC_SUBST(DUMMY_LIBS)
 AC_SUBST(DUMMY_LDFLAGS)
 AC_SUBST(DUMMY_CFLAGS)
@@ -1590,6 +1674,11 @@ then
 			OUTPUT_LDFLAGS="$MINT_LDFLAGS"
 			OUTPUT_CFLAGS="$MINT_CFLAGS"
 		;;
+		openal)
+			OUTPUT_LIBS="$OPENAL_LIBS"
+			OUTPUT_LDFLAGS="$OPENAL_LDFLAGS"
+			OUTPUT_CFLAGS="$OPENAL_CFLAGS"
+		;;
 	esac
 else
 	# Now make a comma-separated list again... eliminating the possible duplicate and dummy.
@@ -1681,6 +1770,11 @@ fi
 AC_DEFINE_UNQUOTED(INDEX_SIZE, $seektable, [size of the frame index seek table])
 
 dnl ############## Final Output
+
+# Do that here to prevent the above tests usign -lltdl...
+if test "x$modules" = xenabled; then
+  LIBS="-lltdl $LIBS"
+fi
 
 AC_CONFIG_FILES([
 	Makefile

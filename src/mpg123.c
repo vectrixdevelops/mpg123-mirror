@@ -111,6 +111,7 @@ struct parameter param = {
 	,NULL /* force_encoding */
 	,1. /* preload */
 	,-1 /* preframes */
+	,-1 /* gain */
 };
 
 mpg123_handle *mh = NULL;
@@ -354,7 +355,7 @@ topt opts[] = {
 	{0,   "mono",        GLO_INT,  set_frameflag, &frameflag, MPG123_MONO_MIX},
 	{0,   "stereo",      GLO_INT,  set_frameflag, &frameflag, MPG123_FORCE_STEREO},
 	{0,   "reopen",      GLO_INT,  0, &param.force_reopen, 1},
-/*	{'g', "gain",        GLO_ARG | GLO_LONG, 0, &ao.gain,    0}, FIXME */
+	{'g', "gain",        GLO_ARG | GLO_LONG, 0, &param.gain,    0},
 	{'r', "rate",        GLO_ARG | GLO_LONG, 0, &param.force_rate,  0},
 	{0,   "8bit",        GLO_INT,  set_frameflag, &frameflag, MPG123_FORCE_8BIT},
 	{0,   "float",       GLO_INT,  set_frameflag, &frameflag, MPG123_FORCE_FLOAT},
@@ -685,16 +686,18 @@ int main(int argc, char *argv[])
 	struct timeval start_time;
 #endif
 
+	/* Extract binary and path, take stuff before/after last / or \ . */
+	if((prgName = strrchr(argv[0], '/')) || (prgName = strrchr(argv[0], '\\')))
 	{
-		/* Hack the path of the binary... needed for relative module search. */
-		int i;
+		/* There is some explicit path. */
+		prgName[0] = 0; /* End byte for path. */
+		prgName++;
 		binpath = argv[0];
-		for(i=strlen(binpath)-1; i>-1; --i)
-		if(binpath[i] == '/' || binpath[i] == '\\')
-		{
-			binpath[i] = 0;
-			break;
-		}
+	}
+	else
+	{
+		prgName = argv[0]; /* No path separators there. */
+		binpath = NULL; /* No path at all. */
 	}
 
 	/* Need to initialize mpg123 lib here for default parameter values. */
@@ -730,8 +733,6 @@ int main(int argc, char *argv[])
         _wildcard(&argc,&argv);
 #endif
 
-	(prgName = strrchr(argv[0], '/')) ? prgName++ : (prgName = argv[0]);
-
 	while ((result = getlopt(argc, argv, opts)))
 	switch (result) {
 		case GLO_UNKNOWN:
@@ -763,6 +764,10 @@ int main(int argc, char *argv[])
 		printf("\n");
 		mpg123_delete_pars(mp);
 		return 0;
+	}
+	if(param.gain != -1)
+	{
+	    warning("The parameter -g is deprecated and may be removed in the future.");
 	}
 
 	if (loptind >= argc && !param.listname && !param.remote) usage(1);
@@ -1086,7 +1091,7 @@ static void usage(int err)  /* print syntax & exit */
 	fprintf(o,"   -k n  skip first n frames [0]        -n n  decode only n frames [all]\n");
 	fprintf(o,"   -c    check range violations         -y    DISABLE resync on errors\n");
 	fprintf(o,"   -b n  output buffer: n Kbytes [0]    -f n  change scalefactor [%li]\n", param.outscale);
-	fprintf(o,"   -r n  set/force samplerate [auto]    -g n  set audio hardware output gain\n");
+	fprintf(o,"   -r n  set/force samplerate [auto]\n");
 	fprintf(o,"   -os,-ol,-oh  output to built-in speaker,line-out connector,headphones\n");
 	#ifdef NAS
 	fprintf(o,"                                        -a d  set NAS server\n");
@@ -1171,7 +1176,7 @@ static void long_usage(int err)
 	fprintf(o,"        --force-3dnow      force use of 3DNow! optimized routine (obsoleted by --test-cpu)\n");
 	fprintf(o,"        --no-3dnow         force use of floating-pointer routine (obsoleted by --cpu)\n");
 	#endif
-	fprintf(o," -g     --gain             set audio hardware output gain\n");
+	fprintf(o," -g     --gain             [DEPRECATED] set audio hardware output gain\n");
 	fprintf(o," -f <n> --scale <n>        scale output samples (soft gain - based on 32768), default=%li)\n", param.outscale);
 	fprintf(o,"        --rva-mix,\n");
 	fprintf(o,"        --rva-radio        use RVA2/ReplayGain values for mix/radio mode\n");

@@ -53,6 +53,73 @@ void frame_init(mpg123_handle *fr)
 	frame_init_par(fr, NULL);
 }
 
+#ifdef OPT_DITHER
+static void dither_table_init(float *dithertable)
+{
+	int32_t i;
+	uint32_t seed = 2463534242UL;
+	float input_noise;
+	float xv[9], yv[9];
+	union
+	{
+		uint32_t i;
+		float f;
+	} dither_noise;
+	
+	for(i=0;i<9;i++)
+	{
+		xv[i] = yv[i] = 0.0f;
+	}
+	
+	for(i=0;i<DITHERSIZE;i++)
+	{
+		/* generate 1st pseudo-random number (xorshift32) */
+		seed ^= (seed<<13);
+		seed ^= (seed>>17);
+		seed ^= (seed<<5);
+		
+		/* scale the number to [-0.5, 0.5] */
+#ifdef IEEE_FLOAT
+		dither_noise.i = (seed>>9)|0x3f800000;
+		dither_noise.f -= 1.5f;
+#else
+		dither_noise.f = (double)seed / 4294967295.0;
+		dither_noise.f -= 0.5f;
+#endif
+		
+		input_noise = dither_noise.f;
+		
+		/* generate 2nd pseudo-random number, to make a TPDF distribution */
+		seed ^= (seed<<13);
+		seed ^= (seed>>17);
+		seed ^= (seed<<5);
+		
+		/* scale the number to [-0.5, 0.5] */
+#ifdef IEEE_FLOAT
+		dither_noise.i = (seed>>9)|0x3f800000;
+		dither_noise.f -= 1.5f;
+#else
+		dither_noise.f = (double)seed / 4294967295.0;
+		dither_noise.f -= 0.5f;
+#endif
+		
+		input_noise += dither_noise.f;
+		
+		/* apply 8th order Chebyshev high-pass IIR filter */
+		xv[0] = xv[1]; xv[1] = xv[2]; xv[2] = xv[3]; xv[3] = xv[4]; xv[4] = xv[5]; xv[5] = xv[6]; xv[6] = xv[7]; xv[7] = xv[8]; 
+		xv[8] = input_noise / 1.046605543e+07;
+		yv[0] = yv[1]; yv[1] = yv[2]; yv[2] = yv[3]; yv[3] = yv[4]; yv[4] = yv[5]; yv[5] = yv[6]; yv[6] = yv[7]; yv[7] = yv[8]; 
+		yv[8] = (xv[0] + xv[8]) - 8 * (xv[1] + xv[7]) + 28 * (xv[2] + xv[6])
+				- 56 * (xv[3] + xv[5]) + 70 * xv[4]
+				+ ( -0.6610337226 * yv[0]) + ( -5.2856836445 * yv[1])
+				+ (-18.7646200370 * yv[2]) + (-38.6287198220 * yv[3])
+				+ (-50.4388759960 * yv[4]) + (-42.7846655830 * yv[5])
+				+ (-23.0310886710 * yv[6]) + ( -7.1965249172 * yv[7]);
+		dithertable[i] = yv[8] * 3.0f;
+	}
+}
+#endif
+
 void frame_init_par(mpg123_handle *fr, mpg123_pars *mp)
 {
 	fr->own_buffer = FALSE;
@@ -98,8 +165,8 @@ void frame_init_par(mpg123_handle *fr, mpg123_pars *mp)
 	frame_index_setup(fr); /* Apply the size setting. */
 #endif
 #ifdef OPT_DITHER
-	/* The idea is to read that at runtime in the future... to avoid bloating the binary. */
-	fr->dithernoise = dithernoise;
+	/* run-time dither noise table generation */
+	dither_table_init(fr->dithernoise);
 #endif
 }
 
@@ -276,7 +343,7 @@ int frame_buffers(mpg123_handle *fr)
 		}
 #endif
 #endif
-#ifdef OPT_ALTIVEC
+#if defined(OPT_ALTIVEC) || defined(OPT_ARM) 
 		if(decwin_size < (512+32)*4) decwin_size = (512+32)*4;
 		decwin_size += 512*4;
 #endif
@@ -442,6 +509,7 @@ static void frame_fixed_reset(mpg123_handle *fr)
 #endif
 	fr->halfphase = 0; /* here or indeed only on first-time init? */
 	fr->error_protection = 0;
+	fr->freeformat_framesize = -1;
 }
 
 void frame_free_buffers(mpg123_handle *fr)
@@ -688,6 +756,22 @@ void frame_gapless_realinit(mpg123_handle *fr)
 	fr->end_os   = frame_ins2outs(fr, fr->end_s);
 	debug2("frame_gapless_realinit: from %lu to %lu samples", (long unsigned)fr->begin_os, (long unsigned)fr->end_os);
 }
+
+/* When we got a new sample count, update the gaplessness. */
+void frame_gapless_update(mpg123_handle *fr, off_t total_samples)
+{
+	if(fr->end_s < 1)
+	{
+		fr->end_s = total_samples;
+		frame_gapless_realinit(fr);
+	}
+	else if(fr->end_s > total_samples)
+	{
+		if(NOQUIET) error2("end sample count smaller than gapless end! (%"OFF_P" < %"OFF_P").", (off_p)total_samples, (off_p)fr->end_s);
+		fr->end_s = total_samples;
+	}
+}
+
 #endif
 
 /* Compute the needed frame to ignore from, for getting accurate/consistent output for intended firstframe. */

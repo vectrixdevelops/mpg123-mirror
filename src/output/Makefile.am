@@ -15,7 +15,7 @@ pkglib_LTLIBRARIES =
 # These are not tested and _very_ likely need work: aix alib hp os2 sgi mint
 
 # Use that sh/perl script to generate the module entries:
-#for i in alsa coreaudio esd jack nas oss portaudio pulse sdl sndio sun win32 aix alib arts hp os2 sgi mint dummy; do echo $i; done |
+#for i in alsa coreaudio esd jack nas oss portaudio pulse sdl sndio sun win32 aix alib arts hp os2 sgi mint openal dummy; do #echo $i; done |
 #perl -ne 'chomp; $big = uc($_); print <<EOT;
 #
 #if HAVE_$big
@@ -178,6 +178,14 @@ output_mint_la_SOURCES = mint.c
 output_mint_la_LDFLAGS = -module -no-undefined -avoid-version -export-dynamic @MINT_LDFLAGS@
 output_mint_la_CFLAGS  = @MINT_CFLAGS@
 output_mint_la_LIBADD  = @MINT_LIBS@ 
+endif
+
+if HAVE_OPENAL
+pkglib_LTLIBRARIES += output_openal.la
+output_openal_la_SOURCES = openal.c
+output_openal_la_LDFLAGS = -module -no-undefined -avoid-version -export-dynamic @OPENAL_LDFLAGS@
+output_openal_la_CFLAGS  = @OPENAL_CFLAGS@
+output_openal_la_LIBADD  = @OPENAL_LIBS@ 
 endif
 
 if HAVE_DUMMY

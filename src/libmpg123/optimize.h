@@ -37,7 +37,7 @@ enum optdec
 { /* autodec needs to be =0 and the first, nodec needs to be the last -- for loops! */
 	autodec=0, generic, generic_dither, idrei,
 	ivier, ifuenf, ifuenf_dither, mmx,
-	dreidnow, dreidnowext, altivec, sse, x86_64,
+	dreidnow, dreidnowext, altivec, sse, x86_64, arm,
 	nodec
 };
 enum optcla { nocla=0, normal, mmxsse };
@@ -178,13 +178,17 @@ extern const int costab_mmxsse[];
 #endif
 #endif
 
+#ifdef OPT_ARM
+#ifndef OPT_MULTI
+#	define defopt arm
+#endif
+#endif
+
 /* used for multi opt mode and the single 3dnow mode to have the old 3dnow test flag still working */
 void check_decoders(void);
 
-/* Announce the data in dnoise.c ... */
 #ifdef OPT_DITHER
 #define DITHERSIZE 65536
-extern float dithernoise[DITHERSIZE];
 #endif
 
 /*

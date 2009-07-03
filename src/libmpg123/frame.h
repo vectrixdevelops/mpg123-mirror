@@ -96,7 +96,7 @@ struct mpg123_handle_struct
 	int bo; /* Just have it always here. */
 #ifdef OPT_DITHER
 	int ditherindex;
-	float *dithernoise;
+	float dithernoise[DITHERSIZE];
 #endif
 	unsigned char* rawdecwin; /* the block with all decwins */
 	int rawdecwins; /* size of rawdecwin memory */
@@ -201,6 +201,8 @@ struct mpg123_handle_struct
 	char accurate; /* Flag to see if we trust the frame number. */
 	char silent_resync; /* Do not complain for the next n resyncs. */
 	unsigned char* xing_toc; /* The seek TOC from Xing header. */
+	int freeformat;
+	long freeformat_framesize;
 
 	/* bitstream info; bsi */
 	int bitindex;
@@ -324,6 +326,7 @@ MPEG 2.5
 /* still fine-tuning the "real music" window... see read_frame */
 void frame_gapless_init(mpg123_handle *fr, off_t b, off_t e);
 void frame_gapless_realinit(mpg123_handle *fr);
+void frame_gapless_update(mpg123_handle *mh, off_t total_samples);
 /*void frame_gapless_position(mpg123_handle* fr);
 void frame_gapless_bytify(mpg123_handle *fr);
 void frame_gapless_ignore(mpg123_handle *fr, off_t frames);*/
