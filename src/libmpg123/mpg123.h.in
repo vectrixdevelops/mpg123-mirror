@@ -1011,7 +1011,8 @@ typedef struct mpgraw_state
 
 /*
  * Open a mpg123 stream for raw access with the given settings.
- *
+ * Supply 0 as the samplerate parameter to decode to the native samplerate
+ * of the input.
  */
 EXPORT int mpgraw_open(
 	mpgraw_state* rs,

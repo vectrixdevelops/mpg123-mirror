@@ -704,6 +704,9 @@ int mpgraw_open(
 	int channels,
 	int encodings )
 {
+    size_t i, nrates;
+    const long *rates;
+
 	memset( rs, 0, sizeof( *rs ) );
 
 	rs->mh = mpg123_new( decoder, &rs->error );
@@ -718,9 +721,23 @@ int mpgraw_open(
 
 		if( ! rs->error )
 		{
-			if( failed( mpg123_format( rs->mh, samplerate, channels, encodings ) ) )
-				rs->error = error_code( rs );
-		}
+            if(samplerate == 0)
+            {
+                rates = NULL;
+	            nrates = 0;
+	            mpg123_rates(&rates, &nrates);
+	            for(i=0; i<nrates; i++)
+	            {
+		            if( failed( mpg123_format( rs->mh, rates[i], channels,  encodings ) ) )
+                        rs->error = error_code( rs );
+	            }
+            }
+            else
+            {
+			    if( failed( mpg123_format( rs->mh, samplerate, channels, encodings ) ) )
+				    rs->error = error_code( rs );
+		    }
+        }
 
 		if( ! rs->error )
 		{
