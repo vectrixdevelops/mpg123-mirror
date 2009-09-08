@@ -49,6 +49,7 @@ libmpg123_la_SOURCES = \
 	synth_8bit.h \
 	synths.h \
 	equalizer.c \
+	feature.c \
 	huffman.h \
 	icy.h \
 	icy2utf8.h \
@@ -75,6 +76,8 @@ EXTRA_libmpg123_la_SOURCES = \
 	layer1.c \
 	layer2.c \
 	layer3.c \
+	dither.h \
+	dither.c \
 	dct36_3dnowext.S \
 	dct36_3dnow.S \
 	dct64_3dnowext.S \

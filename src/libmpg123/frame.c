@@ -53,73 +53,6 @@ void frame_init(mpg123_handle *fr)
 	frame_init_par(fr, NULL);
 }
 
-#ifdef OPT_DITHER
-static void dither_table_init(float *dithertable)
-{
-	int32_t i;
-	uint32_t seed = 2463534242UL;
-	float input_noise;
-	float xv[9], yv[9];
-	union
-	{
-		uint32_t i;
-		float f;
-	} dither_noise;
-	
-	for(i=0;i<9;i++)
-	{
-		xv[i] = yv[i] = 0.0f;
-	}
-	
-	for(i=0;i<DITHERSIZE;i++)
-	{
-		/* generate 1st pseudo-random number (xorshift32) */
-		seed ^= (seed<<13);
-		seed ^= (seed>>17);
-		seed ^= (seed<<5);
-		
-		/* scale the number to [-0.5, 0.5] */
-#ifdef IEEE_FLOAT
-		dither_noise.i = (seed>>9)|0x3f800000;
-		dither_noise.f -= 1.5f;
-#else
-		dither_noise.f = (double)seed / 4294967295.0;
-		dither_noise.f -= 0.5f;
-#endif
-		
-		input_noise = dither_noise.f;
-		
-		/* generate 2nd pseudo-random number, to make a TPDF distribution */
-		seed ^= (seed<<13);
-		seed ^= (seed>>17);
-		seed ^= (seed<<5);
-		
-		/* scale the number to [-0.5, 0.5] */
-#ifdef IEEE_FLOAT
-		dither_noise.i = (seed>>9)|0x3f800000;
-		dither_noise.f -= 1.5f;
-#else
-		dither_noise.f = (double)seed / 4294967295.0;
-		dither_noise.f -= 0.5f;
-#endif
-		
-		input_noise += dither_noise.f;
-		
-		/* apply 8th order Chebyshev high-pass IIR filter */
-		xv[0] = xv[1]; xv[1] = xv[2]; xv[2] = xv[3]; xv[3] = xv[4]; xv[4] = xv[5]; xv[5] = xv[6]; xv[6] = xv[7]; xv[7] = xv[8]; 
-		xv[8] = input_noise / 1.046605543e+07;
-		yv[0] = yv[1]; yv[1] = yv[2]; yv[2] = yv[3]; yv[3] = yv[4]; yv[4] = yv[5]; yv[5] = yv[6]; yv[6] = yv[7]; yv[7] = yv[8]; 
-		yv[8] = (xv[0] + xv[8]) - 8 * (xv[1] + xv[7]) + 28 * (xv[2] + xv[6])
-				- 56 * (xv[3] + xv[5]) + 70 * xv[4]
-				+ ( -0.6610337226 * yv[0]) + ( -5.2856836445 * yv[1])
-				+ (-18.7646200370 * yv[2]) + (-38.6287198220 * yv[3])
-				+ (-50.4388759960 * yv[4]) + (-42.7846655830 * yv[5])
-				+ (-23.0310886710 * yv[6]) + ( -7.1965249172 * yv[7]);
-		dithertable[i] = yv[8] * 3.0f;
-	}
-}
-#endif
-
 void frame_init_par(mpg123_handle *fr, mpg123_pars *mp)
 {
 	fr->own_buffer = FALSE;
@@ -130,6 +63,9 @@ void frame_init_par(mpg123_handle *fr, mpg123_pars *mp)
 	fr->rawdecwins = 0;
 #ifndef NO_8BIT
 	fr->conv16to8_buf = NULL;
+#endif
+#ifdef OPT_DITHER
+	fr->dithernoise = NULL;
 #endif
 	fr->xing_toc = NULL;
 	fr->cpu_opts.type = defdec();
@@ -164,11 +100,24 @@ void frame_init_par(mpg123_handle *fr, mpg123_pars *mp)
 	fi_init(&fr->index);
 	frame_index_setup(fr); /* Apply the size setting. */
 #endif
-#ifdef OPT_DITHER
-	/* run-time dither noise table generation */
-	dither_table_init(fr->dithernoise);
-#endif
 }
+
+#ifdef OPT_DITHER
+/* Also, only allocate the memory for the table on demand.
+   In future, one could create special noise for different sampling frequencies(?). */
+int frame_dither_init(mpg123_handle *fr)
+{
+	/* run-time dither noise table generation */
+	if(fr->dithernoise == NULL)
+	{
+		fr->dithernoise = malloc(sizeof(float)*DITHERSIZE);
+		if(fr->dithernoise == NULL) return 0;
+
+		dither_table_init(fr->dithernoise);
+	}
+	return 1;
+}
+#endif
 
 mpg123_pars attribute_align_arg *mpg123_new_pars(int *error)
 {
@@ -538,6 +487,13 @@ void frame_exit(mpg123_handle *fr)
 	frame_free_toc(fr);
 #ifdef FRAME_INDEX
 	fi_exit(&fr->index);
+#endif
+#ifdef OPT_DITHER
+	if(fr->dithernoise != NULL)
+	{
+		free(fr->dithernoise);
+		fr->dithernoise = NULL;
+	}
 #endif
 	exit_id3(fr);
 	clear_icy(&fr->icy);

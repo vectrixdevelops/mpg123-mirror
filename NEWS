@@ -1,5 +1,27 @@
-- integer decoder fun
-- buffer plays any audio type
+1.10.0
+
+- There is a build-time option to enable unicode file names on windows now. UNIX (Linux) does not need that, UTF-8 works natively.
+  An unicode-enabled build of libmpg123 expects file names as UTF-8 strings, opening of non-utf8 strings (by old applications) still works via fallback when the conversion of the string or opening of the file failed.
+
+1.9.0
+---
+
+- Free format support.
+- ARM assembly optimizations (yay Taihei again!).
+- Dither noise now runtime-generated, thus less bloated binary (thanks Taihei...).
+  This means that dithered decoding is now included per default.
+  Please note that work is ongoing to improve the dithering quality, more to come.
+  For example: Accurate rounding to 16bits is now always used for generic dithered decoder, there are plans to adapt the noise for different sampling frequencies.
+- Buffer plays any audio type now.
+- New output module: OpenAL
+- Bug fixes:
+  - Broken frame fillup for non-signed 8 bit formats with correct zero (bug 2805665)
+  - Crash on invalid UTF-16 in ID3 tags fixed (thanks to Andy Hefner)
+  - Bad detection of separated UTF-16 strings in ID3 tags (bug 2834636).
+- Topic ID3 and UTF: Now we are more tolerant with UTF16, even accepting those broken tags that id3v2 produces (multiple conflicing BOMs).
+- Build system allows AltiVec on non-Macs now (don't enforce unsupported gcc flags).
+- Terminal control mode is more verbose (gives hint about pressing 'h').
+- The library now offers a switch and small API to defer translation of ID3 text data until client app wants to do it (or not).
 
 1.8.1
 ---

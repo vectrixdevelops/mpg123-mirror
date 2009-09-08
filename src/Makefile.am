@@ -20,7 +20,7 @@ CLEANFILES = *.a
 
 bin_PROGRAMS = mpg123
 
-EXTRA_PROGRAMS = tests/seek_accuracy tests/seek_whence
+EXTRA_PROGRAMS = tests/seek_accuracy tests/seek_whence tests/noise tests/text tests/plain_id3
 
 mpg123_SOURCES = \
 	audio.c \
@@ -56,6 +56,12 @@ mpg123_SOURCES = \
 	wavhead.h \
 	xfermem.c \
 	xfermem.h
+
+if WIN32_USE_UNICODE
+    mpg123_SOURCES += \
+    win32conv.c \
+	win32conv.h
+endif
 
 # That is not nice... but it is how I manage to get the dependency on output/alsa.o without error about .deps/output/alsa.Tpo .
 # Did I mention that recursive make sucks?
@@ -151,3 +157,27 @@ libmpg123/compat.c
 
 tests_seek_whence_DEPENDENCIES = libmpg123/libmpg123.la
 tests_seek_whence_LDADD = libmpg123/libmpg123.la
+
+tests_noise_SOURCES = \
+tests/noise.c \
+libmpg123/compat.h \
+libmpg123/compat.c \
+libmpg123/dither.h \
+libmpg123/dither.c
+
+tests_text_SOURCES = \
+tests/text.c \
+tests/testtext.h \
+libmpg123/compat.h \
+libmpg123/compat.c
+
+tests_text_DEPENDENCIES = libmpg123/libmpg123.la
+tests_text_LDADD = libmpg123/libmpg123.la
+
+tests_plain_id3_SOURCES = \
+tests/plain_id3.c \
+libmpg123/compat.h \
+libmpg123/compat.c
+
+tests_plain_id3_DEPENDENCIES = libmpg123/libmpg123.la
+tests_plain_id3_LDADD = libmpg123/libmpg123.la

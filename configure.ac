@@ -10,14 +10,15 @@ AC_PREREQ(2.57)
 
 dnl ############# Initialisation
 
-AC_INIT([mpg123], [1.9.0], [mpg123-devel@lists.sourceforge.net])
-LIBMPG123_VERSION=19:0:19
+AC_INIT([mpg123], [1.10.0], [mpg123-devel@lists.sourceforge.net])
+LIBMPG123_VERSION=21:1:21
 AC_SUBST(LIBMPG123_VERSION)
 
 AC_CONFIG_SRCDIR(src/mpg123.c)
 AC_CONFIG_AUX_DIR(build)
 AC_CONFIG_SRCDIR(doc)
-AC_CANONICAL_TARGET
+AC_CONFIG_MACRO_DIR([m4])
+AC_CANONICAL_HOST
 
 dnl Version 1.7 of automake is recommended
 AM_INIT_AUTOMAKE(1.7)
@@ -458,10 +459,8 @@ AC_ARG_WITH([cpu], [
   --with-cpu=mmx_alone          Really only MMX decoder, without i586 fallback for flexible rate
   --with-cpu=sse          Use code optimized for SSE processors
   --with-cpu=sse_alone          Really only SSE decoder, without i586 fallback for flexible rate
-  --with-cpu=x86          Pack all x86 opts into one binary (excluding i486 and dither)
-  --with-cpu=x86_dither   Pack all x86 opts into one binary (excluding i486, including dither)
-  --with-cpu=x86-64       Use code optimized for x86-64 processors (AMD64 and Intel64)
-  --with-cpu=x86-64_dither x86-64 code together with generic dithering (runtime selection)
+  --with-cpu=x86          Pack all x86 opts into one binary (excluding i486, including dither)
+  --with-cpu=x86-64       Use code optimized for x86-64 processors (AMD64 and Intel64, including dithered generic)
   --with-cpu=altivec      Use code optimized for Altivec processors (PowerPC G4 and G5)
   --with-cpu=ppc_nofpu    Use code optimized for PowerPC processors with fixed point arithmetic (experimental)
   --with-cpu=arm_nofpu    Use code optimized for ARM processors with fixed point arithmetic (experimental)
@@ -472,7 +471,7 @@ AC_ARG_WITH([cpu], [
 # We want to make sure not to apply hacks relying on IEEE754 storage format on platforms where we did not make sure that this actually is valid.
 # It _should_ be fine for about all computers still out there, but we play safe.
 ieee=no
-case $target in
+case $host in
   i?86-*|x86_64-*|powerpc*|sparc*)
     ieee=yes
   ;;
@@ -483,7 +482,7 @@ if test "x$ieee" = xyes; then
 fi
 
 
-case $target in
+case $host in
   arm*-*-linux*)
     # check that... perhaps we are better off on arm with kernel math emulation
     cpu_type="arm_nofpu"
@@ -501,16 +500,29 @@ case $target in
     cpu_type="x86"
   ;;
   x86_64-*-linux*|x86_64-*-kfreebsd*-gnu)
-    cpu_type="x86-64"
+    cpu_type="x86-64_all"
   ;;
   *-*-linux*|*-*-kfreebsd*-gnu)
     cpu_type="generic_fpu"
+  ;;
+  i386-apple-darwin10*)
+    AC_MSG_CHECKING([if CPU type supports x86-64])
+    case `sysctl -n hw.optional.x86_64` in
+      1)
+        AC_MSG_RESULT([yes])
+        cpu_type="x86-64_all"
+      ;;
+      *)
+        AC_MSG_RESULT([no])
+        cpu_type="x86"
+      ;;
+    esac
   ;;
   i386-apple-darwin*)
     cpu_type="x86"
   ;;
   x86_64-apple-darwin*)
-    cpu_type="x86-64"
+    cpu_type="x86-64_all"
   ;;
   *-apple-darwin*)
     AC_MSG_CHECKING([if CPU type supports AltiVec])
@@ -529,11 +541,12 @@ case $target in
     cpu_type="x86"
   ;;
   x86_64-*-dragonfly* | x86_64-*-freebsd* | x86_64-*-midnightbsd* | x86_64-*-mirbsd* | x86_64-*-netbsd* | x86_64-*-openbsd*)
-    cpu_type="x86-64"
+    cpu_type="x86-64_all"
   ;;
   *-*-dragonfly* | *-*-freebsd* | *-*-midnightbsd* | *-*-mirbsd* | *-*-netbsd* | *-*-openbsd*)
     cpu_type="generic_fpu"
   ;;
+  # Todo: Add default for x86 solaris; need to test it there, too.
   *-*-solaris*)
     cpu_type="generic_fpu"
   ;;
@@ -541,7 +554,7 @@ case $target in
     cpu_type="generic_fpu"
   ;;
   x86_64-pc-cygwin*)
-    cpu_type="x86-64"
+    cpu_type="x86-64_all"
   ;;
   i686-pc-cygwin*)
     cpu_type="x86"
@@ -558,43 +571,48 @@ case $target in
   *-pc-cygwin*)
     cpu_type="generic_fpu"
   ;;
-  *-*-mingw32)
+  i@<:@3-7@:>@86-*-mingw32*)
     LIBS="$LIBS"
     buffer=disabled
     cpu_type="x86"
   ;;
+  x86_64-*-mingw32*)
+    LIBS="$LIBS"
+    buffer=disabled
+    cpu_type="x86-64"
+  ;;
 	i386-*)
-		AC_MSG_WARN([Unknown target operating system])
+		AC_MSG_WARN([Unknown host operating system])
 		cpu_type="i386"
 		buffer=disabled
 		ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
 	;;
 	i486-*)
-		AC_MSG_WARN([Unknown target operating system])
+		AC_MSG_WARN([Unknown host operating system])
 		cpu_type="i486"
 		buffer=disabled
 		ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
 	;;
 	i586-*)
-		AC_MSG_WARN([Unknown target operating system])
-		cpu_type="i586"
+		AC_MSG_WARN([Unknown host operating system])
+		cpu_type="x86"
 		buffer=disabled
 		ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
 	;;
 	i686-*)
-		AC_MSG_WARN([Unknown target operating system])
+		AC_MSG_WARN([Unknown host operating system])
 		cpu_type="x86"
 		buffer=disabled
 		ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
 	;;
 	x86_64-*)
-		AC_MSG_WARN([Unknown target operating system])
-		cpu_type="x86-64"
+		AC_MSG_WARN([Unknown host operating system])
+		cpu_type="x86-64_all"
 		buffer=disabled
 		ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
 	;;
   *)
-  	AC_MSG_WARN([Unknown target operating system])
+  	AC_MSG_WARN([Unknown host operating system])
     cpu_type="generic_fpu"
     buffer=disabled
     ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
@@ -1002,7 +1020,7 @@ fi
 
 dnl Only try the attribute_align_arg mumbo-jumbo on x86, x86-64 warns/errors out on that attribute.
 dnl ...dunno even what about other architectures.
-case $target in
+case $host in
   i?86-*)
     AC_DEFINE(ABI_ALIGN_FUN, 1, [ Define if your architecture wants/needs/can use attribute_align_arg and alignment checks. It's for 32bit x86... ])
  ;;
@@ -1028,6 +1046,7 @@ s_mmx="$s_i386 dct64_mmx tabinit_mmx synth_mmx"
 s_sse="$s_i386 dct64_mmx tabinit_mmx dct64_sse dct64_sse_float synth_sse_float synth_stereo_sse_float synth_sse_s32 synth_stereo_sse_s32 "
 s_x86_64="dct64_x86_64 dct64_x86_64_float synth_x86_64_float synth_x86_64_s32 synth_stereo_x86_64_float synth_stereo_x86_64_s32"
 s_x86multi="getcpuflags"
+s_dither="dither"
 
 # choose optimized 16bit decoder for SSE, quality or fast
 # note: supporting deactivation of output formats for these decoders would need more logic here
@@ -1050,7 +1069,7 @@ case $cpu_type in
   ;;
   generic_dither)
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_GENERIC_DITHER -DREAL_IS_FLOAT"
-    more_sources="$s_fpu"
+    more_sources="$s_fpu $s_dither"
     ccalign=no
   ;;
 dnl Not disabling buffer for float mode... check that this is OK now!
@@ -1075,9 +1094,18 @@ dnl Not disabling buffer for float mode... check that this is OK now!
     ccalign=no
   ;;
   altivec)
-    ADD_CFLAGS="$ADD_CFLAGS -maltivec -faltivec"
+    ADD_CFLAGS="$ADD_CFLAGS -maltivec"
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DREAL_IS_FLOAT -DOPT_ALTIVEC"
     more_sources="$s_altivec $s_fpu"
+    AC_MSG_CHECKING([if $CC accepts -faltivec])
+    touch conftest.c
+    if $CC -faltivec -c -o conftest.o conftest.c >/dev/null 2>&1; then
+        ADD_CFLAGS="$ADD_CFLAGS -faltivec"
+        AC_MSG_RESULT([yes])
+    else
+        AC_MSG_RESULT([no])
+    fi
+    rm -f conftest.o conftest.c
   ;;
   i386) 
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_I386 -DREAL_IS_FLOAT"
@@ -1105,7 +1133,7 @@ dnl Not disabling buffer for float mode... check that this is OK now!
   ;;
   i586_dither) 
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_I586_DITHER -DREAL_IS_FLOAT"
-    more_sources="$s_fpu $s_i586d"
+    more_sources="$s_fpu $s_i586d $s_dither"
   ;;
   3dnow)
     # legacy 3dnow had the 3dnow paired with i586...
@@ -1132,25 +1160,17 @@ dnl Not disabling buffer for float mode... check that this is OK now!
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_SSE -DREAL_IS_FLOAT"
     more_sources="$s_fpu $s_sse"
   ;;
-  x86) 
-    ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_MULTI -DOPT_GENERIC -DOPT_I386 -DOPT_I586 -DOPT_MMX -DOPT_3DNOW -DOPT_3DNOWEXT -DOPT_SSE -DREAL_IS_FLOAT"
-    more_sources="$s_fpu $s_i386 $s_i586 $s_mmx $s_3dnow $s_3dnowext $s_sse $s_x86multi"
- ;;
-  x86_dither) 
+  x86|x86_dither) 
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_MULTI -DOPT_GENERIC -DOPT_GENERIC_DITHER -DOPT_I386 -DOPT_I586 -DOPT_I586_DITHER -DOPT_MMX -DOPT_3DNOW -DOPT_3DNOWEXT -DOPT_SSE -DREAL_IS_FLOAT"
-    more_sources="$s_fpu $s_i386 $s_i586 $s_i586d $s_mmx $s_3dnow $s_3dnowext $s_sse $s_x86multi"
+    more_sources="$s_fpu $s_i386 $s_i586 $s_i586d $s_mmx $s_3dnow $s_3dnowext $s_sse $s_x86multi $s_dither"
   ;;
   x86-64) 
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_X86_64 -DREAL_IS_FLOAT"
     more_sources="$s_fpu $s_x86_64"
   ;;
-  x86-64_dither) 
-    ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_MULTI -DOPT_X86_64 -DOPT_GENERIC_DITHER -DREAL_IS_FLOAT"
-    more_sources="$s_fpu $s_x86_64"
-  ;;
-  x86-64_all) # for direct comparison... undocumented actually very similar to the above because of generic code being there in the hidden anyway
+  x86-64_all|x86-64_dither)
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_MULTI -DOPT_X86_64 -DOPT_GENERIC -DOPT_GENERIC_DITHER -DREAL_IS_FLOAT"
-    more_sources="$s_fpu $s_x86_64"
+    more_sources="$s_fpu $s_x86_64 $s_dither"
   ;;
   *)
   	AC_MSG_ERROR([Unknown CPU type '$cpu_type'])
@@ -1160,11 +1180,11 @@ esac
 # Mac OS X specific linker flags
 case $cpu_type in
   3dnow|3dnow_alone|3dnowext|3dnowext_alone|mmx|mmx_alone|sse|sse_alone|x86|x86_dither)
-    case $target in
+    case $host in
       i386-apple-darwin8*)
         ADD_LDFLAGS="$ADD_LDFLAGS -Wl,-read_only_relocs,suppress"
       ;;
-      i386-apple-darwin9*)
+      i386-apple-darwin9*|i386-apple-darwin10*)
         ADD_CFLAGS="$ADD_CFLAGS -mmacosx-version-min=10.4 -isysroot /Developer/SDKs/MacOSX10.4u.sdk"
         ADD_LDFLAGS="$ADD_LDFLAGS -Wl,-syslibroot,/Developer/SDKs/MacOSX10.4u.sdk -Wl,-classic_linker -Wl,-read_only_relocs,suppress"
       ;;
@@ -1174,8 +1194,9 @@ esac
 
 for i in $more_sources
 do
-	DECODER_OBJ="$DECODER_OBJ $i.\$(OBJEXT)"
-	echo $DECODER_LOBJ | grep -q $i.lo || DECODER_LOBJ="$DECODER_LOBJ $i.lo"
+  # Echo make sure every file is only once in the list.
+  echo "$DECODER_OBJ" | grep -v -w "$i\.\$(OBJEXT)" && DECODER_OBJ="$DECODER_OBJ $i.\$(OBJEXT)"
+  echo "$DECODER_LOBJ" | grep -v -w "$i\.lo" && DECODER_LOBJ="$DECODER_LOBJ $i.lo"
 done
 
 AC_SUBST(DECODER_OBJ)
@@ -1252,7 +1273,7 @@ do
 			# Remember: This looks only insane because you chose an insane tab width!
 			PORTAUDIO_LIBS="-lportaudio"
 			PORTAUDIO_CFLAGS=
-			case $target in
+			case $host in
 				*-*-mingw32)
 					# We tested portaudio with MME
 					if test "x$HAVE_PORTAUDIO" != "xyes"; then
@@ -1769,6 +1790,21 @@ fi
 # Define that always... also without frame index enabled.
 AC_DEFINE_UNQUOTED(INDEX_SIZE, $seektable, [size of the frame index seek table])
 
+# Check if we want Unicode for Win32.
+win32_unicode=disabled
+AC_MSG_CHECKING([if we want Unicode File Open for Win32])
+AC_ARG_ENABLE(win32_unicode,
+	[  --enable-win32_unicode=[no/yes] Enable Unicode for Win32 ],
+	[   
+	   if test "x$enableval" = xyes; then
+		AC_DEFINE(WANT_WIN32_UNICODE, 1, [ Define to use Unicode for Windows ])
+		win32_unicode=enabled
+		AC_MSG_RESULT([yes])
+	   fi
+	], [AC_MSG_RESULT([no])])
+
+AM_CONDITIONAL([WIN32_USE_UNICODE], [ test "x$win32_unicode" == xenabled])
+
 dnl ############## Final Output
 
 # Do that here to prevent the above tests usign -lltdl...
@@ -1779,6 +1815,7 @@ fi
 AC_CONFIG_FILES([
 	Makefile
 	libmpg123.pc
+	mpg123.spec
 	doc/Makefile
 	src/Makefile
 	src/output/Makefile
@@ -1829,6 +1866,7 @@ echo -n "
   String API .............. $string
   ICY parsing/conversion .. $icy
   Error/warning messages .. $messages
+  Win32 Unicode File Open.. $win32_unicode
   Output formats (nofpu will disable all but 16 or 8 bit!):
   8 bit integer ........... $int8
   16 bit integer .......... $int16

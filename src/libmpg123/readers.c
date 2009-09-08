@@ -12,19 +12,12 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-/* For select(), I need select.h according to POSIX 2001, else: sys/time.h sys/types.h unistd.h */
-/* Including these here although it works without on my Linux install... curious about _why_. */
+/* For select(), I need select.h according to POSIX 2001, else: sys/time.h sys/types.h unistd.h (the latter two included in compat.h already). */
 #ifdef HAVE_SYS_SELECT_H
 #include <sys/select.h>
 #endif
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
-#endif
-#ifdef HAVE_SYS_TYPES_H
-#include <sys/types.h>
-#endif
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
 #endif
 #ifdef _MSC_VER
 #include <io.h>
@@ -101,10 +94,12 @@ static ssize_t icy_fullread(mpg123_handle *fr, unsigned char *buf, ssize_t count
 		return -1;
 	}
 	/*
-		We check against READER_ID3TAG instead of rds->filelen >= 0 because if we got the ID3 TAG we know we have the end of the file.
-		If we don't have an ID3 TAG, then it is possible the file has grown since we started playing, so we want to keep reading from it if possible.
+		There used to be a check for expected file end here (length value or ID3 flag).
+		This is not needed:
+		1. EOF is indicated by fdread returning zero bytes anyway.
+		2. We get false positives of EOF for either files that grew or
+		3. ... files that have ID3v1 tags in between (stream with intro).
 	*/
-	if((fr->rdat.flags & READER_ID3TAG) && fr->rdat.filepos + count > fr->rdat.filelen) count = fr->rdat.filelen - fr->rdat.filepos;
 
 	while(cnt < count)
 	{
@@ -1400,6 +1395,7 @@ int open_stream(mpg123_handle *fr, const char *bs_filenam, int fd)
 	int filept; /* descriptor of opened file/stream */
 
 	clear_icy(&fr->icy); /* can be done inside frame_clear ...? */
+
 	if(!bs_filenam) /* no file to open, got a descriptor (stdin) */
 	{
 		filept = fd;
@@ -1408,7 +1404,7 @@ int open_stream(mpg123_handle *fr, const char *bs_filenam, int fd)
 	#ifndef O_BINARY
 	#define O_BINARY (0)
 	#endif
-	else if((filept = open(bs_filenam, O_RDONLY|O_BINARY)) < 0) /* a plain old file to open... */
+	else if((filept = compat_open(bs_filenam, O_RDONLY|O_BINARY)) < 0) /* a plain old file to open... */
 	{
 		if(NOQUIET) error2("Cannot open file %s: %s", bs_filenam, strerror(errno));
 		fr->err = MPG123_BAD_FILE;
