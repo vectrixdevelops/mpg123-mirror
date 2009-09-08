@@ -678,7 +678,7 @@ off_t feed_set_pos(mpg123_handle *fr, off_t pos)
  *
  ******************************************************************************/
 
-#define MIN_FEED_BYTES 2048
+#define MIN_FEED_BYTES 0
 
 /* VFALCO: Convert an ambiguous return value into a clear description */
 static int failed( int returnValue )
