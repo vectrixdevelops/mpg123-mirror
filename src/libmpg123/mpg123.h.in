@@ -170,7 +170,7 @@ EXPORT int mpg123_getparam(mpg123_handle *mh, enum mpg123_parms type, long *val,
  * of the error codes returned by libmpg123.
  *
  * Most functions operating on a mpg123_handle simply return MPG123_OK on success and MPG123_ERR on failure (setting the internal error variable of the handle to the specific error code).
- * Decoding/seek functions may also return message codes MPG123_DONE, MPG123_NEW_FORMAT and MPG123_NEED_MORE (please read up on these on how to react!).
+ * Decoding/seek functions may also return message codes MPG123_DONE, MPG123_NEW_FORMAT and MPG123_NEED_MORE.
  * The positive range of return values is used for "useful" values when appropriate.
  *
  * @{
@@ -179,9 +179,9 @@ EXPORT int mpg123_getparam(mpg123_handle *mh, enum mpg123_parms type, long *val,
 /** Enumeration of the message and error codes and returned by libmpg123 functions. */
 enum mpg123_errors
 {
-	MPG123_DONE=-12,	/**< Message: Track ended. Stop decoding. */
-	MPG123_NEW_FORMAT=-11,	/**< Message: Output format will be different on next call. Note that some libmpg123 versions between 1.4.3 and 1.8.0 insist on you calling mpg123_getformat() after getting this message code. Newer verisons behave like advertised: You have the chance to call mpg123_getformat(), but you can also just continue decoding and get your data. */
-	MPG123_NEED_MORE=-10,	/**< Message: For feed reader: "Feed me more!" (call mpg123_feed() or mpg123_decode() with some new input data). */
+	MPG123_DONE=-12,	/**< Message: Track ended. */
+	MPG123_NEW_FORMAT=-11,	/**< Message: Output format will be different on next call. */
+	MPG123_NEED_MORE=-10,	/**< Message: For feed reader: "Feed me more!" */
 	MPG123_ERR=-1,			/**< Generic Error */
 	MPG123_OK=0, 			/**< Success */
 	MPG123_BAD_OUTFORMAT, 	/**< Unable to set up output format! */
@@ -362,7 +362,7 @@ EXPORT int mpg123_getformat(mpg123_handle *mh, long *rate, int *channels, int *e
 /** \defgroup mpg123_input mpg123 file input and decoding
  *
  * Functions for input bitstream and decoding operations.
- * Decoding/seek functions may also return message codes MPG123_DONE, MPG123_NEW_FORMAT and MPG123_NEED_MORE (please read up on these on how to react!).
+ *
  * @{
  */
 
@@ -384,29 +384,6 @@ EXPORT int mpg123_open_fd(mpg123_handle *mh, int fd);
  *  This works together with mpg123_decode(); you are responsible for reading and feeding the input bitstream.
  */
 EXPORT int mpg123_open_feed(mpg123_handle *mh);
-
-/******************************************************************************/
-/* raw performance interface */
-struct mpg123_raw_stream
-{
-	const unsigned char *buffer;
-	const unsigned char *bufend;
-	const unsigned char *this_frame;
-	const unsigned char *next_frame;
-	ssize_t pos;
-	ssize_t skip;
-};
-EXPORT int mpg123_open_raw(mpg123_handle *mh);
-EXPORT struct mpg123_raw_stream *mpg123_get_raw_stream(mpg123_handle *mh);
-EXPORT int mpg123_raw_reset(mpg123_handle *mh);
-EXPORT int mpg123_raw(mpg123_handle *mh, const unsigned char *in, size_t size);
-EXPORT int mpg123_decode_raw(mpg123_handle *mh, off_t *num, unsigned char **audio, size_t *bytes);
-/******************************************************************************/
-
-
-
-
-
 
 /** Closes the source, if libmpg123 opened it. */
 EXPORT int mpg123_close(mpg123_handle *mh);
@@ -893,6 +870,185 @@ EXPORT int mpg123_replace_reader( mpg123_handle *mh,
                                   off_t   (*r_lseek)(int, off_t, int) );
 
 /* @} */
+
+
+/*******************************************************************************
+ *
+ * OLD RAW API
+ *
+ ******************************************************************************/
+
+EXPORT int mpg123_decode_raw(mpg123_handle *mh, off_t *num, unsigned char **audio, size_t *bytes);
+
+/*******************************************************************************
+ *
+ * NEW RAW API
+ *
+ ******************************************************************************/
+
+enum
+{
+	rawFlagAudioFrame		=1,
+	rawFlagId3Tag			=2,
+	rawFlagId3Frame			=4
+};
+
+/*----------------------------------------------------------------------------*/
+#if 0
+typedef struct mpgraw_frame
+{
+	/* for all frames */
+	int kind; /* type of frame (one of the enumeration) */
+	int framesize; /**< The size of the frame (in bytes). */
+	size_t frame_offset; /* absolute byte offset of the beginning
+						    of this frame's data, including reservoir
+							if it is an audio frame */
+
+	/* for id3 frames */
+	const char *tag_name; /* name of this tag. size is in framesize */
+
+	/* for audio frames */
+	unsigned short samples; /* number of mono or stereo samples */
+	enum mpg123_version version; /**< The MPEG version (1.0/2.0/2.5). */
+	int layer; /**< The MPEG Audio Layer (MP1/MP2/MP3). */
+	long rate; /**< The sampling rate in Hz. */
+	enum mpg123_mode mode; /**< The audio mode (Mono, Stereo, Joint-stero, Dual Channel). */
+	int mode_ext; /**< The mode extension bit flag. */
+	enum mpg123_flags flags; /**< MPEG Audio flag bits. */
+	int emphasis; /**< The emphasis type. */
+	int bitrate; /**< Bitrate of the frame (kbps). */
+	int abr_rate; /**< The target average bitrate. */
+	enum mpg123_vbr vbr; /**< The VBR mode. */
+} mpgraw_frame;
+#endif
+
+/*----------------------------------------------------------------------------*/
+
+/* read only */
+typedef struct mpgraw_state
+{
+	int error;
+	mpg123_handle *mh; /* handle to mpg123 state */
+
+	/* Input buffer state */
+	off_t pos;
+	unsigned char const *buffer; /* start of provided input buffer */
+	unsigned char const *bufend; /* one past the last byte of buffer */
+	unsigned char const *this_frame; /* pointer within buffer, to current frame */
+	unsigned char const *next_frame; /* area of input we will read from next */
+
+	/* Current input frame, after a valid call to mpgraw_next() */
+	struct mpg123_frameinfo frameinfo;
+
+	/* Decoded output data, after a valid call to mpgraw_decode() */
+	int frames; /* number of frames (mono or stereo samples) */
+	int encoding;
+	int channels;
+	long rate;
+
+	/* Temporarily keeping these variables here until
+	 * next and decode are implemented correctly */
+	off_t num;
+	size_t bytes;
+	unsigned char* audio;
+} mpgraw_state;
+
+/*----------------------------------------------------------------------------*/
+
+/*
+ * Open a mpg123 stream for raw access with the given settings.
+ *
+ */
+EXPORT int mpgraw_open(
+	mpgraw_state* rs,
+	const char *decoder,
+	long samplerate,
+	int channels,
+	int encodings );
+
+/*----------------------------------------------------------------------------*/
+
+/*
+ * Provide a fresh input buffer to the raw stream. In order to function
+ * correctly there is a minimum input size requirement. If the buffer is less
+ * than the minimum requirement, returns MPG123_BAD_BUFFER, else returns
+ * MPG123_OK. The decoder assumes that consecutive calls to mpgraw_feed()
+ * represent logically consecutive input from the same source. If the
+ * caller wants to switch to a different sources, or to a non consecutive
+ * location within the same input, it is necessary to call mpgraw_seek()
+ * before calling mpgraw_feed() with the fresh input data.
+ *
+ */
+EXPORT int mpgraw_feed(
+	mpgraw_state* rs,
+	void *buffer,
+	size_t bytes );
+
+/*----------------------------------------------------------------------------*/
+
+/*
+ * Indicates to the decoder that the current input buffer, if any, is now
+ * invalid, and that the next call to mpgraw_feed() represents input from new
+ * source material, or data from a fresh location within the same source.
+ * The absolute_offset value informs the decoder of the absolute byte offset
+ * corresponding to the beginning of the next input buffer. This value is
+ * used to keep track of the location in the input, and for reporting the
+ * frame_offset value.
+ *
+ */
+EXPORT void mpgraw_seek(
+	mpgraw_state* rs,
+	size_t current_offset );
+
+/*----------------------------------------------------------------------------*/
+
+/*
+ * Consume input until we reach a fresh frame or run out of data. Input must
+ * exist from a call to mpgraw_feed(). If a frame is located, returns MPG123_OK,
+ * fills out header, and sets this_frame to the location of the frame in the
+ * input. If no frame found, returns MPG123_NEED_MORE. In any case, cur_pos
+ * is set to the next byte of input that will be read. If the return value is
+ * MPG123_NEED_MORE it is the callers responsibility to preserve the remaining
+ * unread data and submit it along with additional input in the next call
+ * to mpgraw_feed().
+ * 
+ * The 'flags' setting is a combination of values from the enumeration,
+ * and controls what frames we are interested in. mpgraw_frame() will advance
+ * until it matches one of the frame types specified in the flags.
+ *
+ */
+EXPORT int mpgraw_next(
+	mpgraw_state* rs,
+	int flags );
+
+/*----------------------------------------------------------------------------*/
+
+/*
+ * Decode the current frame. The result is only defined if the previous call
+ * was to mpgraw_next() and it returned MPG123_OK. Returns MPG123_BAD_BUFFER
+ * if the output buffer provided is too small. Does not change the current
+ * position in the input.
+ *
+ * Id3 tag and Id3 frames are written in their entirety to the destination,
+ * which must be large enough to accomodate the tag.
+ *
+ */
+EXPORT int mpgraw_decode(
+	mpgraw_state* rs,
+	void* dest,
+	size_t bytes );
+
+/*----------------------------------------------------------------------------*/
+
+/*
+ * Close the specified raw stream and dispose all structures. This may only
+ * be called if mpgraw_open() succeeded.
+ *
+ */
+EXPORT void mpgraw_close(
+	mpgraw_state* rs );
+
+/******************************************************************************/
 
 
 #ifdef __cplusplus

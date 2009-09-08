@@ -96,14 +96,14 @@ void initwavformat()
 int _tmain(int argc, TCHAR **argv)
 {
 	unsigned char buf[INBUFF];
-	unsigned char *audio;
 	FILE *in;
-	mpg123_handle *m;
+    mpgraw_state s;	
 	int ret;
 	size_t inc, outc;
-	off_t len, num;
-	size_t bytes;
+	off_t len;
+    int firstframedecoded;
 	inc = outc = 0;
+    firstframedecoded = 0;
 
 	if(argc < 3)
 	{
@@ -113,49 +113,42 @@ int _tmain(int argc, TCHAR **argv)
 
 	mpg123_init();
 
-	m = mpg123_new(NULL, &ret);
-	if(m == NULL)
-	{
-		fprintf(stderr,"Unable to create mpg123 handle: %s\n", mpg123_plain_strerror(ret));
-		return -1;
-	}
+	//mpg123_param(m, MPG123_VERBOSE, 4, 0);
 
-	mpg123_param(m, MPG123_VERBOSE, 4, 0);
-
-	ret = mpg123_param(m, MPG123_FLAGS, MPG123_FUZZY | MPG123_SEEKBUFFER | MPG123_GAPLESS, 0);
-	if(ret != MPG123_OK)
-	{
-		fprintf(stderr,"Unable to set library options: %s\n", mpg123_plain_strerror(ret));
-		return -1;
-	}
+	//ret = mpg123_param(m, MPG123_FLAGS, MPG123_FUZZY | MPG123_SEEKBUFFER | MPG123_GAPLESS, 0);
+	//if(ret != MPG123_OK)
+	//{
+	//	fprintf(stderr,"Unable to set library options: %s\n", mpg123_plain_strerror(ret));
+	//	return -1;
+	//}
 
 	// Let the seek index auto-grow and contain an entry for every frame
-	ret = mpg123_param(m, MPG123_INDEX_SIZE, -1, 0);
-	if(ret != MPG123_OK)
-	{
-		fprintf(stderr,"Unable to set index size: %s\n", mpg123_plain_strerror(ret));
-		return -1;
-	}
+	//ret = mpg123_param(m, MPG123_INDEX_SIZE, -1, 0);
+	//if(ret != MPG123_OK)
+	//{
+	//	fprintf(stderr,"Unable to set index size: %s\n", mpg123_plain_strerror(ret));
+	//	return -1;
+	//}
 
-	ret = mpg123_format_none(m);
+	/*ret = mpg123_format_none(m);
 	if(ret != MPG123_OK)
 	{
 		fprintf(stderr,"Unable to disable all output formats: %s\n", mpg123_plain_strerror(ret));
 		return -1;
-	}
+	}*/
 	
 	// Use float output
-	ret = mpg123_format(m, 44100, MPG123_MONO | MPG123_STEREO,  MPG123_ENC_FLOAT_32);
-	if(ret != MPG123_OK)
-	{
-		fprintf(stderr,"Unable to set float output formats: %s\n", mpg123_plain_strerror(ret));
-		return -1;
-	}
+	//ret = mpg123_format(m, 44100, MPG123_MONO | MPG123_STEREO,  MPG123_ENC_FLOAT_32);
+	//if(ret != MPG123_OK)
+	//{
+	//	fprintf(stderr,"Unable to set float output formats: %s\n", mpg123_plain_strerror(ret));
+	//	return -1;
+	//}
 
-	ret = mpg123_open_raw(m);
+	ret = mpgraw_open(&s, NULL, 44100, 2, MPG123_ENC_FLOAT_32);
 	if(ret != MPG123_OK)
 	{
-		fprintf(stderr,"Unable open feed: %s\n", mpg123_plain_strerror(ret));
+		fprintf(stderr,"Unable to open stream: %s\n", mpg123_plain_strerror(ret));
 		return -1;
 	}
 
@@ -179,25 +172,32 @@ int _tmain(int argc, TCHAR **argv)
 		if(len <= 0)
 			break;
 		inc += len;
-		ret = mpg123_raw(m, buf, len);
+		ret = mpgraw_feed(&s, buf, len);
 
 		while(ret != MPG123_ERR && ret != MPG123_NEED_MORE)
 		{
-			ret = mpg123_decode_raw(m, &num, &audio, &bytes);
-			if(ret == MPG123_NEW_FORMAT)
-			{
-				mpg123_getformat(m, &rate, &channels, &enc);
-				initwavformat();
-				initwav();
-				fprintf(stderr, "New format: %li Hz, %i channels, encoding value %i\n", rate, channels, enc);
-			}
-			fwrite(audio, sizeof(unsigned char), bytes, out);
-			outc += bytes;
+            ret = mpgraw_next(&s, rawFlagAudioFrame);
+            if(ret == MPG123_OK)
+            {
+			    ret = mpgraw_decode(&s, NULL, 0); // for now the temporary fields in s are used
+			    if(ret == MPG123_OK && !firstframedecoded)
+			    {
+                    firstframedecoded = 1;
+                    rate = s.rate;
+                    channels = s.channels;
+                    enc = s.encoding;
+				    initwavformat();
+				    initwav();
+				    fprintf(stderr, "Format: %li Hz, %i channels, encoding value %i\n", rate, channels, enc);
+			    }
+			    fwrite(s.audio, sizeof(unsigned char), s.bytes, out);
+			    outc += s.bytes;
+            }
 		}
 
 		if(ret == MPG123_ERR)
 		{
-			fprintf(stderr, "Error: %s", mpg123_strerror(m));
+            fprintf(stderr, "Error: %s", mpg123_strerror(s.mh));
 			break; 
 		}
 	}
@@ -207,7 +207,7 @@ int _tmain(int argc, TCHAR **argv)
 	closewav();
 	fclose(out);
 	fclose(in);
-	mpg123_delete(m);
+    mpgraw_close(&s);
 	mpg123_exit();
 	return 0;
 }

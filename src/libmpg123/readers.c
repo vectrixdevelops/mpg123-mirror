@@ -101,12 +101,10 @@ static ssize_t icy_fullread(mpg123_handle *fr, unsigned char *buf, ssize_t count
 		return -1;
 	}
 	/*
-		There used to be a check for expected file end here (length value or ID3 flag).
-		This is not needed:
-		1. EOF is indicated by fdread returning zero bytes anyway.
-		2. We get false positives of EOF for either files that grew or
-		3. ... files that have ID3v1 tags in between (stream with intro).
+		We check against READER_ID3TAG instead of rds->filelen >= 0 because if we got the ID3 TAG we know we have the end of the file.
+		If we don't have an ID3 TAG, then it is possible the file has grown since we started playing, so we want to keep reading from it if possible.
 	*/
+	if((fr->rdat.flags & READER_ID3TAG) && fr->rdat.filepos + count > fr->rdat.filelen) count = fr->rdat.filelen - fr->rdat.filepos;
 
 	while(cnt < count)
 	{
@@ -679,116 +677,337 @@ off_t feed_set_pos(mpg123_handle *fr, off_t pos)
 	}
 }
 
-/*****************************************************************************/
-/* Raw buffer/frame access */
+/*******************************************************************************
+ *
+ * RAW API (public inteface)
+ *
+ ******************************************************************************/
 
-struct mpg123_raw_stream *mpg123_get_raw_stream(mpg123_handle *mh)
+#define MIN_FEED_BYTES 2048
+
+/* VFALCO: Convert an ambiguous return value into a clear description */
+static int failed( int returnValue )
 {
-	return &mh->rdat.raw;
+	return returnValue != 0;
 }
 
-int mpg123_raw_reset(mpg123_handle *mh)
+/* VFALCO: This is used to make sure we return a sensible error code */
+static int error_code( mpgraw_state* rs )
 {
-/*	mh->buffer.fill=0; */
-/*	mh->to_decode=FALSE; */
-
-/*	frame_reset(mh); */
-
-	mh->rdat.raw.buffer=0;
-	mh->rdat.raw.bufend=0;
-	mh->rdat.raw.this_frame=0;
-	mh->rdat.raw.next_frame=0;
-	mh->rdat.raw.pos=0;
-	mh->rdat.raw.skip=0;
-
-	return 0;
+	int result = rs->mh->err;
+	if( ! result ) /* VFALCO: Assuming MPG123_OK == 0 everywhere for brevity */
+		result = MPG123_ERR; /* VFALCO: Lets hope we never get here */
+	return result;
 }
 
-int attribute_align_arg mpg123_open_raw(mpg123_handle *mh)
-{
-/*	ALIGNCHECK(mh); */
-	if(mh == NULL) return MPG123_ERR;
+/*----------------------------------------------------------------------------*/
 
-	mpg123_close(mh);
-	frame_reset(mh);
-	return open_raw(mh);
-}
-
-int attribute_align_arg mpg123_raw(mpg123_handle *mh, const unsigned char *in, size_t size)
+int mpgraw_open(
+	mpgraw_state *rs,
+	const char *decoder,
+	long samplerate,
+	int channels,
+	int encodings )
 {
-	if(mh == NULL) return MPG123_ERR;
-	if(size > 0)
+	memset( rs, 0, sizeof( *rs ) );
+
+	rs->mh = mpg123_new( decoder, &rs->error );
+
+	if( rs->mh )
 	{
-		if(in != NULL)
+		if( ! rs->error )
 		{
-			if(raw_more(mh, in, size) != 0) return MPG123_ERR;
-			else return MPG123_OK;
+			if( failed( mpg123_format_none( rs->mh ) ) )
+				rs->error = error_code( rs );
+		}
+
+		if( ! rs->error )
+		{
+			if( failed( mpg123_format( rs->mh, samplerate, channels, encodings ) ) )
+				rs->error = error_code( rs );
+		}
+
+		if( ! rs->error )
+		{
+			/* Need to set this before open_raw() */
+			rs->mh->rdat.rs = rs;
+
+			if( failed( open_raw( rs->mh ) ) )
+				rs->error = error_code( rs );
+		}
+		
+		if( rs->error )
+		{
+			/* clean up */
+			mpg123_delete( rs->mh );
+			rs->mh = 0;
+		}
+	}
+	else
+	{
+		/* in case mpg123_new() didn't set the error */
+		if( rs->error == MPG123_OK )
+			rs->error = MPG123_ERR;
+	}
+
+	return rs->error;
+}
+
+/*----------------------------------------------------------------------------*/
+
+/* VFALCO: Should allow this to be called with buffer=0 meaning clear
+ * the input and return MPG123_NEED_MORE in the next call to next. */
+int mpgraw_feed(
+	mpgraw_state *rs,
+	void *buffer,
+	size_t bytes )
+{
+	if( buffer )
+	{
+		if( bytes >= MIN_FEED_BYTES )
+		{
+			rs->this_frame = 0;
+
+			rs->buffer = buffer;
+			rs->bufend = ((char*)buffer) + bytes;
+			rs->this_frame = buffer;
+			rs->next_frame = buffer;
+			rs->pos=0;
+
+			rs->error = MPG123_OK;
 		}
 		else
 		{
-			mh->err = MPG123_NULL_BUFFER;
-			return MPG123_ERR;
+			rs->error = MPG123_BAD_BUFFER;
 		}
 	}
-	return MPG123_OK;
+	else
+	{
+		rs->error = MPG123_NULL_BUFFER;
+	}
+
+	return rs->error;
 }
+
+/*----------------------------------------------------------------------------*/
+
+void mpgraw_seek(
+	mpgraw_state* rs,
+	size_t current_offset )
+{
+	/* clear bit reservoir */
+
+	/* need to do this because frame_outs() gets called with the */
+	/* frame number and its successor in mpg123_decode_frame() */
+	rs->mh->num=0;
+
+	/* VFALCO: Not sure what this is all about */
+	/* mh->buffer.fill=0; */
+	/* mh->to_decode=FALSE; */
+	/* frame_reset(mh); */
+
+	rs->buffer=0;
+	rs->bufend=0;
+	rs->this_frame=0;
+	rs->next_frame=0;
+	rs->pos=0;
+	rs->mh->rdat.skip=0;
+
+	rs->error = MPG123_OK;
+}
+
+/*----------------------------------------------------------------------------*/
+
+int mpgraw_next(
+	mpgraw_state* rs,
+	int flags )
+{
+	mpg123_handle* mh = rs->mh;
+
+	rs->error = MPG123_OK;
+
+	do
+	{
+		/* Handle skip */
+		if( mh->rdat.skip > 0 )
+		{
+			ssize_t needed = mh->rdat.skip;
+			ssize_t available = mh->rdat.rs->bufend - mh->rdat.rs->next_frame;
+
+			if( available > needed )
+			{
+				mh->rdat.rs->next_frame += needed;
+				mh->rdat.rs->pos += needed;
+				mh->rdat.skip = 0;
+				mh->rdat.rs->this_frame = mh->rdat.rs->next_frame;
+			}
+			else
+			{
+				mh->rdat.rs->next_frame += available;
+				mh->rdat.rs->pos += available;
+				mh->rdat.skip = needed - available;
+				rs->error = MPG123_NEED_MORE;
+			}
+		}
+
+		if( ! rs->error )
+		{
+			rs->error = mpg123_decode_frame( mh, &rs->num, &rs->audio, &rs->bytes );
+
+			if( rs->error == MPG123_OK || rs->error == MPG123_DONE )
+			{
+				/* Get the whole frame info */
+				mpg123_info( mh, &rs->frameinfo );
+
+				/* Raw users never want to see MPG123_DONE */
+				rs->error = MPG123_OK;
+
+				/* Exit loop */
+				break;
+			}
+			else if( rs->error == MPG123_NEW_FORMAT )
+			{
+				/* VFALCO: Eat the new format. Not sure if this is right
+				 * Is this the format of the actual input? Or is this
+				 * what mpg123 would give us on decode (e.g. after NTOM) */
+				long rate;
+				int channels;
+				int encoding;
+				mpg123_getformat( mh, &rate, &channels, &encoding );
+
+				rs->error = MPG123_OK;
+			}
+		}
+	}
+	while( ! rs->error );
+
+	return rs->error;
+}
+
+/*----------------------------------------------------------------------------*/
+
+int mpgraw_decode(
+	mpgraw_state* rs,
+	void* dest,
+	size_t bytes )
+{
+	mpg123_handle* mh = rs->mh;
+
+	/* Store the number of frames for caller convenience */
+	rs->frames = rs->bytes / ( mh->af.encsize * mh->af.channels );
+
+	/* Give the caller access to mh->af */
+	rs->encoding = mh->af.encoding;
+	rs->channels = mh->af.channels;
+	rs->rate = mh->af.rate;
+
+	/* Copy to caller's buffer */
+	if( dest )
+	{
+		if( bytes > rs->bytes )
+			bytes = rs->bytes;
+		memcpy( dest, rs->audio, bytes );
+	}
+
+	rs->error = MPG123_OK;
+
+	return rs->error;
+}
+
+/*----------------------------------------------------------------------------*/
+
+int attribute_align_arg mpg123_decode_raw(mpg123_handle *fr, off_t *num, unsigned char **audio, size_t *bytes)
+{
+	mpgraw_state* rs = fr->rdat.rs;
+
+	int error;
+
+	error = mpgraw_next( rs, 0 );
+
+	if( ! error )
+	{
+		error = mpgraw_decode( rs, 0, 0 );
+	}
+
+	if( ! error )
+	{
+		if( audio )
+			*audio = rs->audio;
+		if( bytes )
+			*bytes = rs->bytes;
+	}
+
+	return error;
+}
+
+/*----------------------------------------------------------------------------*/
+
+void mpgraw_close(
+	mpgraw_state *rs )
+{
+	mpg123_close( rs->mh );
+	mpg123_delete( rs->mh );
+	memset( rs, 0, sizeof( *rs ) );
+}
+
+/*******************************************************************************
+ *
+ * RAW API (reader)
+ *
+ ******************************************************************************/
 
 static int raw_init(mpg123_handle *fr)
 {
-	fr->rdat.raw.buffer=0;
-	fr->rdat.raw.bufend=0;
-	fr->rdat.raw.next_frame=0;
-	fr->rdat.raw.pos=0;
-	fr->rdat.raw.skip=0;
-	/* hack to make sure we never see MPG123_DONE */
+	fr->rdat.rs->buffer = 0;
+	fr->rdat.rs->bufend = 0;
+	fr->rdat.rs->next_frame = 0;
+	fr->rdat.rs->pos = 0;
+	fr->rdat.skip = 0;
+	/* VFALCO: hack to make sure we never see MPG123_DONE */
 	fr->rdat.filepos = 0;
 	fr->rdat.filelen = 1;
 /*	fr->rdat.flags |= READER_BUFFERED; */
 	return 0;
 }
 
-/* externally called function, returns 0 on success, -1 on error */
-int raw_more(mpg123_handle *fr, const unsigned char *in, long count)
-{
-	int ret = 0;
-	fr->rdat.raw.buffer=in;
-	fr->rdat.raw.bufend=in+count;
-	fr->rdat.raw.this_frame=in;
-	fr->rdat.raw.next_frame=in;
-	fr->rdat.raw.pos=0;
-	return ret;
-}
+/*----------------------------------------------------------------------------*/
 
 static ssize_t raw_read(mpg123_handle *fr, unsigned char *out, ssize_t count)
 {
-	ssize_t gotcount = fr->rdat.raw.bufend-fr->rdat.raw.next_frame;
-	if( gotcount>=count )
+	ssize_t gotcount = fr->rdat.rs->bufend - fr->rdat.rs->next_frame;
+	if( gotcount >= count )
 	{
-		gotcount=count;
-		memcpy(out,fr->rdat.raw.next_frame,count);
-		fr->rdat.raw.next_frame+=count;
-		fr->rdat.raw.pos+=count;
+		gotcount = count;
+		memcpy( out, fr->rdat.rs->next_frame, count );
+		fr->rdat.rs->next_frame += count;
+		fr->rdat.rs->pos += count;
 	}
 	else
 	{
 		/* rewind */
-		fr->rdat.raw.pos-=fr->rdat.raw.next_frame-fr->rdat.raw.this_frame;
-		fr->rdat.raw.next_frame=fr->rdat.raw.this_frame;
-		gotcount=MPG123_NEED_MORE;
+		fr->rdat.rs->pos -= fr->rdat.rs->next_frame - fr->rdat.rs->this_frame;
+		fr->rdat.rs->next_frame = fr->rdat.rs->this_frame;
+		gotcount = MPG123_NEED_MORE;
 	}
 	return gotcount;
 }
+
+/*----------------------------------------------------------------------------*/
 
 static void raw_close(mpg123_handle *fr)
 {
 }
 
+/*----------------------------------------------------------------------------*/
+
 static off_t raw_tell(mpg123_handle *fr)
 {
 	/* this returns the offset from the beginning of the
 	 * buffer rather than the global position within the input */
-	return fr->rdat.raw.pos;
+	return fr->rdat.rs->pos;
 }
+
+/*----------------------------------------------------------------------------*/
 
 /* This does not (fully) work for non-seekable streams... You have to check for that flag, pal! */
 static void raw_rewind(mpg123_handle *fr)
@@ -796,37 +1015,42 @@ static void raw_rewind(mpg123_handle *fr)
 	/* can't work for raw */
 }
 
+/*----------------------------------------------------------------------------*/
+
 /* returns reached position... negative ones are bad... */
 static off_t raw_skip_bytes(mpg123_handle *fr,off_t len)
 {
-	ssize_t avail=fr->rdat.raw.bufend-fr->rdat.raw.next_frame;
-	if( len<avail )
+	ssize_t avail = fr->rdat.rs->bufend - fr->rdat.rs->next_frame;
+
+	if( len < avail )
 	{
-		fr->rdat.raw.next_frame+=len;
-		fr->rdat.raw.pos+=len;
-		return fr->rdat.raw.pos;
+		fr->rdat.rs->next_frame += len;
+		fr->rdat.rs->pos += len;
+		return fr->rdat.rs->pos;
 	}
 	else
 	{
-		fr->rdat.raw.next_frame+=avail;
-		fr->rdat.raw.pos+=avail;
-		fr->rdat.raw.skip=len-avail;
+		fr->rdat.rs->next_frame += avail;
+		fr->rdat.rs->pos += avail;
+		fr->rdat.skip = len - avail;
 		return READER_MORE;
 	}
 }
+
+/*----------------------------------------------------------------------------*/
 
 static int raw_back_bytes(mpg123_handle *fr, off_t bytes)
 {
 	if( bytes>=0 )
 	{
 		/* Which one is right? */
-		ssize_t avail=fr->rdat.raw.next_frame-fr->rdat.raw.buffer;
-		/*ssize_t avail=fr->rdat.raw.next_frame-fr->rdat.raw.this_frame; */
+		ssize_t avail=fr->rdat.rs->next_frame-fr->rdat.rs->buffer;
+		/*ssize_t avail=fr->rdat.rs->next_frame-fr->rdat.rs->this_frame; */
 		if( bytes<=avail )
 		{
-			fr->rdat.raw.next_frame-=bytes;
-			fr->rdat.raw.pos-=bytes;
-			return fr->rdat.raw.pos;
+			fr->rdat.rs->next_frame-=bytes;
+			fr->rdat.rs->pos-=bytes;
+			return fr->rdat.rs->pos;
 		}
 		else
 		{
@@ -839,46 +1063,18 @@ static int raw_back_bytes(mpg123_handle *fr, off_t bytes)
 	}
 }
 
+/*----------------------------------------------------------------------------*/
+
 static int raw_seek_frame(mpg123_handle *fr, off_t num)
 {
 	return READER_ERROR;
 }
 
+/*----------------------------------------------------------------------------*/
+
 static void raw_forget(mpg123_handle *fr)
 {
-	fr->rdat.raw.this_frame=fr->rdat.raw.next_frame;
-}
-
-int attribute_align_arg mpg123_decode_raw(mpg123_handle *fr, off_t *num, unsigned char **audio, size_t *bytes)
-{
-	int ret=MPG123_OK;
-
-	if( fr->rdat.raw.skip>0 )
-	{
-		ssize_t len=fr->rdat.raw.skip;
-		ssize_t avail=fr->rdat.raw.bufend-fr->rdat.raw.next_frame;
-		if( len<avail )
-		{
-			fr->rdat.raw.next_frame+=len;
-			fr->rdat.raw.pos+=len;
-			fr->rdat.raw.skip=0;
-			fr->rdat.raw.this_frame=fr->rdat.raw.next_frame;
-		}
-		else
-		{
-			fr->rdat.raw.next_frame+=avail;
-			fr->rdat.raw.pos+=avail;
-			fr->rdat.raw.skip=len-avail;
-			ret=READER_MORE;
-		}
-	}
-
-	if( ret==MPG123_OK )
-	{
-		ret=mpg123_decode_frame( fr, num, audio, bytes );
-	}
-
-	return ret;
+	fr->rdat.rs->this_frame=fr->rdat.rs->next_frame;
 }
 
 /*****************************************************************************/
@@ -1253,6 +1449,9 @@ int open_raw(mpg123_handle *fr)
 	fr->err = MPG123_MISSING_FEATURE;
 	return -1;
 #else
+	/* VFALCO: I have no idea why this is needed but we crash otherwise.
+	 * And it has to happen here, place it any farther down and we crash. */
+	frame_reset( fr );
 #ifndef NO_ICY
 	if(fr->p.icy_interval > 0)
 	{

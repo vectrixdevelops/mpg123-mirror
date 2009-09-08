@@ -624,7 +624,6 @@ static int get_next_frame(mpg123_handle *mh)
 			if(b==0 || mh->rdat.filepos == mh->rdat.filelen)
 			{ /* We simply reached the end. */
 				mh->track_frames = mh->num + 1;
-				debug("What about updating/checking gapless sample count here?");
 				return MPG123_DONE;
 			}
 			else return MPG123_ERR; /* Some real error. */
@@ -789,7 +788,6 @@ int attribute_align_arg mpg123_decode_frame(mpg123_handle *mh, off_t *num, unsig
 			if(mh->new_format)
 			{
 				debug("notifiying new format");
-				mh->new_format = 0;
 				return MPG123_NEW_FORMAT;
 			}
 			if(num != NULL) *num = mh->num;
@@ -879,7 +877,6 @@ int attribute_align_arg mpg123_decode(mpg123_handle *mh, const unsigned char *in
 			if(mh->new_format)
 			{
 				debug("notifiying new format");
-				mh->new_format = 0;
 				return MPG123_NEW_FORMAT;
 			}
 			if(mh->buffer.size - mh->buffer.fill < mh->outblock)
@@ -1080,16 +1077,14 @@ off_t attribute_align_arg mpg123_seek(mpg123_handle *mh, off_t sampleoff, int wh
 		return MPG123_ERR;
 	}
 	if((b=init_track(mh)) < 0) return b;
+
 	switch(whence)
 	{
 		case SEEK_CUR: pos += sampleoff; break;
 		case SEEK_SET: pos  = sampleoff; break;
 		case SEEK_END:
-			/* When we do not know the end already, we can try to find it. */
-			if(mh->track_frames < 1 && (mh->rdat.flags & READER_SEEKABLE))
-			mpg123_scan(mh);
 #ifdef GAPLESS
-			if(mh->end_os > 0) pos = SAMPLE_ADJUST(mh->end_os) - sampleoff;
+			if(mh->end_os >= 0) pos = SAMPLE_ADJUST(mh->end_os) - sampleoff;
 #else
 			if(mh->track_frames > 0) pos = SAMPLE_ADJUST(frame_outs(mh, mh->track_frames)) - sampleoff;
 #endif
@@ -1253,7 +1248,6 @@ int attribute_align_arg mpg123_scan(mpg123_handle *mh)
 	if(!(mh->rdat.flags & READER_SEEKABLE)){ mh->err = MPG123_NO_SEEK; return MPG123_ERR; }
 	/* Scan through the _whole_ file, since the current position is no count but computed assuming constant samples per frame. */
 	/* Also, we can just keep the current buffer and seek settings. Just operate on input frames here. */
-	debug("issuing scan");
 	b = init_track(mh); /* mh->num >= 0 !! */
 	if(b<0)
 	{
@@ -1273,10 +1267,6 @@ int attribute_align_arg mpg123_scan(mpg123_handle *mh)
 		++mh->track_frames;
 		mh->track_samples += spf(mh);
 	}
-#ifdef GAPLESS
-	/* Also, think about usefulness of that extra value track_samples ... it could be used for consistency checking. */
-	frame_gapless_update(mh, mh->track_samples);
-#endif	
 	b = mh->rd->seek_frame(mh, backframe);
 	if(b<0 || mh->num != backframe) return MPG123_ERR;
 	mh->to_decode = to_decode;
@@ -1453,7 +1443,7 @@ const char* attribute_align_arg mpg123_plain_strerror(int errcode)
 		case MPG123_NEED_MORE:
 			return "Message: Feed me more input data!";
 		case MPG123_NEW_FORMAT:
-			return "Message: Prepare for a changed audio format (query the new one)!";
+			return "Message: Prepare for a changed audio format!";
 		default:
 			return "I have no idea - an unknown error code!";
 	}

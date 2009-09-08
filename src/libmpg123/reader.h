@@ -49,11 +49,9 @@ struct reader_data
 	off_t   (*lseek)(int fd, off_t offset, int whence);
 	/* Buffered readers want that abstracted, set internally. */
 	ssize_t (*fullread)(mpg123_handle *, unsigned char *, ssize_t);
-	union
-	{
-		struct bufferchain buffer; /* Not dynamically allocated, these few struct bytes aren't worth the trouble. */
-		struct mpg123_raw_stream raw;
-	};
+	struct bufferchain buffer; /* Not dynamically allocated, these few struct bytes aren't worth the trouble. */
+	struct mpgraw_state* rs; /* backpointer to the caller's state structure */
+	ssize_t skip; /* raw api amount to skip on read */
 };
 
 /* start to use off_t to properly do LFS in future ... used to be long */
