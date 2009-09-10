@@ -678,6 +678,7 @@ off_t feed_set_pos(mpg123_handle *fr, off_t pos)
  *
  ******************************************************************************/
 
+/* in theory this should be 2896 */
 #define MIN_FEED_BYTES 0
 
 /* VFALCO: Convert an ambiguous return value into a clear description */
@@ -824,6 +825,7 @@ void mpgraw_seek(
 	rs->next_frame=0;
 	rs->pos=0;
 	rs->mh->rdat.skip=0;
+	rs->mh->rdat.advance_this_frame = FALSE;
 
 	rs->error = MPG123_OK;
 }
@@ -845,6 +847,11 @@ int mpgraw_next(
 		{
 			ssize_t needed = mh->rdat.skip;
 			ssize_t available = mh->rdat.rs->bufend - mh->rdat.rs->next_frame;
+
+			if( available == needed )
+			{
+				available = needed;
+			}
 
 			if( available > needed )
 			{
@@ -987,6 +994,13 @@ static int raw_init(mpg123_handle *fr)
 static ssize_t raw_read(mpg123_handle *fr, unsigned char *out, ssize_t count)
 {
 	ssize_t gotcount = fr->rdat.rs->bufend - fr->rdat.rs->next_frame;
+
+	if( fr->rdat.advance_this_frame )
+	{
+		fr->rdat.rs->this_frame = fr->rdat.rs->next_frame;
+		fr->rdat.advance_this_frame = FALSE;
+	}
+
 	if( gotcount >= count )
 	{
 		gotcount = count;
@@ -1034,6 +1048,12 @@ static off_t raw_skip_bytes(mpg123_handle *fr,off_t len)
 {
 	ssize_t avail = fr->rdat.rs->bufend - fr->rdat.rs->next_frame;
 
+	if( fr->rdat.advance_this_frame )
+	{
+		fr->rdat.rs->this_frame = fr->rdat.rs->next_frame;
+		fr->rdat.advance_this_frame = FALSE;
+	}
+
 	if( len < avail )
 	{
 		fr->rdat.rs->next_frame += len;
@@ -1053,6 +1073,12 @@ static off_t raw_skip_bytes(mpg123_handle *fr,off_t len)
 
 static int raw_back_bytes(mpg123_handle *fr, off_t bytes)
 {
+	if( fr->rdat.advance_this_frame )
+	{
+		fr->rdat.rs->this_frame = fr->rdat.rs->next_frame;
+		fr->rdat.advance_this_frame = FALSE;
+	}
+
 	if( bytes>=0 )
 	{
 		/* Which one is right? */
@@ -1086,7 +1112,7 @@ static int raw_seek_frame(mpg123_handle *fr, off_t num)
 
 static void raw_forget(mpg123_handle *fr)
 {
-	fr->rdat.rs->this_frame=fr->rdat.rs->next_frame;
+	fr->rdat.advance_this_frame = TRUE;
 }
 
 /*****************************************************************************/

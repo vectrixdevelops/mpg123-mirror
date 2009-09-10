@@ -52,6 +52,7 @@ struct reader_data
 	struct bufferchain buffer; /* Not dynamically allocated, these few struct bytes aren't worth the trouble. */
 	struct mpgraw_state* rs; /* backpointer to the caller's state structure */
 	ssize_t skip; /* raw api amount to skip on read */
+	int advance_this_frame;
 };
 
 /* start to use off_t to properly do LFS in future ... used to be long */
