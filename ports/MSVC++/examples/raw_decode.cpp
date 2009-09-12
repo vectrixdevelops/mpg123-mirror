@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <tchar.h>
 #include <wchar.h>
+#include <memory.h>
 
 #define INBUFF  16384 * 2 * 2
 #define WAVE_FORMAT_PCM 0x0001
@@ -102,7 +103,11 @@ int _tmain(int argc, TCHAR **argv)
 	size_t inc, outc;
 	off_t len;
     int firstframedecoded;
-	inc = outc = 0;
+    off_t* offsets;
+	off_t step;
+	size_t fill;
+    size_t left;
+	inc = outc = left = 0;
     firstframedecoded = 0;
 
 	if(argc < 3)
@@ -112,38 +117,6 @@ int _tmain(int argc, TCHAR **argv)
 	}
 
 	mpg123_init();
-
-	//mpg123_param(m, MPG123_VERBOSE, 4, 0);
-
-	//ret = mpg123_param(m, MPG123_FLAGS, MPG123_FUZZY | MPG123_SEEKBUFFER | MPG123_GAPLESS, 0);
-	//if(ret != MPG123_OK)
-	//{
-	//	fprintf(stderr,"Unable to set library options: %s\n", mpg123_plain_strerror(ret));
-	//	return -1;
-	//}
-
-	// Let the seek index auto-grow and contain an entry for every frame
-	//ret = mpg123_param(m, MPG123_INDEX_SIZE, -1, 0);
-	//if(ret != MPG123_OK)
-	//{
-	//	fprintf(stderr,"Unable to set index size: %s\n", mpg123_plain_strerror(ret));
-	//	return -1;
-	//}
-
-	/*ret = mpg123_format_none(m);
-	if(ret != MPG123_OK)
-	{
-		fprintf(stderr,"Unable to disable all output formats: %s\n", mpg123_plain_strerror(ret));
-		return -1;
-	}*/
-	
-	// Use float output
-	//ret = mpg123_format(m, 44100, MPG123_MONO | MPG123_STEREO,  MPG123_ENC_FLOAT_32);
-	//if(ret != MPG123_OK)
-	//{
-	//	fprintf(stderr,"Unable to set float output formats: %s\n", mpg123_plain_strerror(ret));
-	//	return -1;
-	//}
 
 	ret = mpgraw_open(&s, NULL, 44100, 2, MPG123_ENC_FLOAT_32);
 	if(ret != MPG123_OK)
@@ -168,11 +141,13 @@ int _tmain(int argc, TCHAR **argv)
 		
 	while(1)
 	{
-		len = fread(buf, sizeof(unsigned char), INBUFF, in);
+        left = s.bufend - s.next_frame;
+        memcpy(buf, buf+(INBUFF-left), left);
+		len = fread(buf+left, sizeof(unsigned char), INBUFF-left, in);
 		if(len <= 0)
 			break;
 		inc += len;
-		ret = mpgraw_feed(&s, buf, len);
+		ret = mpgraw_feed(&s, buf, len+left);
 
 		while(ret != MPG123_ERR && ret != MPG123_NEED_MORE)
 		{
@@ -201,6 +176,11 @@ int _tmain(int argc, TCHAR **argv)
 			break; 
 		}
 	}
+
+    offsets = NULL;
+    step = 0;
+    fill = 0;	
+    mpg123_index(s.mh, &offsets, &step, &fill);
 
 	fprintf(stderr, "Finished\n", (unsigned long)inc, (unsigned long)outc);
 
