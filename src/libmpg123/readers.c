@@ -888,10 +888,7 @@ int mpgraw_next(
 				/* VFALCO: Eat the new format. Not sure if this is right
 				 * Is this the format of the actual input? Or is this
 				 * what mpg123 would give us on decode (e.g. after NTOM) */
-				long rate;
-				int channels;
-				int encoding;
-				mpg123_getformat( mh, &rate, &channels, &encoding );
+				mpg123_getformat( mh, &rs->rate, &rs->channels, &rs->encoding );
 
 				rs->error = MPG123_OK;
 			}
