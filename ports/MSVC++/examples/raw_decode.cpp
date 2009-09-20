@@ -98,17 +98,15 @@ int _tmain(int argc, TCHAR **argv)
 {
 	unsigned char buf[INBUFF];
 	FILE *in;
-    mpgraw_state s;	
+	mpgraw_state s;
 	int ret;
-	size_t inc, outc;
 	off_t len;
-    int firstframedecoded;
-    off_t* offsets;
+	off_t* offsets;
 	off_t step;
 	size_t fill;
-    size_t left;
-	inc = outc = left = 0;
-    firstframedecoded = 0;
+	size_t left;
+	int firstframefound;
+	left = firstframefound = 0;
 
 	if(argc < 3)
 	{
@@ -118,7 +116,7 @@ int _tmain(int argc, TCHAR **argv)
 
 	mpg123_init();
 
-	ret = mpgraw_open(&s, NULL, 44100, 2, MPG123_ENC_FLOAT_32);
+	ret = mpgraw_open(&s, NULL, 0, MPG123_MONO | MPG123_STEREO, MPG123_ENC_FLOAT_32);
 	if(ret != MPG123_OK)
 	{
 		fprintf(stderr,"Unable to open stream: %s\n", mpg123_plain_strerror(ret));
@@ -141,53 +139,51 @@ int _tmain(int argc, TCHAR **argv)
 		
 	while(1)
 	{
-        left = s.bufend - s.next_frame;
-        memcpy(buf, buf+(INBUFF-left), left);
-		len = fread(buf+left, sizeof(unsigned char), INBUFF-left, in);
-		if(len <= 0)
-			break;
-		inc += len;
-		ret = mpgraw_feed(&s, buf, len+left);
-
-		while(ret != MPG123_ERR && ret != MPG123_NEED_MORE)
+		int ret = mpgraw_next(&s, rawFlagAudioFrame);
+		if(ret == MPG123_OK)
 		{
-            ret = mpgraw_next(&s, rawFlagAudioFrame);
-            if(ret == MPG123_OK)
-            {
-			    ret = mpgraw_decode(&s, NULL, 0); // for now the temporary fields in s are used
-			    if(ret == MPG123_OK && !firstframedecoded)
-			    {
-                    firstframedecoded = 1;
-                    rate = s.rate;
-                    channels = s.channels;
-                    enc = s.encoding;
-				    initwavformat();
-				    initwav();
-				    fprintf(stderr, "Format: %li Hz, %i channels, encoding value %i\n", rate, channels, enc);
-			    }
-			    fwrite(s.audio, sizeof(unsigned char), s.bytes, out);
-			    outc += s.bytes;
-            }
+			if(!firstframefound)
+			{
+				firstframefound = 1;
+				rate = s.rate;
+				channels = s.channels;
+				enc = s.encoding;
+				initwavformat();
+				initwav();
+				fprintf(stderr, "Format: %li Hz, %i channels, encoding value %i\n", rate, channels, enc);
+			}
+
+			ret = mpgraw_decode(&s, NULL, 0); // for now the temporary fields in s are used
+			fwrite(s.audio, sizeof(unsigned char), s.bytes, out);
 		}
-
-		if(ret == MPG123_ERR)
+		
+		if(ret == MPG123_NEED_MORE)
 		{
-            fprintf(stderr, "Error: %s", mpg123_strerror(s.mh));
+			left = s.bufend - s.next_frame;
+			memcpy(buf, buf+(INBUFF-left), left);
+			len = fread(buf+left, sizeof(unsigned char), INBUFF-left, in);
+			if(len <= 0)
+				break;
+			ret = mpgraw_feed(&s, buf, len+left);
+		}
+		else if(ret == MPG123_ERR)
+		{
+			fprintf(stderr, "Error: %s", mpg123_strerror(s.mh));
 			break; 
 		}
 	}
 
-    offsets = NULL;
-    step = 0;
-    fill = 0;	
-    mpg123_index(s.mh, &offsets, &step, &fill);
+	offsets = NULL;
+	step = 0;
+	fill = 0;
+	mpg123_index(s.mh, &offsets, &step, &fill);
 
-	fprintf(stderr, "Finished\n", (unsigned long)inc, (unsigned long)outc);
+	fprintf(stderr, "Finished\n");
 
 	closewav();
 	fclose(out);
 	fclose(in);
-    mpgraw_close(&s);
+	mpgraw_close(&s);
 	mpg123_exit();
 	return 0;
 }

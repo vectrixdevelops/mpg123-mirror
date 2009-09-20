@@ -871,8 +871,7 @@ int mpgraw_next(
 
 		if( ! rs->error )
 		{
-			rs->error = mpg123_decode_frame( mh, &rs->num, &rs->audio, &rs->bytes );
-
+			rs->error = mpg123_framebyframe_next(mh);
 			if( rs->error == MPG123_OK || rs->error == MPG123_DONE )
 			{
 				/* Get the whole frame info */
@@ -911,6 +910,8 @@ int mpgraw_decode(
 	size_t bytes )
 {
 	mpg123_handle* mh = rs->mh;
+
+	rs->error = mpg123_framebyframe_decode( mh, &rs->num, &rs->audio, &rs->bytes );
 
 	/* Store the number of frames for caller convenience */
 	rs->frames = rs->bytes / ( mh->af.encsize * mh->af.channels );
