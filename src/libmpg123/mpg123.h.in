@@ -958,35 +958,6 @@ enum
 };
 
 /*----------------------------------------------------------------------------*/
-#if 0
-typedef struct mpgraw_frame
-{
-	/* for all frames */
-	int kind; /* type of frame (one of the enumeration) */
-	int framesize; /**< The size of the frame (in bytes). */
-	size_t frame_offset; /* absolute byte offset of the beginning
-						    of this frame's data, including reservoir
-							if it is an audio frame */
-
-	/* for id3 frames */
-	const char *tag_name; /* name of this tag. size is in framesize */
-
-	/* for audio frames */
-	unsigned short samples; /* number of mono or stereo samples */
-	enum mpg123_version version; /**< The MPEG version (1.0/2.0/2.5). */
-	int layer; /**< The MPEG Audio Layer (MP1/MP2/MP3). */
-	long rate; /**< The sampling rate in Hz. */
-	enum mpg123_mode mode; /**< The audio mode (Mono, Stereo, Joint-stero, Dual Channel). */
-	int mode_ext; /**< The mode extension bit flag. */
-	enum mpg123_flags flags; /**< MPEG Audio flag bits. */
-	int emphasis; /**< The emphasis type. */
-	int bitrate; /**< Bitrate of the frame (kbps). */
-	int abr_rate; /**< The target average bitrate. */
-	enum mpg123_vbr vbr; /**< The VBR mode. */
-} mpgraw_frame;
-#endif
-
-/*----------------------------------------------------------------------------*/
 
 /* read only */
 typedef struct mpgraw_state
@@ -1006,6 +977,7 @@ typedef struct mpgraw_state
 
 	/* Decoded output data, after a valid call to mpgraw_decode() */
 	int frames; /* number of frames (mono or stereo samples) */
+	int new_format; /* TRUE if we got MPG123_NEW_FORMAT */
 	int encoding;
 	int channels;
 	long rate;

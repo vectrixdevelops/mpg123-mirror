@@ -812,19 +812,20 @@ void mpgraw_seek(
 
 	/* need to do this because frame_outs() gets called with the */
 	/* frame number and its successor in mpg123_decode_frame() */
-	rs->mh->num=0;
+	rs->mh->num = 0;
 
 	/* VFALCO: Not sure what this is all about */
 	/* mh->buffer.fill=0; */
 	/* mh->to_decode=FALSE; */
 	/* frame_reset(mh); */
 
-	rs->buffer=0;
-	rs->bufend=0;
-	rs->this_frame=0;
-	rs->next_frame=0;
-	rs->pos=0;
-	rs->mh->rdat.skip=0;
+	rs->buffer = 0;
+	rs->bufend = 0;
+	rs->this_frame = 0;
+	rs->next_frame = 0;
+	rs->pos = 0;
+	rs->new_format = FALSE;
+	rs->mh->rdat.skip = 0;
 	rs->mh->rdat.advance_this_frame = FALSE;
 
 	rs->error = MPG123_OK;
@@ -891,10 +892,18 @@ int mpgraw_next(
 				mpg123_getformat( mh, &rs->rate, &rs->channels, &rs->encoding );
 
 				rs->error = MPG123_OK;
+				rs->new_format = TRUE;
 			}
 		}
 	}
 	while( ! rs->error );
+
+	/* notify new format if we got it earlier */
+	if( rs->error == MPG123_OK && rs->new_format )
+	{
+		rs->new_format = FALSE;
+		rs->error = MPG123_NEW_FORMAT;
+	}
 
 	return rs->error;
 }
