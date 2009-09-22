@@ -624,6 +624,7 @@ static int get_next_frame(mpg123_handle *mh)
 			if(b==0 || mh->rdat.filepos == mh->rdat.filelen)
 			{ /* We simply reached the end. */
 				mh->track_frames = mh->num + 1;
+				debug("What about updating/checking gapless sample count here?");
 				return MPG123_DONE;
 			}
 			else return MPG123_ERR; /* Some real error. */
@@ -780,11 +781,11 @@ void decode_the_frame(mpg123_handle *fr)
 
 /*
 	Decode the current frame into the frame structure's buffer, accessible at the location stored in <audio>, with <bytes> bytes available.
-	<num> will contain the last decoded frame.number. This function should be called after mpg123_framebyframe_next positioned the stream at a
+	<num> will contain the last decoded frame number. This function should be called after mpg123_framebyframe_next positioned the stream at a
 	valid mp3 frame. The buffer contents will get lost on the next call to mpg123_framebyframe_next or mpg123_framebyframe_decode.
 	returns
-	MPG123_OK -- successfully decoded the frame, you get your output data
-	MPG123_DONE -- TODO Should never be returned by this function?
+	MPG123_OK -- successfully decoded or ignored the frame, you get your output data or in case of ignored frames 0 bytes
+	MPG123_DONE -- decoding finished, should not happen
 	MPG123_ERR -- some error occured.
 	MPG123_ERR_NULL -- audio or bytes are not pointing to valid storage addresses
 	MPG123_BAD_HANDLE -- mh has not been initialized
@@ -797,10 +798,10 @@ int attribute_align_arg mpg123_framebyframe_decode(mpg123_handle *mh, off_t *num
 	if(audio == NULL) return MPG123_ERR_NULL;
 	if(mh == NULL) return MPG123_BAD_HANDLE;
 	if(mh->buffer.size < mh->outblock) return MPG123_NO_SPACE;
-	if(!mh->to_decode) return MPG123_ERR;
 
 	*bytes = 0;
 	mh->buffer.fill = 0; /* always start fresh */
+	if(!mh->to_decode) return MPG123_OK;
 
 	if(num != NULL) *num = mh->num;
 	debug("decoding");
@@ -827,12 +828,7 @@ int attribute_align_arg mpg123_framebyframe_decode(mpg123_handle *mh, off_t *num
 */
 int attribute_align_arg mpg123_framebyframe_next(mpg123_handle *mh)
 {
-	/*
-		TODO
-		ALIGNCHECK(mh) not possible because of variable declaration at the beginning?
-	*/
 	int b;
-	
 	if(mh == NULL) return MPG123_BAD_HANDLE;
 
 	mh->to_decode = mh->to_ignore = FALSE;
@@ -842,13 +838,9 @@ int attribute_align_arg mpg123_framebyframe_next(mpg123_handle *mh)
 
 	if(b == MPG123_NEED_MORE) return MPG123_NEED_MORE;
 
-	/*
-		TODO
-		nothing there to decode, should be a more specific error
-		so that the users knows he should call mpg123_framebyframe_next
-		again instead of mpg123_framebyframe_decode?
-	*/
-	if(!mh->to_decode) return MPG123_ERR;
+	/* mpg123_framebyframe_decode will return MPG123_OK with 0 bytes decoded if mh->to_decode is 0 */
+	if(!mh->to_decode)
+		return MPG123_OK;
 
 	if(mh->new_format)
 	{
@@ -862,7 +854,6 @@ int attribute_align_arg mpg123_framebyframe_next(mpg123_handle *mh)
 
 	return MPG123_OK;
 }
-
 
 /*
 	Put _one_ decoded frame into the frame structure's buffer, accessible at the location stored in <audio>, with <bytes> bytes available.
@@ -891,6 +882,7 @@ int attribute_align_arg mpg123_decode_frame(mpg123_handle *mh, off_t *num, unsig
 			if(mh->new_format)
 			{
 				debug("notifiying new format");
+				mh->new_format = 0;
 				return MPG123_NEW_FORMAT;
 			}
 			if(num != NULL) *num = mh->num;
@@ -980,6 +972,7 @@ int attribute_align_arg mpg123_decode(mpg123_handle *mh, const unsigned char *in
 			if(mh->new_format)
 			{
 				debug("notifiying new format");
+				mh->new_format = 0;
 				ret = MPG123_NEW_FORMAT;
 				goto decodeend;
 			}
@@ -1181,14 +1174,16 @@ off_t attribute_align_arg mpg123_seek(mpg123_handle *mh, off_t sampleoff, int wh
 		return MPG123_ERR;
 	}
 	if((b=init_track(mh)) < 0) return b;
-
 	switch(whence)
 	{
 		case SEEK_CUR: pos += sampleoff; break;
 		case SEEK_SET: pos  = sampleoff; break;
 		case SEEK_END:
+			/* When we do not know the end already, we can try to find it. */
+			if(mh->track_frames < 1 && (mh->rdat.flags & READER_SEEKABLE))
+			mpg123_scan(mh);
 #ifdef GAPLESS
-			if(mh->end_os >= 0) pos = SAMPLE_ADJUST(mh->end_os) - sampleoff;
+			if(mh->end_os > 0) pos = SAMPLE_ADJUST(mh->end_os) - sampleoff;
 #else
 			if(mh->track_frames > 0) pos = SAMPLE_ADJUST(frame_outs(mh, mh->track_frames)) - sampleoff;
 #endif
@@ -1352,6 +1347,7 @@ int attribute_align_arg mpg123_scan(mpg123_handle *mh)
 	if(!(mh->rdat.flags & READER_SEEKABLE)){ mh->err = MPG123_NO_SEEK; return MPG123_ERR; }
 	/* Scan through the _whole_ file, since the current position is no count but computed assuming constant samples per frame. */
 	/* Also, we can just keep the current buffer and seek settings. Just operate on input frames here. */
+	debug("issuing scan");
 	b = init_track(mh); /* mh->num >= 0 !! */
 	if(b<0)
 	{
@@ -1371,6 +1367,10 @@ int attribute_align_arg mpg123_scan(mpg123_handle *mh)
 		++mh->track_frames;
 		mh->track_samples += spf(mh);
 	}
+#ifdef GAPLESS
+	/* Also, think about usefulness of that extra value track_samples ... it could be used for consistency checking. */
+	frame_gapless_update(mh, mh->track_samples);
+#endif	
 	b = mh->rd->seek_frame(mh, backframe);
 	if(b<0 || mh->num != backframe) return MPG123_ERR;
 	mh->to_decode = to_decode;
@@ -1531,6 +1531,28 @@ int attribute_align_arg mpg123_index(mpg123_handle *mh, off_t **offsets, off_t *
 	return MPG123_OK;
 }
 
+int attribute_align_arg mpg123_set_index(mpg123_handle *mh, off_t *offsets, off_t step, size_t fill)
+{
+	ALIGNCHECK(mh);
+	if(mh == NULL) return MPG123_ERR;
+#ifdef FRAME_INDEX
+	if(step == 0)
+	{
+		mh->err = MPG123_BAD_INDEX_PAR;
+		return MPG123_ERR;
+	}
+	if(fi_set(&mh->index, offsets, step, fill) == -1)
+	{
+		mh->err = MPG123_OUT_OF_MEM;
+		return MPG123_ERR;
+	}
+	return MPG123_OK;
+#else
+	mh->err = MPG123_MISSING_FEATURE;
+	return MPG123_ERR;
+#endif
+}
+
 int attribute_align_arg mpg123_close(mpg123_handle *mh)
 {
 	ALIGNCHECK(mh);
@@ -1614,7 +1636,7 @@ const char* attribute_align_arg mpg123_plain_strerror(int errcode)
 		case MPG123_NEED_MORE:
 			return "Message: Feed me more input data!";
 		case MPG123_NEW_FORMAT:
-			return "Message: Prepare for a changed audio format!";
+			return "Message: Prepare for a changed audio format (query the new one)!";
 		default:
 			return "I have no idea - an unknown error code!";
 	}
