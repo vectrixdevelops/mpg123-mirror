@@ -887,8 +887,10 @@ int mpgraw_next(
 			else if( rs->error == MPG123_NEW_FORMAT )
 			{
 				/* VFALCO: Eat the new format. Not sure if this is right
-				 * Is this the format of the actual input? Or is this
-				 * what mpg123 would give us on decode (e.g. after NTOM) */
+				 * Is this the format of the actual input?
+				 * Is this before or after NTOM?
+				 * Do we have both sets of values? we should make them available if thats the case 
+				 * Ask Thomas about this */
 				mpg123_getformat( mh, &rs->rate, &rs->channels, &rs->encoding );
 
 				rs->error = MPG123_OK;
@@ -898,12 +900,19 @@ int mpgraw_next(
 	}
 	while( ! rs->error );
 
-	/* notify new format if we got it earlier */
-	if( rs->error == MPG123_OK && rs->new_format )
+	if( rs->error == MPG123_OK )
 	{
-		rs->new_format = FALSE;
-		rs->error = MPG123_NEW_FORMAT;
+		/* Store the number of frames for caller convenience */
+		rs->frame_count = spf(mh);
+
+		/* notify new format if we got it earlier */
+		if( rs->new_format )
+		{
+			rs->new_format = FALSE;
+			rs->error = MPG123_NEW_FORMAT;
+		}
 	}
+
 
 	return rs->error;
 }
@@ -918,14 +927,6 @@ int mpgraw_decode(
 	mpg123_handle* mh = rs->mh;
 
 	rs->error = mpg123_framebyframe_decode( mh, &rs->num, &rs->audio, &rs->bytes );
-
-	/* Store the number of frames for caller convenience */
-	rs->frames = rs->bytes / ( mh->af.encsize * mh->af.channels );
-
-	/* Give the caller access to mh->af */
-	rs->encoding = mh->af.encoding;
-	rs->channels = mh->af.channels;
-	rs->rate = mh->af.rate;
 
 	/* Copy to caller's buffer */
 	if( dest )

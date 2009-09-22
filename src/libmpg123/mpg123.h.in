@@ -998,7 +998,7 @@ typedef struct mpgraw_state
 	struct mpg123_frameinfo frameinfo;
 
 	/* Decoded output data, after a valid call to mpgraw_decode() */
-	int frames; /* number of frames (mono or stereo samples) */
+	int frame_count; /* number of mono or stereo samples in the current mp3 frame */
 	int new_format; /* TRUE if we got MPG123_NEW_FORMAT */
 	int encoding;
 	int channels;
