@@ -893,6 +893,9 @@ int mpgraw_next(
 				 * Ask Thomas about this */
 				mpg123_getformat( mh, &rs->rate, &rs->channels, &rs->encoding );
 
+				/* Store the number of frames for caller convenience */
+				rs->frame_count = spf(mh);
+
 				rs->error = MPG123_OK;
 				rs->new_format = TRUE;
 			}
@@ -902,9 +905,6 @@ int mpgraw_next(
 
 	if( rs->error == MPG123_OK )
 	{
-		/* Store the number of frames for caller convenience */
-		rs->frame_count = spf(mh);
-
 		/* notify new format if we got it earlier */
 		if( rs->new_format )
 		{
