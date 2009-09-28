@@ -635,6 +635,28 @@ struct mpg123_frameinfo
 /** Get frame information about the MPEG audio bitstream and store it in a mpg123_frameinfo structure. */
 EXPORT int mpg123_info(mpg123_handle *mh, struct mpg123_frameinfo *mi);
 
+/** Data structure for giving raw access to information about the current decoding state */
+struct mpg123_raw_state
+{
+	size_t size;			/**< Length of the mpg123_raw_state structure in bytes */
+	int mpeg25;
+	int lsf;				/**< 0: MPEG 1.0; 1: MPEG 2.0/2.5 -- both used as bool and array index! */
+	int lay;
+	int mode;
+	int mode_ext;
+	int framesize;			/* computed framesize (-4 bytes header size) */
+	int error_protection;
+	int copyright;
+	int extension;
+	int original;
+	int emphasis;
+	int abr_rate;
+	enum mpg123_vbr vbr; /* 1 if variable bitrate was detected */
+};
+
+/** Get raw information about the MPEG audio bitstream. You are asked not to change any values. */
+EXPORT int mpg123_get_raw_state(mpg123_handle *mh, struct mpg123_raw_state **ps);
+
 /** Get the safe output buffer size for all cases (when you want to replace the internal buffer) */
 EXPORT size_t mpg123_safe_buffer(); 
 

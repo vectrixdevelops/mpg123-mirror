@@ -86,6 +86,8 @@ struct mpg123_pars_struct
 /* There is a lot to condense here... many ints can be merged as flags; though the main space is still consumed by buffers. */
 struct mpg123_handle_struct
 {
+	struct mpg123_raw_state ps; /* public state */
+
 	int fresh; /* to be moved into flags */
 	int new_format;
 	real hybrid_block[2][2][SBLIMIT*SSLIMIT];
@@ -180,26 +182,14 @@ struct mpg123_handle_struct
 	int single;
 	int II_sblimit;
 	int down_sample_sblimit;
-	int lsf; /* 0: MPEG 1.0; 1: MPEG 2.0/2.5 -- both used as bool and array index! */
 	/* Many flags in disguise as integers... wasting bytes. */
-	int mpeg25;
 	int down_sample;
 	int header_change;
-	int lay;
 	int (*do_layer)(mpg123_handle *);
-	int error_protection;
 	int bitrate_index;
 	int sampling_frequency;
 	int padding;
-	int extension;
-	int mode;
-	int mode_ext;
-	int copyright;
-	int original;
-	int emphasis;
-	int framesize; /* computed framesize */
 	int freesize;  /* free format frame size */
-	enum mpg123_vbr vbr; /* 1 if variable bitrate was detected */
 	off_t num; /* frame offset ... */
 	off_t playnum; /* playback offset... includes repetitions, reset at seeks */
 	off_t audio_start; /* The byte offset in the file where audio data begins. */
@@ -241,7 +231,6 @@ struct mpg123_handle_struct
 	int bsnum;
 	unsigned long oldhead;
 	unsigned long firsthead;
-	int abr_rate;
 #ifdef FRAME_INDEX
 	struct frame_index index;
 #endif
@@ -323,7 +312,7 @@ MPEG 2.5
 1152
 576
 */
-#define spf(fr) ((fr)->lay == 1 ? 384 : ((fr)->lay==2 ? 1152 : ((fr)->lsf || (fr)->mpeg25 ? 576 : 1152)))
+#define spf(fr) ((fr)->ps.lay == 1 ? 384 : ((fr)->ps.lay==2 ? 1152 : ((fr)->ps.lsf || (fr)->ps.mpeg25 ? 576 : 1152)))
 
 #ifdef GAPLESS
 /* well, I take that one for granted... at least layer3 */

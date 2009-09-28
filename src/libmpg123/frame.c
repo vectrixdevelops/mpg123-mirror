@@ -404,6 +404,7 @@ static void frame_fixed_reset(mpg123_handle *fr)
 {
 	frame_icy_reset(fr);
 	open_bad(fr);
+	fr->ps.size = sizeof(struct mpg123_raw_state);
 	fr->to_decode = FALSE;
 	fr->to_ignore = FALSE;
 	fr->metaflags = 0;
@@ -416,11 +417,11 @@ static void frame_fixed_reset(mpg123_handle *fr)
 	fr->clip = 0;
 	fr->oldhead = 0;
 	fr->firsthead = 0;
-	fr->vbr = MPG123_CBR;
-	fr->abr_rate = 0;
+	fr->ps.vbr = MPG123_CBR;
+	fr->ps.abr_rate = 0;
 	fr->track_frames = 0;
 	fr->track_samples = -1;
-	fr->framesize=0; 
+	fr->ps.framesize=0; 
 	fr->mean_frames = 0;
 	fr->mean_framesize = 0;
 	fr->freesize = 0;
@@ -457,7 +458,7 @@ static void frame_fixed_reset(mpg123_handle *fr)
 	fr->icy.next = 0;
 #endif
 	fr->halfphase = 0; /* here or indeed only on first-time init? */
-	fr->error_protection = 0;
+	fr->ps.error_protection = 0;
 	fr->freeformat_framesize = -1;
 }
 
@@ -499,6 +500,14 @@ void frame_exit(mpg123_handle *fr)
 	clear_icy(&fr->icy);
 }
 
+int attribute_align_arg mpg123_get_raw_state(mpg123_handle *mh, struct mpg123_raw_state **ps)
+{
+	if(mh == NULL) return MPG123_ERR;
+	if(mh->ps.size != (*ps)->size) return MPG123_ERR;
+	*ps = &mh->ps;
+	return MPG123_OK;
+}
+
 int attribute_align_arg mpg123_info(mpg123_handle *mh, struct mpg123_frameinfo *mi)
 {
 	if(mh == NULL) return MPG123_ERR;
@@ -507,10 +516,10 @@ int attribute_align_arg mpg123_info(mpg123_handle *mh, struct mpg123_frameinfo *
 		mh->err = MPG123_ERR_NULL;
 		return MPG123_ERR;
 	}
-	mi->version = mh->mpeg25 ? MPG123_2_5 : (mh->lsf ? MPG123_2_0 : MPG123_1_0);
-	mi->layer = mh->lay;
+	mi->version = mh->ps.mpeg25 ? MPG123_2_5 : (mh->ps.lsf ? MPG123_2_0 : MPG123_1_0);
+	mi->layer = mh->ps.lay;
 	mi->rate = frame_freq(mh);
-	switch(mh->mode)
+	switch(mh->ps.mode)
 	{
 		case 0: mi->mode = MPG123_M_STEREO; break;
 		case 1: mi->mode = MPG123_M_JOINT;  break;
@@ -518,17 +527,17 @@ int attribute_align_arg mpg123_info(mpg123_handle *mh, struct mpg123_frameinfo *
 		case 3: mi->mode = MPG123_M_MONO;   break;
 		default: error("That mode cannot be!");
 	}
-	mi->mode_ext = mh->mode_ext;
-	mi->framesize = mh->framesize+4; /* Include header. */
+	mi->mode_ext = mh->ps.mode_ext;
+	mi->framesize = mh->ps.framesize+4; /* Include header. */
 	mi->flags = 0;
-	if(mh->error_protection) mi->flags |= MPG123_CRC;
-	if(mh->copyright)        mi->flags |= MPG123_COPYRIGHT;
-	if(mh->extension)        mi->flags |= MPG123_PRIVATE;
-	if(mh->original)         mi->flags |= MPG123_ORIGINAL;
-	mi->emphasis = mh->emphasis;
+	if(mh->ps.error_protection) mi->flags |= MPG123_CRC;
+	if(mh->ps.copyright)        mi->flags |= MPG123_COPYRIGHT;
+	if(mh->ps.extension)        mi->flags |= MPG123_PRIVATE;
+	if(mh->ps.original)         mi->flags |= MPG123_ORIGINAL;
+	mi->emphasis = mh->ps.emphasis;
 	mi->bitrate  = frame_bitrate(mh);
-	mi->abr_rate = mh->abr_rate;
-	mi->vbr = mh->vbr;
+	mi->abr_rate = mh->ps.abr_rate;
+	mi->vbr = mh->ps.vbr;
 	return MPG123_OK;
 }
 
@@ -735,9 +744,9 @@ static off_t ignoreframe(mpg123_handle *fr)
 {
 	off_t preshift = fr->p.preframes;
 	/* Layer 3 _really_ needs at least one frame before. */
-	if(fr->lay==3 && preshift < 1) preshift = 1;
+	if(fr->ps.lay==3 && preshift < 1) preshift = 1;
 	/* Layer 1 & 2 reall do not need more than 2. */
-	if(fr->lay!=3 && preshift > 2) preshift = 2;
+	if(fr->ps.lay!=3 && preshift > 2) preshift = 2;
 
 	return fr->firstframe - preshift;
 }
@@ -782,7 +791,7 @@ void frame_set_frameseek(mpg123_handle *fr, off_t fe)
 void frame_skip(mpg123_handle *fr)
 {
 #ifndef NO_LAYER3
-	if(fr->lay == 3) set_pointer(fr, 512);
+	if(fr->ps.lay == 3) set_pointer(fr, 512);
 #endif
 }
 

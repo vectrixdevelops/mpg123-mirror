@@ -132,7 +132,7 @@ int do_layer1(mpg123_handle *fr)
 	ALIGNED(16) real fraction[2][SBLIMIT];
 	int single = fr->single;
 
-	fr->jsbound = (fr->mode == MPG_MD_JOINT_STEREO) ? (fr->mode_ext<<2)+4 : 32;
+	fr->jsbound = (fr->ps.mode == MPG_MD_JOINT_STEREO) ? (fr->ps.mode_ext<<2)+4 : 32;
 
 	if(stereo == 1 || single == SINGLE_MIX) /* I don't see mixing handled here */
 	single = SINGLE_LEFT;

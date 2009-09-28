@@ -94,7 +94,7 @@ int read_frame_init(mpg123_handle* fr)
 
 int frame_bitrate(mpg123_handle *fr)
 {
-	return tabsel_123[fr->lsf][fr->lay-1][fr->bitrate_index];
+	return tabsel_123[fr->ps.lsf][fr->ps.lay-1][fr->bitrate_index];
 }
 
 long frame_freq(mpg123_handle *fr)
@@ -143,13 +143,13 @@ static int check_lame_tag(mpg123_handle *fr)
 		Also, how to avoid false positives? I guess I should interpret more of the header to rule that out(?).
 		I hope that ensuring all zeros until tag start is enough.
 	*/
-	int lame_offset = (fr->stereo == 2) ? (fr->lsf ? 17 : 32 ) : (fr->lsf ? 9 : 17);
+	int lame_offset = (fr->stereo == 2) ? (fr->ps.lsf ? 17 : 32 ) : (fr->ps.lsf ? 9 : 17);
 	/* At least skip the decoder delay. */
 #ifdef GAPLESS
 	if(fr->begin_s == 0) frame_gapless_init(fr, GAPLESS_DELAY, 0);
 #endif
 
-	if(fr->framesize >= 120+lame_offset) /* traditional Xing header is 120 bytes */
+	if(fr->ps.framesize >= 120+lame_offset) /* traditional Xing header is 120 bytes */
 	{
 		int i;
 		int lame_type = 0;
@@ -178,7 +178,7 @@ static int check_lame_tag(mpg123_handle *fr)
 			)
 			{
 				lame_type = 2;
-				fr->vbr = MPG123_VBR; /* Xing header means always VBR */
+				fr->ps.vbr = MPG123_VBR; /* Xing header means always VBR */
 			}
 			if(lame_type)
 			{
@@ -288,10 +288,10 @@ static int check_lame_tag(mpg123_handle *fr)
 					{
 						/* from rev1 proposal... not sure if all good in practice */
 						case 1:
-						case 8: fr->vbr = MPG123_CBR; break;
+						case 8: fr->ps.vbr = MPG123_CBR; break;
 						case 2:
-						case 9: fr->vbr = MPG123_ABR; break;
-						default: fr->vbr = MPG123_VBR; /* 00==unknown is taken as VBR */
+						case 9: fr->ps.vbr = MPG123_ABR; break;
+						default: fr->ps.vbr = MPG123_VBR; /* 00==unknown is taken as VBR */
 					}
 					/* skipping: lowpass filter value */
 					lame_offset += 1;
@@ -352,10 +352,10 @@ static int check_lame_tag(mpg123_handle *fr)
 						}
 					}
 					lame_offset += 1; /* skipping encoding flags byte */
-					if(fr->vbr == MPG123_ABR)
+					if(fr->ps.vbr == MPG123_ABR)
 					{
-						fr->abr_rate = fr->bsbuf[lame_offset];
-						if(VERBOSE3) fprintf(stderr, "Note: Info: ABR rate = %u\n", fr->abr_rate);
+						fr->ps.abr_rate = fr->bsbuf[lame_offset];
+						if(VERBOSE3) fprintf(stderr, "Note: Info: ABR rate = %u\n", fr->ps.abr_rate);
 					}
 					lame_offset += 1;
 					/* encoder delay and padding, two 12 bit values... lame does write them from int ...*/
@@ -403,9 +403,9 @@ int read_frame(mpg123_handle *fr)
 	off_t framepos;
 	int ret;
 	/* stuff that needs resetting if complete frame reading fails */
-	int oldsize  = fr->framesize;
+	int oldsize  = fr->ps.framesize;
 	int oldphase = fr->halfphase;
-	fr->fsizeold=fr->framesize;       /* for Layer3 */
+	fr->fsizeold=fr->ps.framesize;       /* for Layer3 */
 
 	/* Speed-down hack: Play it again, Sam (the frame, I mean). */
 	if (fr->p.halfspeed) 
@@ -417,8 +417,8 @@ int read_frame(mpg123_handle *fr)
 			--fr->halfphase;
 			fr->bitindex = 0;
 			fr->wordpointer = (unsigned char *) fr->bsbuf;
-			if(fr->lay == 3) memcpy (fr->bsbuf, fr->ssave, fr->ssize);
-			if(fr->error_protection) fr->crc = getbits(fr, 16); /* skip crc */
+			if(fr->ps.lay == 3) memcpy (fr->bsbuf, fr->ssave, fr->ssize);
+			if(fr->ps.error_protection) fr->crc = getbits(fr, 16); /* skip crc */
 			return 1;
 		}
 		else
@@ -516,9 +516,9 @@ init_resync:
 		unsigned long nexthead = 0;
 		int hd = 0;
 		off_t start = fr->rd->tell(fr);
-		debug2("doing ahead check with BPF %d at %li", fr->framesize+4, (long)start);
+		debug2("doing ahead check with BPF %d at %li", fr->ps.framesize+4, (long)start);
 		/* step framesize bytes forward and read next possible header*/
-		if((ret=fr->rd->skip_bytes(fr, fr->framesize))<0)
+		if((ret=fr->rd->skip_bytes(fr, fr->ps.framesize))<0)
 		{
 			if(ret==READER_ERROR && NOQUIET) error("cannot seek!");
 			goto read_frame_bad;
@@ -685,7 +685,7 @@ init_resync:
 	{
 		unsigned char *newbuf = fr->bsspace[fr->bsnum]+512;
 		/* read main data into memory */
-		if((ret=fr->rd->read_frame_body(fr,newbuf,fr->framesize))<0)
+		if((ret=fr->rd->read_frame_body(fr,newbuf,fr->ps.framesize))<0)
 		{
 			/* if failed: flip back */
 			debug("need more?");
@@ -707,7 +707,7 @@ init_resync:
 			fr->audio_start = framepos;
 			/* Only check for LAME  tag at beginning of whole stream
 			   ... when there indeed is one in between, it's the user's problem. */
-			if(fr->lay == 3 && check_lame_tag(fr) == 1)
+			if(fr->ps.lay == 3 && check_lame_tag(fr) == 1)
 			{ /* ...in practice, Xing/LAME tags are layer 3 only. */
 				if(fr->rd->forget != NULL) fr->rd->forget(fr);
 
@@ -731,9 +731,9 @@ init_resync:
 	}
 	++fr->num; /* 0 for first frame! */
 	debug4("Frame %li %08lx %i, next filepos=0x%lx", 
-	(long)fr->num, newhead, fr->framesize, (long unsigned)fr->rd->tell(fr));
+	(long)fr->num, newhead, fr->ps.framesize, (long unsigned)fr->rd->tell(fr));
 	/* save for repetition */
-	if(fr->p.halfspeed && fr->lay == 3)
+	if(fr->p.halfspeed && fr->ps.lay == 3)
 	{
 		debug("halfspeed - reusing old bsbuf ");
 		memcpy (fr->ssave, fr->bsbuf, fr->ssize);
@@ -752,13 +752,13 @@ init_resync:
 	if(fr->rd->forget != NULL) fr->rd->forget(fr);
 
 	fr->to_decode = fr->to_ignore = TRUE;
-	if(fr->error_protection) fr->crc = getbits(fr, 16); /* skip crc */
+	if(fr->ps.error_protection) fr->crc = getbits(fr, 16); /* skip crc */
 
 	return 1;
 read_frame_bad:
 	fr->silent_resync = 0;
 	if(fr->err == MPG123_OK) fr->err = MPG123_ERR_READER;
-	fr->framesize = oldsize;
+	fr->ps.framesize = oldsize;
 	fr->halfphase = oldphase;
 	return ret;
 }
@@ -808,7 +808,7 @@ static long guess_freeformat_framesize(mpg123_handle *fr)
 			else
 				sampling_frequency = ((head>>10)&0x3) + (lsf*3);
 			
-			if((lsf==fr->lsf) && (mpeg25==fr->mpeg25) && (sampling_frequency == fr->sampling_frequency))
+			if((lsf==fr->ps.lsf) && (mpeg25==fr->ps.mpeg25) && (sampling_frequency == fr->sampling_frequency))
 			{
 				fr->rd->back_bytes(fr,i+1);
 				return i-3;
@@ -834,13 +834,13 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 	}
 	if( newhead & (1<<20) )
 	{
-		fr->lsf = (newhead & (1<<19)) ? 0x0 : 0x1;
-		fr->mpeg25 = 0;
+		fr->ps.lsf = (newhead & (1<<19)) ? 0x0 : 0x1;
+		fr->ps.mpeg25 = 0;
 	}
 	else
 	{
-		fr->lsf = 1;
-		fr->mpeg25 = 1;
+		fr->ps.lsf = 1;
+		fr->ps.mpeg25 = 1;
 	}
 
 	if(   (fr->p.flags & MPG123_NO_RESYNC) || !fr->oldhead
@@ -850,34 +850,34 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 		parameters do not change within the stream!
 		Force an update if lsf or mpeg25 settings
 		have changed. */
-		fr->lay = 4-((newhead>>17)&3);
+		fr->ps.lay = 4-((newhead>>17)&3);
 		if( ((newhead>>10)&0x3) == 0x3)
 		{
 			if(NOQUIET) error("Stream error");
 
 			return 0; /* exit() here really is too much, isn't it? */
 		}
-		if(fr->mpeg25)
+		if(fr->ps.mpeg25)
 		fr->sampling_frequency = 6 + ((newhead>>10)&0x3);
 		else
-		fr->sampling_frequency = ((newhead>>10)&0x3) + (fr->lsf*3);
+		fr->sampling_frequency = ((newhead>>10)&0x3) + (fr->ps.lsf*3);
 	}
 
 	#ifdef DEBUG
-	if((((newhead>>16)&0x1)^0x1) != fr->error_protection) debug("changed crc bit!");
+	if((((newhead>>16)&0x1)^0x1) != fr->ps.error_protection) debug("changed crc bit!");
 	#endif
-	fr->error_protection = ((newhead>>16)&0x1)^0x1; /* seen a file where this varies (old lame tag without crc, track with crc) */
+	fr->ps.error_protection = ((newhead>>16)&0x1)^0x1; /* seen a file where this varies (old lame tag without crc, track with crc) */
 	fr->bitrate_index = ((newhead>>12)&0xf);
 	fr->padding   = ((newhead>>9)&0x1);
-	fr->extension = ((newhead>>8)&0x1);
-	fr->mode      = ((newhead>>6)&0x3);
-	fr->mode_ext  = ((newhead>>4)&0x3);
-	fr->copyright = ((newhead>>3)&0x1);
-	fr->original  = ((newhead>>2)&0x1);
-	fr->emphasis  = newhead & 0x3;
+	fr->ps.extension = ((newhead>>8)&0x1);
+	fr->ps.mode      = ((newhead>>6)&0x3);
+	fr->ps.mode_ext  = ((newhead>>4)&0x3);
+	fr->ps.copyright = ((newhead>>3)&0x1);
+	fr->ps.original  = ((newhead>>2)&0x1);
+	fr->ps.emphasis  = newhead & 0x3;
 	fr->freeformat = free_format_header(newhead);
 
-	fr->stereo    = (fr->mode == MPG_MD_MONO) ? 1 : 2;
+	fr->stereo    = (fr->ps.mode == MPG_MD_MONO) ? 1 : 2;
 
 	fr->oldhead = newhead;
 	
@@ -888,10 +888,10 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 		/* when we first encounter the frame with freeformat, guess framesize */
 		if(fr->freeformat_framesize < 0)
 		{
-			fr->framesize = guess_freeformat_framesize(fr);
-			if(fr->framesize > 0)
+			fr->ps.framesize = guess_freeformat_framesize(fr);
+			if(fr->ps.framesize > 0)
 			{
-				fr->freeformat_framesize = fr->framesize - fr->padding;
+				fr->freeformat_framesize = fr->ps.framesize - fr->padding;
 			}
 			else
 			{
@@ -902,20 +902,20 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 		/* freeformat should be CBR, so the same framesize can be used at the 2nd reading or later */
 		else
 		{
-			fr->framesize = fr->freeformat_framesize + fr->padding;
+			fr->ps.framesize = fr->freeformat_framesize + fr->padding;
 		}
 	}
 
-	switch(fr->lay)
+	switch(fr->ps.lay)
 	{
 #ifndef NO_LAYER1
 		case 1:
 			fr->do_layer = do_layer1;
 			if(!fr->freeformat)
 			{
-				fr->framesize  = (long) tabsel_123[fr->lsf][0][fr->bitrate_index] * 12000;
-				fr->framesize /= freqs[fr->sampling_frequency];
-				fr->framesize  = ((fr->framesize+fr->padding)<<2)-4;
+				fr->ps.framesize  = (long) tabsel_123[fr->ps.lsf][0][fr->bitrate_index] * 12000;
+				fr->ps.framesize /= freqs[fr->sampling_frequency];
+				fr->ps.framesize  = ((fr->ps.framesize+fr->padding)<<2)-4;
 			}
 		break;
 #endif
@@ -924,40 +924,40 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 			fr->do_layer = do_layer2;
 			if(!fr->freeformat)
 			{
-				debug2("bitrate index: %i (%i)", fr->bitrate_index, tabsel_123[fr->lsf][1][fr->bitrate_index] );
-				fr->framesize = (long) tabsel_123[fr->lsf][1][fr->bitrate_index] * 144000;
-				fr->framesize /= freqs[fr->sampling_frequency];
-				fr->framesize += fr->padding - 4;
+				debug2("bitrate index: %i (%i)", fr->bitrate_index, tabsel_123[fr->ps.lsf][1][fr->bitrate_index] );
+				fr->ps.framesize = (long) tabsel_123[fr->ps.lsf][1][fr->bitrate_index] * 144000;
+				fr->ps.framesize /= freqs[fr->sampling_frequency];
+				fr->ps.framesize += fr->padding - 4;
 			}
 		break;
 #endif
 #ifndef NO_LAYER3
 		case 3:
 			fr->do_layer = do_layer3;
-			if(fr->lsf)
+			if(fr->ps.lsf)
 			fr->ssize = (fr->stereo == 1) ? 9 : 17;
 			else
 			fr->ssize = (fr->stereo == 1) ? 17 : 32;
 
-			if(fr->error_protection)
+			if(fr->ps.error_protection)
 			fr->ssize += 2;
 
 			if(!fr->freeformat)
 			{
-				fr->framesize  = (long) tabsel_123[fr->lsf][2][fr->bitrate_index] * 144000;
-				fr->framesize /= freqs[fr->sampling_frequency]<<(fr->lsf);
-				fr->framesize = fr->framesize + fr->padding - 4;
+				fr->ps.framesize  = (long) tabsel_123[fr->ps.lsf][2][fr->bitrate_index] * 144000;
+				fr->ps.framesize /= freqs[fr->sampling_frequency]<<(fr->ps.lsf);
+				fr->ps.framesize = fr->ps.framesize + fr->padding - 4;
 			}
 		break;
 #endif 
 		default:
-			if(NOQUIET) error1("Layer type %i not supported in this build!", fr->lay); 
+			if(NOQUIET) error1("Layer type %i not supported in this build!", fr->ps.lay); 
 
 			return 0;
 	}
-	if (fr->framesize > MAXFRAMESIZE)
+	if (fr->ps.framesize > MAXFRAMESIZE)
 	{
-		if(NOQUIET) error1("Frame size too big: %d", fr->framesize+4-fr->padding);
+		if(NOQUIET) error1("Frame size too big: %d", fr->ps.framesize+4-fr->padding);
 
 		return (0);
 	}
@@ -979,18 +979,18 @@ double compute_bpf(mpg123_handle *fr)
 {
 	double bpf;
 
-	switch(fr->lay) 
+	switch(fr->ps.lay) 
 	{
 		case 1:
-			bpf = tabsel_123[fr->lsf][0][fr->bitrate_index];
+			bpf = tabsel_123[fr->ps.lsf][0][fr->bitrate_index];
 			bpf *= 12000.0 * 4.0;
-			bpf /= freqs[fr->sampling_frequency] <<(fr->lsf);
+			bpf /= freqs[fr->sampling_frequency] <<(fr->ps.lsf);
 		break;
 		case 2:
 		case 3:
-			bpf = tabsel_123[fr->lsf][fr->lay-1][fr->bitrate_index];
+			bpf = tabsel_123[fr->ps.lsf][fr->ps.lay-1][fr->bitrate_index];
 			bpf *= 144000;
-			bpf /= freqs[fr->sampling_frequency] << (fr->lsf);
+			bpf /= freqs[fr->sampling_frequency] << (fr->ps.lsf);
 		break;
 		default:
 			bpf = 1.0;
@@ -1005,8 +1005,8 @@ double attribute_align_arg mpg123_tpf(mpg123_handle *fr)
 	double tpf;
 	if(fr == NULL) return -1;
 
-	tpf = (double) bs[fr->lay];
-	tpf /= freqs[fr->sampling_frequency] << (fr->lsf);
+	tpf = (double) bs[fr->ps.lay];
+	tpf /= freqs[fr->sampling_frequency] << (fr->ps.lsf);
 	return tpf;
 }
 

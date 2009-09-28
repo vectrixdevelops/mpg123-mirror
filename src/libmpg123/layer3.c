@@ -397,7 +397,7 @@ static int III_get_side_info(mpg123_handle *fr, struct III_sideinfo *si,int ster
 	int powdiff = (single == SINGLE_MIX) ? 4 : 0;
 
 	const int tabs[2][5] = { { 2,9,5,3,4 } , { 1,8,1,2,9 } };
-	const int *tab = tabs[fr->lsf];
+	const int *tab = tabs[fr->ps.lsf];
 
 	si->main_data_begin = getbits(fr, tab[1]);
 
@@ -407,7 +407,7 @@ static int III_get_side_info(mpg123_handle *fr, struct III_sideinfo *si,int ster
 
 		/*  overwrite main_data_begin for the really available bit reservoir */
 		backbits(fr, tab[1]);
-		if(fr->lsf == 0)
+		if(fr->ps.lsf == 0)
 		{
 			fr->wordpointer[0] = (unsigned char) (fr->bitreservoir >> 1);
 			fr->wordpointer[1] = (unsigned char) ((fr->bitreservoir & 1) << 7);
@@ -424,10 +424,10 @@ static int III_get_side_info(mpg123_handle *fr, struct III_sideinfo *si,int ster
 
 	/* Keep track of the available data bytes for the bit reservoir.
 	Think: Substract the 2 crc bytes in parser already? */
-	fr->bitreservoir = fr->bitreservoir + fr->framesize - fr->ssize - (fr->error_protection ? 2 : 0);
+	fr->bitreservoir = fr->bitreservoir + fr->ps.framesize - fr->ssize - (fr->ps.error_protection ? 2 : 0);
 	/* Limit the reservoir to the max for MPEG 1.0 or 2.x . */
-	if(fr->bitreservoir > (unsigned int) (fr->lsf == 0 ? 511 : 255))
-	fr->bitreservoir = (fr->lsf == 0 ? 511 : 255);
+	if(fr->bitreservoir > (unsigned int) (fr->ps.lsf == 0 ? 511 : 255))
+	fr->bitreservoir = (fr->ps.lsf == 0 ? 511 : 255);
 
 	/* Now back into less commented territory. It's code. It works. */
 
@@ -436,7 +436,7 @@ static int III_get_side_info(mpg123_handle *fr, struct III_sideinfo *si,int ster
 	else 
 	si->private_bits = getbits_fast(fr, tab[3]);
 
-	if(!fr->lsf) for(ch=0; ch<stereo; ch++)
+	if(!fr->ps.lsf) for(ch=0; ch<stereo; ch++)
 	{
 		si->ch[ch].gr[0].scfsi = -1;
 		si->ch[ch].gr[1].scfsi = getbits_fast(fr, 4);
@@ -481,14 +481,14 @@ static int III_get_side_info(mpg123_handle *fr, struct III_sideinfo *si,int ster
 			}
 
 			/* region_count/start parameters are implicit in this case. */       
-			if( (!fr->lsf || (gr_info->block_type == 2)) && !fr->mpeg25)
+			if( (!fr->ps.lsf || (gr_info->block_type == 2)) && !fr->ps.mpeg25)
 			{
 				gr_info->region1start = 36>>1;
 				gr_info->region2start = 576>>1;
 			}
 			else
 			{
-				if(fr->mpeg25)
+				if(fr->ps.mpeg25)
 				{ 
 					int r0c,r1c;
 					if((gr_info->block_type == 2) && (!gr_info->mixed_block_flag) ) r0c = 5;
@@ -522,7 +522,7 @@ static int III_get_side_info(mpg123_handle *fr, struct III_sideinfo *si,int ster
 			gr_info->block_type = 0;
 			gr_info->mixed_block_flag = 0;
 		}
-		if(!fr->lsf) gr_info->preflag = get1bit(fr);
+		if(!fr->ps.lsf) gr_info->preflag = get1bit(fr);
 
 		gr_info->scalefac_scale = get1bit(fr);
 		gr_info->count1table_select = get1bit(fr);
@@ -1912,14 +1912,14 @@ int do_layer3(mpg123_handle *fr)
 	else
 	stereo1 = 2;
 
-	if(fr->mode == MPG_MD_JOINT_STEREO)
+	if(fr->ps.mode == MPG_MD_JOINT_STEREO)
 	{
-		ms_stereo = (fr->mode_ext & 0x2)>>1;
-		i_stereo  = fr->mode_ext & 0x1;
+		ms_stereo = (fr->ps.mode_ext & 0x2)>>1;
+		i_stereo  = fr->ps.mode_ext & 0x1;
 	}
 	else ms_stereo = i_stereo = 0;
 
-	granules = fr->lsf ? 1 : 2;
+	granules = fr->ps.lsf ? 1 : 2;
 
 	/* quick hack to keep the music playing */
 	/* after having seen this nasty test file... */
@@ -1939,7 +1939,7 @@ int do_layer3(mpg123_handle *fr)
 		{
 			struct gr_info_s *gr_info = &(sideinfo.ch[0].gr[gr]);
 			long part2bits;
-			if(fr->lsf)
+			if(fr->ps.lsf)
 			part2bits = III_get_scale_factors_2(fr, scalefacs[0],gr_info,0);
 			else
 			part2bits = III_get_scale_factors_1(fr, scalefacs[0],gr_info,0,gr);
@@ -1955,7 +1955,7 @@ int do_layer3(mpg123_handle *fr)
 		{
 			struct gr_info_s *gr_info = &(sideinfo.ch[1].gr[gr]);
 			long part2bits;
-			if(fr->lsf) 
+			if(fr->ps.lsf) 
 			part2bits = III_get_scale_factors_2(fr, scalefacs[1],gr_info,i_stereo);
 			else
 			part2bits = III_get_scale_factors_1(fr, scalefacs[1],gr_info,1,gr);
@@ -1981,7 +1981,7 @@ int do_layer3(mpg123_handle *fr)
 				}
 			}
 
-			if(i_stereo) III_i_stereo(hybridIn,scalefacs[1],gr_info,sfreq,ms_stereo,fr->lsf);
+			if(i_stereo) III_i_stereo(hybridIn,scalefacs[1],gr_info,sfreq,ms_stereo,fr->ps.lsf);
 
 			if(ms_stereo || i_stereo || (single == SINGLE_MIX) )
 			{
