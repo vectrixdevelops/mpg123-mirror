@@ -635,23 +635,100 @@ struct mpg123_frameinfo
 /** Get frame information about the MPEG audio bitstream and store it in a mpg123_frameinfo structure. */
 EXPORT int mpg123_info(mpg123_handle *mh, struct mpg123_frameinfo *mi);
 
+/** Data structure for the output format */
+struct mpg123_audioformat
+{
+	int encoding;
+	int encsize; /* Size of one sample in bytes, plain int should be fine here... */
+	int channels;
+	long rate;
+};
+
 /** Data structure for giving raw access to information about the current decoding state */
 struct mpg123_raw_state
 {
+/* ok? split side info parsing and decoding to provide side info during the parsing stage */
+/* 1st approach: *_next() should also parse side_info to provide the values below */
+/* 2nd approach: three functions, next, side_info, decode */
+/* 3rd approach: one function taking an enum (scan, scan_with_side_info, decode) */
+/* ok? handle bloat because of the additional properties? */
+/* 1st approach: put everything into the handle */
+/* 2nd approach: refactor the additional state into a separate struct, add only a pointer to this struct, collect the data only if the pointer is != NULL */
+/* 3rd approach: use 2nd approach and use a user supplied buffer to hold the additional state */
+/* how to #ifdef the additional functionality? */
+
 	size_t size;			/**< Length of the mpg123_raw_state structure in bytes */
-	int mpeg25;
+	
+	/* --------------------------------*/
+	/* Current input frame information */
+
 	int lsf;				/**< 0: MPEG 1.0; 1: MPEG 2.0/2.5 -- both used as bool and array index! */
-	int lay;
-	int mode;
-	int mode_ext;
-	int framesize;			/* computed framesize (-4 bytes header size) */
-	int error_protection;
-	int copyright;
-	int extension;
-	int original;
-	int emphasis;
-	int abr_rate;
-	enum mpg123_vbr vbr; /* 1 if variable bitrate was detected */
+	int mpeg25;				/**< 0: Not MPEG 2.5; 1 MPEG 2.5 */
+	int lay;				/**< 1: Layer III; 2: Layer II; 3: Layer I */
+	int error_protection;	/**< 0: Protected by CRC; 1: Not protected by CRC */
+	int bitrate;
+	int sampling_frequency;
+	int padding;			/**< 0: Frame is not padded; 1: Frame is padded with one extra slot */
+	int extension;			/**< TODO: shouldn't this be called private_bit? */
+	int mode;				/**< 0: Stereo; 1: Joint Stereo; 2: Dual channel; 3: Single channel. TODO: Do we also want the actual number of input channels? is that fr->stereo for input? */
+	int mode_ext;			/**< Determines in which subbands intensity stereo or m/s stereo (for layer III) is applied */
+	int copyright;			/**< 0: No copyright; 1: Copyrighted */
+	int original;			/**< 0: Copy of original data; 1: Original data */
+	int emphasis;			/**< 0: None; 1: 50/15 ms; 3: CCIT J.17 */
+	unsigned int crc;		/**< Well, I need a safe 16bit type, actually. But wider doesn't hurt. Only valid if error_protection==0. */
+	enum mpg123_vbr vbr;	/**< 0: cbr; 1: vbr; 2: abr */
+	int freeformat;
+	long freeformat_framesize;
+	/* bitreservoir needed (main_data_begin, before changing it because of missing bitreservoir) */
+	/* Number of output sample frames from spf() */
+	/* Pointer to the unmodified actual input buffer positioned at the beginning of the current frame */
+	int framesize;			/**< Computed current input framesize in bytes (-4 bytes header size) */
+	/* crc offset (Valid only if error_protection==0) */
+	/* crc size (Valid only if error_protection==0) */
+	/* main_data_begin offset (Valid only for MPEG1 and MPEG 2, not MPEG 2.5, mpeg25 == 0) */
+	/* main_data_begin size (Valid only for MPEG1 and MPEG 2, not MPEG 2.5, mpeg25 == 0) */
+	/* private bits offset (Valid only for MPEG1 and MPEG 2, not MPEG 2.5, mpeg25 == 0) */
+	/* private bits size (Valid only for MPEG1 and MPEG 2, not MPEG 2.5, mpeg25 == 0) */
+	/* granule info offset (Valid only for MPEG1 and MPEG 2, not MPEG 2.5, mpeg25 == 0) */
+	/* granule info size (fr->ssize-2, Valid only for MPEG1 and MPEG 2, not MPEG 2.5, mpeg25 == 0) */
+	/* granule info count (number of granules, Valid only for MPEG1 and MPEG 2, not MPEG 2.5, mpeg25 == 0) */
+	/* audio data offset */
+	/* audio data size */
+
+	/* ----------------------------*/
+	/* Current output audio format */
+	
+	struct mpg123_audioformat af;
+
+	/* --------------------------*/
+	/* Decoding state information */
+
+	int err;
+	int new_format;			/**< 1: input format has changed; 0: input format has not changed */
+	/* track_need_init / track is initialized flag */
+	/* bitreservoir available (summed up from the already scanned frames, interesting at beginning and after seeking) */
+
+	/* ------------------------*/
+	/* Stream wide information */
+	/* Collected to and including the currently scanned mp3 frame */
+	/* Only valid if no seeking happened */
+
+	off_t num;				/**< Current input frame number */
+	/* TODO: Current byte offset in the input stream, before decoding */
+	/* TODO: Current sample frame in the output stream, can be calculated from num, before decoding, track_samples is only filled by mpg123_scan */
+	off_t audio_start;		/**< Byte offset in the input stream where audio data begins. */
+	off_t track_frames;		/**< Absolute count of frames in the input stream, TODO: is this accurate outside of mpg123_scan? */
+
+	/* ---------*/
+	/* Metadata */
+
+	/* frame_index will stay in mh and be returned as usual from mpg123_index, we could move it here just as well */
+	/*	Xing / Lame header info */
+	/* Define a proper Xing struct that holds this and the other missing properties of the xing header and store it here */
+	/* Rva info */
+	/* Id3V2 info */
+	/* Id3V1 info */
+	/* Icy info */
 };
 
 /** Get raw information about the MPEG audio bitstream. You are asked not to change any values. */

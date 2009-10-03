@@ -44,15 +44,7 @@ struct outbuffer
 	size_t size; /* that's actually more like a safe size, after we have more than that, flush it */
 };
 
-struct audioformat
-{
-	int encoding;
-	int encsize; /* Size of one sample in bytes, plain int should be fine here... */
-	int channels;
-	long rate;
-};
-
-void invalidate_format(struct audioformat *af);
+void invalidate_format(struct mpg123_audioformat *af);
 
 struct mpg123_pars_struct
 {
@@ -89,7 +81,6 @@ struct mpg123_handle_struct
 	struct mpg123_raw_state ps; /* public state */
 
 	int fresh; /* to be moved into flags */
-	int new_format;
 	real hybrid_block[2][2][SBLIMIT*SSLIMIT];
 	int hybrid_blc[2];
 	/* the scratch vars for the decoders, sometimes real, sometimes short... sometimes int/long */ 
@@ -172,7 +163,8 @@ struct mpg123_handle_struct
 	func_synth_mono synth_mono;
 	/* Yes, this function is runtime-switched, too. */
 	void (*make_decode_tables)(mpg123_handle *fr); /* That is the volume control. */
-
+	int bitrate_index;
+	int sampling_frequency;
 	int stereo; /* I _think_ 1 for mono and 2 for stereo */
 	int jsbound;
 #define SINGLE_STEREO -1
@@ -186,18 +178,9 @@ struct mpg123_handle_struct
 	int down_sample;
 	int header_change;
 	int (*do_layer)(mpg123_handle *);
-	int bitrate_index;
-	int sampling_frequency;
-	int padding;
-	int freesize;  /* free format frame size */
-	off_t num; /* frame offset ... */
 	off_t playnum; /* playback offset... includes repetitions, reset at seeks */
-	off_t audio_start; /* The byte offset in the file where audio data begins. */
 	char accurate; /* Flag to see if we trust the frame number. */
 	char silent_resync; /* Do not complain for the next n resyncs. */
-	unsigned char* xing_toc; /* The seek TOC from Xing header. */
-	int freeformat;
-	long freeformat_framesize;
 
 	/* bitstream info; bsi */
 	int bitindex;
@@ -206,9 +189,11 @@ struct mpg123_handle_struct
 	unsigned long ultmp;
 	unsigned char uctmp;
 
+	int abr_rate;			/* The target average bitrate. */
+	unsigned char* xing_toc; /* The seek TOC from Xing header. */
+
 	/* rva data, used in common.c, set in id3.c */
 
-	double maxoutburst; /* The maximum amplitude in current sample represenation. */
 	double lastscale;
 	struct
 	{
@@ -218,7 +203,6 @@ struct mpg123_handle_struct
 	} rva;
 
 	/* input data */
-	off_t track_frames;
 	off_t track_samples;
 	double mean_framesize;
 	off_t mean_frames;
@@ -237,7 +221,6 @@ struct mpg123_handle_struct
 
 	/* output data */
 	struct outbuffer buffer;
-	struct audioformat af;
 	int own_buffer;
 	size_t outblock; /* number of bytes that this frame produces (upper bound) */
 	int to_decode;   /* this frame holds data to be decoded */
@@ -253,13 +236,10 @@ struct mpg123_handle_struct
 	off_t end_s;    /* overall end offset in samples */
 	off_t end_os;
 #endif
-	unsigned int crc; /* Well, I need a safe 16bit type, actually. But wider doesn't hurt. */
 	struct reader *rd; /* pointer to the reading functions */
 	struct reader_data rdat; /* reader data and state info */
 	struct mpg123_pars_struct p;
-	int err;
 	int decoder_change;
-	int delayed_change;
 	long clip;
 	/* the meta crap */
 	int metaflags;

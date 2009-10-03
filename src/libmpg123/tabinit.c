@@ -230,7 +230,7 @@ void make_decode_tables(mpg123_handle *fr)
 int make_conv16to8_table(mpg123_handle *fr)
 {
   int i;
-	int mode = fr->af.encoding;
+	int mode = fr->ps.af.encoding;
 
   /*
    * ????: 8.0 is right but on SB cards '2.0' is a better value ???
@@ -240,14 +240,14 @@ int make_conv16to8_table(mpg123_handle *fr)
   if(!fr->conv16to8_buf){
     fr->conv16to8_buf = (unsigned char *) malloc(8192);
     if(!fr->conv16to8_buf) {
-      fr->err = MPG123_ERR_16TO8TABLE;
+      fr->ps.err = MPG123_ERR_16TO8TABLE;
       if(NOQUIET) error("Can't allocate 16 to 8 converter table!");
       return -1;
     }
     fr->conv16to8 = fr->conv16to8_buf + 4096;
   }
 
-  if(fr->af.encoding == MPG123_ENC_ULAW_8){
+  if(fr->ps.af.encoding == MPG123_ENC_ULAW_8){
     double m=127.0 / log(256.0);
     int c1;
 

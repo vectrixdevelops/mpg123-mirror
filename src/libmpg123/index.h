@@ -34,7 +34,7 @@ struct frame_index
 };
 
 /* The condition for a framenum to be appended to the index. 
-  if(FI_NEXT(fr->index, fr->num)) fi_add(offset); */
+  if(FI_NEXT(fr->index, fr->ps.num)) fi_add(offset); */
 #define FI_NEXT(fi, framenum) ((fi).size && framenum == (fi).next)
 
 /* Initialize stuff, set things to zero and NULL... */

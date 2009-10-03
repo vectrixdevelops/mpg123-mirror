@@ -219,7 +219,7 @@ static off_t stream_lseek(mpg123_handle *fr, off_t pos, int whence)
 	if (ret >= 0)	fr->rdat.filepos = ret;
 	else
 	{
-		fr->err = MPG123_LSEEK_FAILED;
+		fr->ps.err = MPG123_LSEEK_FAILED;
 		ret = READER_ERROR; /* not the original value */
 	}
 	return ret;
@@ -233,10 +233,10 @@ static void stream_close(mpg123_handle *fr)
 
 static int stream_seek_frame(mpg123_handle *fr, off_t newframe)
 {
-	debug2("seek_frame to %"OFF_P" (from %"OFF_P")", (off_p)newframe, (off_p)fr->num);
+	debug2("seek_frame to %"OFF_P" (from %"OFF_P")", (off_p)newframe, (off_p)fr->ps.num);
 	/* Seekable streams can go backwards and jump forwards.
 	   Non-seekable streams still can go forward, just not jump. */
-	if((fr->rdat.flags & READER_SEEKABLE) || (newframe >= fr->num))
+	if((fr->rdat.flags & READER_SEEKABLE) || (newframe >= fr->ps.num))
 	{
 		off_t preframe; /* a leading frame we jump to */
 		off_t seek_to;  /* the byte offset we want to reach */
@@ -248,30 +248,30 @@ static int stream_seek_frame(mpg123_handle *fr, off_t newframe)
 		*/
 		seek_to = frame_index_find(fr, newframe, &preframe);
 		/* No need to seek to index position if we are closer already.
-		   But I am picky about fr->num == newframe, play safe by reading the frame again.
+		   But I am picky about fr->ps.num == newframe, play safe by reading the frame again.
 		   If you think that's stupid, don't call a seek to the current frame. */
-		if(fr->num >= newframe || fr->num < preframe)
+		if(fr->ps.num >= newframe || fr->ps.num < preframe)
 		{
 			to_skip = seek_to - fr->rd->tell(fr);
 			if(fr->rd->skip_bytes(fr, to_skip) != seek_to)
 			return READER_ERROR;
 
 			debug2("going to %lu; just got %lu", (long unsigned)newframe, (long unsigned)preframe);
-			fr->num = preframe-1; /* Watch out! I am going to read preframe... fr->num should indicate the frame before! */
+			fr->ps.num = preframe-1; /* Watch out! I am going to read preframe... fr->ps.num should indicate the frame before! */
 		}
-		while(fr->num < newframe)
+		while(fr->ps.num < newframe)
 		{
 			/* try to be non-fatal now... frameNum only gets advanced on success anyway */
 			if(!read_frame(fr)) break;
 		}
 		/* Now the wanted frame should be ready for decoding. */
-		debug1("arrived at %lu", (long unsigned)fr->num);
+		debug1("arrived at %lu", (long unsigned)fr->ps.num);
 
 		return MPG123_OK;
 	}
 	else
 	{
-		fr->err = MPG123_NO_SEEK;
+		fr->ps.err = MPG123_NO_SEEK;
 		return READER_ERROR; /* invalid, no seek happened */
 	}
 }
@@ -337,13 +337,13 @@ static off_t stream_skip_bytes(mpg123_handle *fr,off_t len)
 		}
 		else
 		{
-			fr->err = MPG123_NO_SEEK;
+			fr->ps.err = MPG123_NO_SEEK;
 			return READER_ERROR;
 		}
 	}
 	else
 	{
-		fr->err = MPG123_NO_SEEK;
+		fr->ps.err = MPG123_NO_SEEK;
 		return READER_ERROR;
 	}
 }
@@ -729,12 +729,12 @@ static ssize_t buffered_fullread(mpg123_handle *fr, unsigned char *out, ssize_t 
 #else
 int feed_more(mpg123_handle *fr, const unsigned char *in, long count)
 {
-	fr->err = MPG123_MISSING_FEATURE;
+	fr->ps.err = MPG123_MISSING_FEATURE;
 	return -1;
 }
 off_t feed_set_pos(mpg123_handle *fr, off_t pos)
 {
-	fr->err = MPG123_MISSING_FEATURE;
+	fr->ps.err = MPG123_MISSING_FEATURE;
 	return -1;
 }
 #endif /* NO_FEEDER */
@@ -743,7 +743,7 @@ off_t feed_set_pos(mpg123_handle *fr, off_t pos)
  * read frame helper
  */
 
-#define bugger_off { mh->err = MPG123_NO_READER; return MPG123_ERR; }
+#define bugger_off { mh->ps.err = MPG123_NO_READER; return MPG123_ERR; }
 int bad_init(mpg123_handle *mh) bugger_off
 void bad_close(mpg123_handle *mh){}
 ssize_t bad_fullread(mpg123_handle *mh, unsigned char *data, ssize_t count) bugger_off
@@ -917,7 +917,7 @@ static int default_init(mpg123_handle *fr)
 	{
 #ifdef NO_FEEDER
 		error("Buffered readers not supported in this build.");
-		fr->err = MPG123_MISSING_FEATURE;
+		fr->ps.err = MPG123_MISSING_FEATURE;
 		return -1;
 #else
 		if     (fr->rd == &readers[READER_STREAM])
@@ -961,7 +961,7 @@ int open_feed(mpg123_handle *fr)
 	debug("feed reader");
 #ifdef NO_FEEDER
 	error("Buffered readers not supported in this build.");
-	fr->err = MPG123_MISSING_FEATURE;
+	fr->ps.err = MPG123_MISSING_FEATURE;
 	return -1;
 #else
 #ifndef NO_ICY
@@ -998,7 +998,7 @@ int open_stream(mpg123_handle *fr, const char *bs_filenam, int fd)
 	else if((filept = compat_open(bs_filenam, O_RDONLY|O_BINARY)) < 0) /* a plain old file to open... */
 	{
 		if(NOQUIET) error2("Cannot open file %s: %s", bs_filenam, strerror(errno));
-		fr->err = MPG123_BAD_FILE;
+		fr->ps.err = MPG123_BAD_FILE;
 		return MPG123_ERR; /* error... */
 	}
 

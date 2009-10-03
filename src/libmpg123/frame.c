@@ -83,11 +83,11 @@ void frame_init_par(mpg123_handle *fr, mpg123_pars *mp)
 	/* frame_outbuffer is missing... */
 	/* frame_buffers is missing... that one needs cpu opt setting! */
 	/* after these... frame_reset is needed before starting full decode */
-	invalidate_format(&fr->af);
+	invalidate_format(&fr->ps.af);
 	fr->rdat.r_read = NULL;
 	fr->rdat.r_lseek = NULL;
 	fr->decoder_change = 1;
-	fr->err = MPG123_OK;
+	fr->ps.err = MPG123_OK;
 	if(mp == NULL) frame_default_pars(&fr->p);
 	else memcpy(&fr->p, mp, sizeof(struct mpg123_pars_struct));
 
@@ -154,7 +154,7 @@ int frame_outbuffer(mpg123_handle *fr)
 	if(fr->buffer.data == NULL) fr->buffer.data = (unsigned char*) malloc(fr->buffer.size);
 	if(fr->buffer.data == NULL)
 	{
-		fr->err = MPG123_OUT_OF_MEM;
+		fr->ps.err = MPG123_OUT_OF_MEM;
 		return -1;
 	}
 	fr->own_buffer = TRUE;
@@ -166,7 +166,7 @@ int attribute_align_arg mpg123_replace_buffer(mpg123_handle *mh, unsigned char *
 {
 	if(data == NULL || size < mpg123_safe_buffer())
 	{
-		mh->err = MPG123_BAD_BUFFER;
+		mh->ps.err = MPG123_BAD_BUFFER;
 		return MPG123_ERR;
 	}
 	if(mh->own_buffer && mh->buffer.data != NULL) free(mh->buffer.data);
@@ -409,22 +409,21 @@ static void frame_fixed_reset(mpg123_handle *fr)
 	fr->to_ignore = FALSE;
 	fr->metaflags = 0;
 	fr->outblock = mpg123_safe_buffer();
-	fr->num = -1;
+	fr->ps.num = -1;
 	fr->playnum = -1;
 	fr->accurate = TRUE;
 	fr->silent_resync = 0;
-	fr->audio_start = 0;
+	fr->ps.audio_start = 0;
 	fr->clip = 0;
 	fr->oldhead = 0;
 	fr->firsthead = 0;
 	fr->ps.vbr = MPG123_CBR;
-	fr->ps.abr_rate = 0;
-	fr->track_frames = 0;
+	fr->abr_rate = 0;
+	fr->ps.track_frames = 0;
 	fr->track_samples = -1;
 	fr->ps.framesize=0; 
 	fr->mean_frames = 0;
 	fr->mean_framesize = 0;
-	fr->freesize = 0;
 	fr->lastscale = -1;
 	fr->rva.level[0] = -1;
 	fr->rva.level[1] = -1;
@@ -437,7 +436,7 @@ static void frame_fixed_reset(mpg123_handle *fr)
 	fr->ignoreframe = fr->firstframe-fr->p.preframes;
 	fr->lastframe = -1;
 	fr->fresh = 1;
-	fr->new_format = 0;
+	fr->ps.freeformat = 0;
 #ifdef GAPLESS
 	frame_gapless_init(fr,0,0);
 	fr->lastoff = 0;
@@ -459,7 +458,7 @@ static void frame_fixed_reset(mpg123_handle *fr)
 #endif
 	fr->halfphase = 0; /* here or indeed only on first-time init? */
 	fr->ps.error_protection = 0;
-	fr->freeformat_framesize = -1;
+	fr->ps.freeformat_framesize = -1;
 }
 
 void frame_free_buffers(mpg123_handle *fr)
@@ -513,7 +512,7 @@ int attribute_align_arg mpg123_info(mpg123_handle *mh, struct mpg123_frameinfo *
 	if(mh == NULL) return MPG123_ERR;
 	if(mi == NULL)
 	{
-		mh->err = MPG123_ERR_NULL;
+		mh->ps.err = MPG123_ERR_NULL;
 		return MPG123_ERR;
 	}
 	mi->version = mh->ps.mpeg25 ? MPG123_2_5 : (mh->ps.lsf ? MPG123_2_0 : MPG123_1_0);
@@ -536,7 +535,7 @@ int attribute_align_arg mpg123_info(mpg123_handle *mh, struct mpg123_frameinfo *
 	if(mh->ps.original)         mi->flags |= MPG123_ORIGINAL;
 	mi->emphasis = mh->ps.emphasis;
 	mi->bitrate  = frame_bitrate(mh);
-	mi->abr_rate = mh->ps.abr_rate;
+	mi->abr_rate = mh->abr_rate;
 	mi->vbr = mh->ps.vbr;
 	return MPG123_OK;
 }
@@ -553,23 +552,23 @@ int attribute_align_arg mpg123_info(mpg123_handle *mh, struct mpg123_frameinfo *
 off_t frame_fuzzy_find(mpg123_handle *fr, off_t want_frame, off_t* get_frame)
 {
 	/* Default is to go to the beginning. */
-	off_t ret = fr->audio_start;
+	off_t ret = fr->ps.audio_start;
 	*get_frame = 0;
 
 	/* But we try to find something better. */
 	/* Xing VBR TOC works with relative positions, both in terms of audio frames and stream bytes.
 	   Thus, it only works when whe know the length of things.
 	   Oh... I assume the offsets are relative to the _total_ file length. */
-	if(fr->xing_toc != NULL && fr->track_frames > 0 && fr->rdat.filelen > 0)
+	if(fr->xing_toc != NULL && fr->ps.track_frames > 0 && fr->rdat.filelen > 0)
 	{
 		/* One could round... */
-		int toc_entry = (int) ((double)want_frame*100./fr->track_frames);
+		int toc_entry = (int) ((double)want_frame*100./fr->ps.track_frames);
 		/* It is an index in the 100-entry table. */
 		if(toc_entry < 0)  toc_entry = 0;
 		if(toc_entry > 99) toc_entry = 99;
 
 		/* Now estimate back what frame we get. */
-		*get_frame = (off_t) ((double)toc_entry/100. * fr->track_frames);
+		*get_frame = (off_t) ((double)toc_entry/100. * fr->ps.track_frames);
 		fr->accurate = FALSE;
 		fr->silent_resync = 1;
 		/* Question: Is the TOC for whole file size (with/without ID3) or the "real" audio data only?
@@ -582,10 +581,10 @@ off_t frame_fuzzy_find(mpg123_handle *fr, off_t want_frame, off_t* get_frame)
 		fr->accurate = FALSE; /* Fuzzy! */
 		fr->silent_resync = 1;
 		*get_frame = want_frame;
-		ret = (off_t) (fr->audio_start+fr->mean_framesize*want_frame);
+		ret = (off_t) (fr->ps.audio_start+fr->mean_framesize*want_frame);
 	}
 	debug5("fuzzy: want %li of %li, get %li at %li B of %li B",
-		(long)want_frame, (long)fr->track_frames, (long)*get_frame, (long)ret, (long)(fr->rdat.filelen-fr->audio_start));
+		(long)want_frame, (long)fr->ps.track_frames, (long)*get_frame, (long)ret, (long)(fr->rdat.filelen-fr->ps.audio_start));
 	return ret;
 }
 
@@ -617,7 +616,7 @@ off_t frame_index_find(mpg123_handle *fr, off_t want_frame, off_t* get_frame)
 			if(fr->p.flags & MPG123_FUZZY && want_frame - (fr->index.fill-1)*fr->index.step > 10)
 			{
 				gopos = frame_fuzzy_find(fr, want_frame, get_frame);
-				if(gopos > fr->audio_start) return gopos; /* Only in that case, we have a useful guess. */
+				if(gopos > fr->ps.audio_start) return gopos; /* Only in that case, we have a useful guess. */
 				/* Else... just continue, fuzzyness didn't help. */
 			}
 			/* Use the last available position, slowly advancing from that one. */

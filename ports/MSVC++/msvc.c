@@ -33,7 +33,7 @@ int mpg123_topen(mpg123_handle *fr, const _TCHAR *path)
 		   if(NOQUIET) error2("Cannot open file %s: %s", path, strerror(errno)); */
 
 		if(NOQUIET) error1("Cannot open file: %s", strerror(errno));
-		fr->err = MPG123_BAD_FILE;
+		fr->ps.err = MPG123_BAD_FILE;
 		return filept; /* error... */
 	}
 

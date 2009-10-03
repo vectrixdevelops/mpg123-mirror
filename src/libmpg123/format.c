@@ -106,7 +106,7 @@ static int enc2num(int encoding)
 	return -1;
 }
 
-static int cap_fit(mpg123_handle *fr, struct audioformat *nf, int f0, int f2)
+static int cap_fit(mpg123_handle *fr, struct mpg123_audioformat *nf, int f0, int f2)
 {
 	int i;
 	int c  = nf->channels-1;
@@ -122,7 +122,7 @@ static int cap_fit(mpg123_handle *fr, struct audioformat *nf, int f0, int f2)
 	return 0;
 }
 
-static int freq_fit(mpg123_handle *fr, struct audioformat *nf, int f0, int f2)
+static int freq_fit(mpg123_handle *fr, struct mpg123_audioformat *nf, int f0, int f2)
 {
 	nf->rate = frame_freq(fr)>>fr->p.down_sample;
 	if(cap_fit(fr,nf,f0,f2)) return 1;
@@ -166,7 +166,7 @@ static int freq_fit(mpg123_handle *fr, struct audioformat *nf, int f0, int f2)
   return: -1: error; 0: no format change; 1: format change */
 int frame_output_format(mpg123_handle *fr)
 {
-	struct audioformat nf;
+	struct mpg123_audioformat nf;
 	int f0=0;
 	int f2=MPG123_ENCODINGS; /* Omit the 32bit and float encodings. */
 	mpg123_pars *p = &fr->p;
@@ -211,7 +211,7 @@ int frame_output_format(mpg123_handle *fr)
 		        p->force_rate );
 /*		if(NOQUIET && p->verbose <= 1) print_capabilities(fr); */
 
-		fr->err = MPG123_BAD_OUTFORMAT;
+		fr->ps.err = MPG123_BAD_OUTFORMAT;
 		return -1;
 	}
 #endif
@@ -237,12 +237,12 @@ int frame_output_format(mpg123_handle *fr)
 	}
 /*	if(NOQUIET && p->verbose <= 1) print_capabilities(fr); */
 
-	fr->err = MPG123_BAD_OUTFORMAT;
+	fr->ps.err = MPG123_BAD_OUTFORMAT;
 	return -1;
 
 end: /* Here is the _good_ end. */
 	/* we had a successful match, now see if there's a change */
-	if(nf.rate == fr->af.rate && nf.channels == fr->af.channels && nf.encoding == fr->af.encoding)
+	if(nf.rate == fr->ps.af.rate && nf.channels == fr->ps.af.channels && nf.encoding == fr->ps.af.encoding)
 	{
 		debug2("Old format with %i channels, and FORCE_MONO=%li", nf.channels, p->flags & MPG123_FORCE_MONO);
 		return 0; /* the same format as before */
@@ -250,23 +250,23 @@ end: /* Here is the _good_ end. */
 	else /* a new format */
 	{
 		debug1("New format with %i channels!", nf.channels);
-		fr->af.rate = nf.rate;
-		fr->af.channels = nf.channels;
-		fr->af.encoding = nf.encoding;
+		fr->ps.af.rate = nf.rate;
+		fr->ps.af.channels = nf.channels;
+		fr->ps.af.encoding = nf.encoding;
 		/* Cache the size of one sample in bytes, for ease of use. */
-		if(fr->af.encoding & MPG123_ENC_8)
-		fr->af.encsize = 1;
-		else if(fr->af.encoding & MPG123_ENC_16)
-		fr->af.encsize = 2;
-		else if(fr->af.encoding & MPG123_ENC_32 || fr->af.encoding == MPG123_ENC_FLOAT_32)
-		fr->af.encsize = 4;
-		else if(fr->af.encoding == MPG123_ENC_FLOAT_64)
-		fr->af.encsize = 8;
+		if(fr->ps.af.encoding & MPG123_ENC_8)
+		fr->ps.af.encsize = 1;
+		else if(fr->ps.af.encoding & MPG123_ENC_16)
+		fr->ps.af.encsize = 2;
+		else if(fr->ps.af.encoding & MPG123_ENC_32 || fr->ps.af.encoding == MPG123_ENC_FLOAT_32)
+		fr->ps.af.encsize = 4;
+		else if(fr->ps.af.encoding == MPG123_ENC_FLOAT_64)
+		fr->ps.af.encsize = 8;
 		else
 		{
-			if(NOQUIET) error1("Some unknown encoding??? (%i)", fr->af.encoding);
+			if(NOQUIET) error1("Some unknown encoding??? (%i)", fr->ps.af.encoding);
 
-			fr->err = MPG123_BAD_OUTFORMAT;
+			fr->ps.err = MPG123_BAD_OUTFORMAT;
 			return -1;
 		}
 		return 1;
@@ -279,7 +279,7 @@ int attribute_align_arg mpg123_format_none(mpg123_handle *mh)
 	if(mh == NULL) return MPG123_ERR;
 
 	r = mpg123_fmt_none(&mh->p);
-	if(r != MPG123_OK){ mh->err = r; r = MPG123_ERR; }
+	if(r != MPG123_OK){ mh->ps.err = r; r = MPG123_ERR; }
 
 	return r;
 }
@@ -300,7 +300,7 @@ int attribute_align_arg mpg123_format_all(mpg123_handle *mh)
 	if(mh == NULL) return MPG123_ERR;
 
 	r = mpg123_fmt_all(&mh->p);
-	if(r != MPG123_OK){ mh->err = r; r = MPG123_ERR; }
+	if(r != MPG123_OK){ mh->ps.err = r; r = MPG123_ERR; }
 
 	return r;
 }
@@ -325,7 +325,7 @@ int attribute_align_arg mpg123_format(mpg123_handle *mh, long rate, int channels
 	int r;
 	if(mh == NULL) return MPG123_ERR;
 	r = mpg123_fmt(&mh->p, rate, channels, encodings);
-	if(r != MPG123_OK){ mh->err = r; r = MPG123_ERR; }
+	if(r != MPG123_OK){ mh->ps.err = r; r = MPG123_ERR; }
 
 	return r;
 }
@@ -376,7 +376,7 @@ int attribute_align_arg mpg123_fmt_support(mpg123_pars *mp, long rate, int encod
 }
 
 /* Call this one to ensure that any valid format will be something different than this. */
-void invalidate_format(struct audioformat *af)
+void invalidate_format(struct mpg123_audioformat *af)
 {
 	af->encoding = 0;
 	af->rate     = 0;
@@ -386,10 +386,10 @@ void invalidate_format(struct audioformat *af)
 /* take into account: channels, bytes per sample -- NOT resampling!*/
 off_t samples_to_bytes(mpg123_handle *fr , off_t s)
 {
-	return s * fr->af.encsize * fr->af.channels;
+	return s * fr->ps.af.encsize * fr->ps.af.channels;
 }
 
 off_t bytes_to_samples(mpg123_handle *fr , off_t b)
 {
-	return b / fr->af.encsize / fr->af.channels;
+	return b / fr->ps.af.encsize / fr->ps.af.channels;
 }
