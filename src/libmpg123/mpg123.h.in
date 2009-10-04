@@ -664,8 +664,8 @@ struct mpg123_raw_state
 
 	int lsf;				/**< 0: MPEG 1.0; 1: MPEG 2.0/2.5 -- both used as bool and array index! */
 	int mpeg25;				/**< 0: Not MPEG 2.5; 1 MPEG 2.5 */
-	int lay;				/**< 1: Layer III; 2: Layer II; 3: Layer I */
-	int error_protection;	/**< 0: Protected by CRC; 1: Not protected by CRC */
+	int lay;				/**< 3: Layer III; 2: Layer II; 1: Layer I */
+	int error_protection;	/**< 1: Protected by CRC; 0: Not protected by CRC */
 	int bitrate;
 	int sampling_frequency;
 	int padding;			/**< 0: Frame is not padded; 1: Frame is padded with one extra slot */

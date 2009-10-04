@@ -502,7 +502,7 @@ void frame_exit(mpg123_handle *fr)
 int attribute_align_arg mpg123_get_raw_state(mpg123_handle *mh, struct mpg123_raw_state **ps)
 {
 	if(mh == NULL) return MPG123_ERR;
-	if(mh->ps.size != (*ps)->size) return MPG123_ERR;
+	if(mh->ps.size < (*ps)->size) return MPG123_ERR;
 	*ps = &mh->ps;
 	return MPG123_OK;
 }
