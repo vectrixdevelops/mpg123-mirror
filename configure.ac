@@ -11,7 +11,7 @@ AC_PREREQ(2.57)
 dnl ############# Initialisation
 
 AC_INIT([mpg123], [1.10.0], [mpg123-devel@lists.sourceforge.net])
-LIBMPG123_VERSION=21:1:21
+LIBMPG123_VERSION=21:2:21
 AC_SUBST(LIBMPG123_VERSION)
 
 AC_CONFIG_SRCDIR(src/mpg123.c)
@@ -1206,7 +1206,7 @@ AC_ARG_ENABLE(feature_report,
 	],
 	[AC_MSG_RESULT([yes])])
 
-if test "x$feature_report" == xenabled; then
+if test "x$feature_report" = xenabled; then
 	more_sources="$more_sources feature"
 fi
 
@@ -1821,7 +1821,7 @@ AC_ARG_ENABLE(win32_unicode,
 	   fi
 	], [AC_MSG_RESULT([no])])
 
-AM_CONDITIONAL([WIN32_USE_UNICODE], [ test "x$win32_unicode" == xenabled])
+AM_CONDITIONAL([WIN32_USE_UNICODE], [ test "x$win32_unicode" = xenabled])
 
 dnl ############## Final Output
 
