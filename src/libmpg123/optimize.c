@@ -296,19 +296,19 @@ int set_synth_functions(mpg123_handle *fr)
 	/* Select the basic output format, different from 16bit: 8bit, real. */
 	if(FALSE){}
 #ifndef NO_16BIT
-	else if(fr->ps.af.encoding & MPG123_ENC_16)
+	else if(fr->ps.of.encoding & MPG123_ENC_16)
 	basic_format = f_16;
 #endif
 #ifndef NO_8BIT
-	else if(fr->ps.af.encoding & MPG123_ENC_8)
+	else if(fr->ps.of.encoding & MPG123_ENC_8)
 	basic_format = f_8;
 #endif
 #ifndef NO_REAL
-	else if(fr->ps.af.encoding & MPG123_ENC_FLOAT)
+	else if(fr->ps.of.encoding & MPG123_ENC_FLOAT)
 	basic_format = f_real;
 #endif
 #ifndef NO_32BIT
-	else if(fr->ps.af.encoding & MPG123_ENC_32)
+	else if(fr->ps.of.encoding & MPG123_ENC_32)
 	basic_format = f_32;
 #endif
 
@@ -344,7 +344,7 @@ int set_synth_functions(mpg123_handle *fr)
 	/* Finally selecting the synth functions for stereo / mono. */
 	fr->synth = fr->synths.plain[resample][basic_format];
 	fr->synth_stereo = fr->synths.stereo[resample][basic_format];
-	fr->synth_mono = fr->ps.af.channels==2
+	fr->synth_mono = fr->ps.of.channels==2
 		? fr->synths.mono2stereo[resample][basic_format] /* Mono MPEG file decoded to stereo. */
 		: fr->synths.mono[resample][basic_format];       /* Mono MPEG file decoded to mono. */
 

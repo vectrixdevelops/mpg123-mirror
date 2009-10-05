@@ -1031,10 +1031,10 @@ int attribute_align_arg mpg123_position(mpg123_handle *fr, off_t no, off_t buffs
 	no += fr->ps.num; /* no starts out as offset */
 	cur = no;
 	tpf = mpg123_tpf(fr);
-	if(buffsize > 0 && fr->ps.af.rate > 0 && fr->ps.af.channels > 0)
+	if(buffsize > 0 && fr->ps.of.rate > 0 && fr->ps.of.channels > 0)
 	{
-		dt = (double) buffsize / fr->ps.af.rate / fr->ps.af.channels;
-		if(fr->ps.af.encoding & MPG123_ENC_16) dt *= 0.5;
+		dt = (double) buffsize / fr->ps.of.rate / fr->ps.of.channels;
+		if(fr->ps.of.encoding & MPG123_ENC_16) dt *= 0.5;
 	}
 
 	left = 0;

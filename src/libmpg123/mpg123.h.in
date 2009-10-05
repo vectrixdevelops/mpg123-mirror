@@ -697,7 +697,7 @@ struct mpg123_raw_state
 	/* ----------------------------*/
 	/* Current output audio format */
 	
-	struct mpg123_audioformat af;
+	struct mpg123_audioformat of;
 
 	/* --------------------------*/
 	/* Decoding state information */

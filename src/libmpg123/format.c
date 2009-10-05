@@ -242,7 +242,7 @@ int frame_output_format(mpg123_handle *fr)
 
 end: /* Here is the _good_ end. */
 	/* we had a successful match, now see if there's a change */
-	if(nf.rate == fr->ps.af.rate && nf.channels == fr->ps.af.channels && nf.encoding == fr->ps.af.encoding)
+	if(nf.rate == fr->ps.of.rate && nf.channels == fr->ps.of.channels && nf.encoding == fr->ps.of.encoding)
 	{
 		debug2("Old format with %i channels, and FORCE_MONO=%li", nf.channels, p->flags & MPG123_FORCE_MONO);
 		return 0; /* the same format as before */
@@ -250,21 +250,21 @@ end: /* Here is the _good_ end. */
 	else /* a new format */
 	{
 		debug1("New format with %i channels!", nf.channels);
-		fr->ps.af.rate = nf.rate;
-		fr->ps.af.channels = nf.channels;
-		fr->ps.af.encoding = nf.encoding;
+		fr->ps.of.rate = nf.rate;
+		fr->ps.of.channels = nf.channels;
+		fr->ps.of.encoding = nf.encoding;
 		/* Cache the size of one sample in bytes, for ease of use. */
-		if(fr->ps.af.encoding & MPG123_ENC_8)
-		fr->ps.af.encsize = 1;
-		else if(fr->ps.af.encoding & MPG123_ENC_16)
-		fr->ps.af.encsize = 2;
-		else if(fr->ps.af.encoding & MPG123_ENC_32 || fr->ps.af.encoding == MPG123_ENC_FLOAT_32)
-		fr->ps.af.encsize = 4;
-		else if(fr->ps.af.encoding == MPG123_ENC_FLOAT_64)
-		fr->ps.af.encsize = 8;
+		if(fr->ps.of.encoding & MPG123_ENC_8)
+		fr->ps.of.encsize = 1;
+		else if(fr->ps.of.encoding & MPG123_ENC_16)
+		fr->ps.of.encsize = 2;
+		else if(fr->ps.of.encoding & MPG123_ENC_32 || fr->ps.of.encoding == MPG123_ENC_FLOAT_32)
+		fr->ps.of.encsize = 4;
+		else if(fr->ps.of.encoding == MPG123_ENC_FLOAT_64)
+		fr->ps.of.encsize = 8;
 		else
 		{
-			if(NOQUIET) error1("Some unknown encoding??? (%i)", fr->ps.af.encoding);
+			if(NOQUIET) error1("Some unknown encoding??? (%i)", fr->ps.of.encoding);
 
 			fr->ps.err = MPG123_BAD_OUTFORMAT;
 			return -1;
@@ -386,10 +386,10 @@ void invalidate_format(struct mpg123_audioformat *af)
 /* take into account: channels, bytes per sample -- NOT resampling!*/
 off_t samples_to_bytes(mpg123_handle *fr , off_t s)
 {
-	return s * fr->ps.af.encsize * fr->ps.af.channels;
+	return s * fr->ps.of.encsize * fr->ps.of.channels;
 }
 
 off_t bytes_to_samples(mpg123_handle *fr , off_t b)
 {
-	return b / fr->ps.af.encsize / fr->ps.af.channels;
+	return b / fr->ps.of.encsize / fr->ps.of.channels;
 }

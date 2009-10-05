@@ -2020,7 +2020,7 @@ int do_layer3(mpg123_handle *fr)
 		}
 
 #ifdef OPT_I486
-		if(single != SINGLE_STEREO || fr->ps.af.encoding != MPG123_ENC_SIGNED_16 || fr->down_sample != 0)
+		if(single != SINGLE_STEREO || fr->ps.of.encoding != MPG123_ENC_SIGNED_16 || fr->down_sample != 0)
 		{
 #endif
 		for(ss=0;ss<SSLIMIT;ss++)

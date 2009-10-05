@@ -535,10 +535,10 @@ int decode_update(mpg123_handle *mh)
 
 	if(b == 1) mh->ps.new_format = 1; /* Store for later... */
 
-	debug3("updating decoder structure with native rate %li and af.rate %li (new format: %i)", native_rate, mh->ps.af.rate, mh->ps.newformat);
-	if(mh->ps.af.rate == native_rate) mh->down_sample = 0;
-	else if(mh->ps.af.rate == native_rate>>1) mh->down_sample = 1;
-	else if(mh->ps.af.rate == native_rate>>2) mh->down_sample = 2;
+	debug3("updating decoder structure with native rate %li and af.rate %li (new format: %i)", native_rate, mh->ps.of.rate, mh->ps.newformat);
+	if(mh->ps.of.rate == native_rate) mh->down_sample = 0;
+	else if(mh->ps.of.rate == native_rate>>1) mh->down_sample = 1;
+	else if(mh->ps.of.rate == native_rate>>2) mh->down_sample = 2;
 	else mh->down_sample = 3; /* flexible (fixed) rate */
 	switch(mh->down_sample)
 	{
@@ -553,15 +553,15 @@ int decode_update(mpg123_handle *mh)
 		case 3:
 		{
 			if(synth_ntom_set_step(mh) != 0) return -1;
-			if(frame_freq(mh) > mh->ps.af.rate)
+			if(frame_freq(mh) > mh->ps.of.rate)
 			{
-				mh->down_sample_sblimit = SBLIMIT * mh->ps.af.rate;
+				mh->down_sample_sblimit = SBLIMIT * mh->ps.of.rate;
 				mh->down_sample_sblimit /= frame_freq(mh);
 			}
 			else mh->down_sample_sblimit = SBLIMIT;
-			mh->outblock = mh->ps.af.encsize * mh->ps.af.channels *
+			mh->outblock = mh->ps.of.encsize * mh->ps.of.channels *
 			               ( ( NTOM_MUL-1+spf(mh)
-			                   * (((size_t)NTOM_MUL*mh->ps.af.rate)/frame_freq(mh))
+			                   * (((size_t)NTOM_MUL*mh->ps.of.rate)/frame_freq(mh))
 			                 )/NTOM_MUL );
 		}
 		break;
@@ -570,14 +570,14 @@ int decode_update(mpg123_handle *mh)
 
 	if(!(mh->p.flags & MPG123_FORCE_MONO))
 	{
-		if(mh->ps.af.channels == 1) mh->single = SINGLE_MIX;
+		if(mh->ps.of.channels == 1) mh->single = SINGLE_MIX;
 		else mh->single = SINGLE_STEREO;
 	}
 	else mh->single = (mh->p.flags & MPG123_FORCE_MONO)-1;
 	if(set_synth_functions(mh) != 0) return -1;;
 
 	do_rva(mh);
-	debug3("done updating decoder structure with native rate %li and af.rate %li and down_sample %i", frame_freq(mh), mh->ps.af.rate, mh->down_sample);
+	debug3("done updating decoder structure with native rate %li and af.rate %li and down_sample %i", frame_freq(mh), mh->ps.of.rate, mh->down_sample);
 
 	return 0;
 }
@@ -688,7 +688,7 @@ debug1("new format: %i", mh->ps.newformat);
 static int zero_byte(mpg123_handle *fr)
 {
 #ifndef NO_8BIT
-	return fr->ps.af.encoding & MPG123_ENC_8 ? fr->conv16to8[0] : 0;
+	return fr->ps.of.encoding & MPG123_ENC_8 ? fr->conv16to8[0] : 0;
 #else
 	return 0; /* All normal signed formats have the zero here (even in byte form -- that may be an assumption for your funny machine...). */
 #endif
@@ -737,7 +737,7 @@ void decode_the_frame(mpg123_handle *fr)
 #endif
 	/* Handle unsigned output formats via reshifting after decode here. */
 #ifndef NO_32BIT
-	if(fr->ps.af.encoding == MPG123_ENC_UNSIGNED_32)
+	if(fr->ps.of.encoding == MPG123_ENC_UNSIGNED_32)
 	{ /* 32bit signed -> unsigned */
 		size_t i;
 		int32_t *ssamples;
@@ -761,7 +761,7 @@ void decode_the_frame(mpg123_handle *fr)
 	}
 #endif
 #ifndef NO_16BIT
-	if(fr->ps.af.encoding == MPG123_ENC_UNSIGNED_16)
+	if(fr->ps.of.encoding == MPG123_ENC_UNSIGNED_16)
 	{
 		size_t i;
 		short *ssamples;
@@ -967,9 +967,9 @@ int attribute_align_arg mpg123_getformat(mpg123_handle *mh, long *rate, int *cha
 	if(mh == NULL) return MPG123_ERR;
 	if(init_track(mh) == MPG123_ERR) return MPG123_ERR;
 
-	if(rate != NULL) *rate = mh->ps.af.rate;
-	if(channels != NULL) *channels = mh->ps.af.channels;
-	if(encoding != NULL) *encoding = mh->ps.af.encoding;
+	if(rate != NULL) *rate = mh->ps.of.rate;
+	if(channels != NULL) *channels = mh->ps.of.channels;
+	if(encoding != NULL) *encoding = mh->ps.of.encoding;
 	mh->ps.new_format = 0;
 	return MPG123_OK;
 }
@@ -1485,7 +1485,7 @@ int attribute_align_arg mpg123_close(mpg123_handle *mh)
 	if(mh->ps.new_format)
 	{
 		debug("Hey, we are closing a track before the new format has been queried...");
-		invalidate_format(&mh->ps.af);
+		invalidate_format(&mh->ps.of);
 		mh->ps.new_format = 0;
 	}
 	return MPG123_OK;

@@ -14,7 +14,7 @@ int synth_ntom_set_step(mpg123_handle *fr)
 {
 	long m,n;
 	m = frame_freq(fr);
-	n = fr->ps.af.rate;
+	n = fr->ps.of.rate;
 	if(VERBOSE2)
 		fprintf(stderr,"Init rate converter: %ld->%ld\n",m,n);
 
