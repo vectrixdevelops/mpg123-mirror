@@ -181,6 +181,8 @@ struct mpg123_handle_struct
 	off_t playnum; /* playback offset... includes repetitions, reset at seeks */
 	char accurate; /* Flag to see if we trust the frame number. */
 	char silent_resync; /* Do not complain for the next n resyncs. */
+	unsigned char* xing_toc; /* The seek TOC from Xing header. */
+	long freeformat_framesize;
 
 	/* bitstream info; bsi */
 	int bitindex;
@@ -190,7 +192,6 @@ struct mpg123_handle_struct
 	unsigned char uctmp;
 
 	int abr_rate;			/* The target average bitrate. */
-	unsigned char* xing_toc; /* The seek TOC from Xing header. */
 
 	/* rva data, used in common.c, set in id3.c */
 

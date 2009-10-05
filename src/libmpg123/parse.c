@@ -889,12 +889,12 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 	if(fr->ps.freeformat)
 	{
 		/* when we first encounter the frame with freeformat, guess framesize */
-		if(fr->ps.freeformat_framesize < 0)
+		if(fr->freeformat_framesize < 0)
 		{
 			fr->ps.framesize = guess_freeformat_framesize(fr);
 			if(fr->ps.framesize > 0)
 			{
-				fr->ps.freeformat_framesize = fr->ps.framesize - fr->ps.padding;
+				fr->freeformat_framesize = fr->ps.framesize - fr->ps.padding;
 			}
 			else
 			{
@@ -905,7 +905,7 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 		/* freeformat should be CBR, so the same framesize can be used at the 2nd reading or later */
 		else
 		{
-			fr->ps.framesize = fr->ps.freeformat_framesize + fr->ps.padding;
+			fr->ps.framesize = fr->freeformat_framesize + fr->ps.padding;
 		}
 	}
 

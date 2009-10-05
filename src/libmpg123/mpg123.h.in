@@ -678,7 +678,6 @@ struct mpg123_raw_state
 	unsigned int crc;		/**< Well, I need a safe 16bit type, actually. But wider doesn't hurt. Only valid if error_protection==0. */
 	enum mpg123_vbr vbr;	/**< 0: cbr; 1: vbr; 2: abr */
 	int freeformat;
-	long freeformat_framesize;
 	/* bitreservoir needed (main_data_begin, before changing it because of missing bitreservoir) */
 	/* Number of output sample frames from spf() */
 	/* Pointer to the unmodified actual input buffer positioned at the beginning of the current frame */
