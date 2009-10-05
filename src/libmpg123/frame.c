@@ -436,7 +436,7 @@ static void frame_fixed_reset(mpg123_handle *fr)
 	fr->ignoreframe = fr->firstframe-fr->p.preframes;
 	fr->lastframe = -1;
 	fr->fresh = 1;
-	fr->ps.freeformat = 0;
+	fr->ps.new_format = 0;
 #ifdef GAPLESS
 	frame_gapless_init(fr,0,0);
 	fr->lastoff = 0;

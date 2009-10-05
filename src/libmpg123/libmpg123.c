@@ -533,9 +533,9 @@ int decode_update(mpg123_handle *mh)
 	b = frame_output_format(mh); /* Select the new output format based on given constraints. */
 	if(b < 0) return MPG123_ERR;
 
-	if(b == 1) mh->ps.freeformat = 1; /* Store for later... */
+	if(b == 1) mh->ps.new_format = 1; /* Store for later... */
 
-	debug3("updating decoder structure with native rate %li and af.rate %li (new format: %i)", native_rate, mh->ps.af.rate, mh->ps.freeformat);
+	debug3("updating decoder structure with native rate %li and af.rate %li (new format: %i)", native_rate, mh->ps.af.rate, mh->ps.newformat);
 	if(mh->ps.af.rate == native_rate) mh->down_sample = 0;
 	else if(mh->ps.af.rate == native_rate>>1) mh->down_sample = 1;
 	else if(mh->ps.af.rate == native_rate>>2) mh->down_sample = 2;
@@ -662,7 +662,7 @@ static int get_next_frame(mpg123_handle *mh)
 		if(decode_update(mh) < 0)  /* dito... */
 		return MPG123_ERR;
 
-debug1("new format: %i", mh->ps.freeformat);
+debug1("new format: %i", mh->ps.newformat);
 
 		mh->decoder_change = 0;
 #ifdef GAPLESS
@@ -803,10 +803,10 @@ int attribute_align_arg mpg123_decode_frame(mpg123_handle *mh, off_t *num, unsig
 		/* decode if possible */
 		if(mh->to_decode)
 		{
-			if(mh->ps.freeformat)
+			if(mh->ps.new_format)
 			{
 				debug("notifiying new format");
-				mh->ps.freeformat = 0;
+				mh->ps.new_format = 0;
 				return MPG123_NEW_FORMAT;
 			}
 			if(num != NULL) *num = mh->ps.num;
@@ -893,10 +893,10 @@ int attribute_align_arg mpg123_decode(mpg123_handle *mh, const unsigned char *in
 		   This only happens when buffer is empty! */
 		if(mh->to_decode)
 		{
-			if(mh->ps.freeformat)
+			if(mh->ps.new_format)
 			{
 				debug("notifiying new format");
-				mh->ps.freeformat = 0;
+				mh->ps.new_format = 0;
 				ret = MPG123_NEW_FORMAT;
 				goto decodeend;
 			}
@@ -971,7 +971,7 @@ int attribute_align_arg mpg123_getformat(mpg123_handle *mh, long *rate, int *cha
 	if(rate != NULL) *rate = mh->ps.af.rate;
 	if(channels != NULL) *channels = mh->ps.af.channels;
 	if(encoding != NULL) *encoding = mh->ps.af.encoding;
-	mh->ps.freeformat = 0;
+	mh->ps.new_format = 0;
 	return MPG123_OK;
 }
 
@@ -1483,11 +1483,11 @@ int attribute_align_arg mpg123_close(mpg123_handle *mh)
 	if(mh == NULL) return MPG123_ERR;
 	if(mh->rd != NULL && mh->rd->close != NULL) mh->rd->close(mh);
 	mh->rd = NULL;
-	if(mh->ps.freeformat)
+	if(mh->ps.new_format)
 	{
 		debug("Hey, we are closing a track before the new format has been queried...");
 		invalidate_format(&mh->ps.af);
-		mh->ps.freeformat = 0;
+		mh->ps.new_format = 0;
 	}
 	return MPG123_OK;
 }
