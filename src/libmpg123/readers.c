@@ -23,6 +23,7 @@
 #include <io.h>
 #endif
 
+#include "compat.h"
 #include "debug.h"
 
 static int default_init(mpg123_handle *fr);
@@ -227,7 +228,7 @@ static off_t stream_lseek(mpg123_handle *fr, off_t pos, int whence)
 
 static void stream_close(mpg123_handle *fr)
 {
-	if(fr->rdat.flags & READER_FD_OPENED) close(fr->rdat.filept);
+	if(fr->rdat.flags & READER_FD_OPENED) compat_close(fr->rdat.filept);
 	if(fr->rdat.flags & READER_BUFFERED)  bc_reset(&fr->rdat.buffer);
 }
 
@@ -512,7 +513,7 @@ static int bc_add(struct bufferchain *bc, const unsigned char *data, ssize_t siz
 /* Common handler for "You want more than I can give." situation. */
 static ssize_t bc_need_more(struct bufferchain *bc)
 {
-	debug3("hit end, back to beginning (%li - %li < %li)", (long)bc->size, (long)bc->pos, (long)size);
+	debug3("hit end, back to beginning (%li - %li < %li)", (long)bc->size, (long)bc->pos, (long)bc->size);
 	/* go back to firstpos, undo the previous reads */
 	bc->pos = bc->firstpos;
 	return READER_MORE;
@@ -640,7 +641,7 @@ static ssize_t feed_read(mpg123_handle *fr, unsigned char *out, ssize_t count)
 /* returns reached position... negative ones are bad... */
 static off_t feed_skip_bytes(mpg123_handle *fr,off_t len)
 {
-	// This is either the new buffer offset or some negative error value.
+	/* This is either the new buffer offset or some negative error value. */
 	off_t res = bc_skip(&fr->rdat.buffer, (ssize_t)len);
 	if(res < 0) return res;
 
