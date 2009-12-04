@@ -85,10 +85,23 @@ static const char** mimes[] = { mime_file, mime_m3u, mime_pls, NULL };
 int debunk_mime(const char* mime)
 {
 	int i,j;
+	size_t len;
 	int r = 0;
+	char *aux;
+	/* Watch out for such: "audio/x-mpegurl; charset=utf-8" */
+	aux = strchr(mime, ';');
+	if(aux != NULL)
+	{
+		fprintf(stderr, "Warning: additional info in content-type ignored (%s)\n", aux+1);
+		/* Just compare up to before the ";". */
+		len = aux-mime;
+	}
+	/* Else, compare the whole string -- including the end. */
+	else len = strlen(mime)+1;
+
 	for(i=0; mimes[i]    != NULL; ++i)
 	for(j=0; mimes[i][j] != NULL; ++j)
-	if(!strcmp(mimes[i][j], mime)) goto debunk_result;
+	if(!strncasecmp(mimes[i][j], mime, len)) goto debunk_result;
 
 debunk_result:
 	if(mimes[i] != NULL)
@@ -442,7 +455,7 @@ static int resolve_redirect(mpg123_string *response, mpg123_string *request_url,
 	if(!mpg123_copy_string(request_url, purl)) return FALSE;
 
 	/* We may strip it down to a prefix ot totally. */
-	if(strncmp(response->p, "Location: http://", 17))
+	if(strncasecmp(response->p, "Location: http://", 17))
 	{ /* OK, only partial strip, need prefix for relative path. */
 		char* ptmp = NULL;
 		/* though it's not RFC (?), accept relative URIs as wget does */
@@ -483,6 +496,7 @@ int http_open(char* url, struct httpdata *hd)
 	int sock = -1;
 	int oom  = 0;
 	int relocate, numrelocs = 0;
+	int got_location = FALSE;
 	FILE *myfile;
 	/*
 		workaround for http://www.global24music.com/rautemusik/files/extreme/isdn.pls
@@ -589,9 +603,9 @@ int http_open(char* url, struct httpdata *hd)
 		{ \
 			error("readstring failed"); \
 			http_failure; \
-		}
+		} \
+		if(param.verbose > 2) fprintf(stderr, "HTTP in: %s", response.p);
 		safe_readstring;
-		if(param.verbose > 2)	fprintf(stderr, "HTTP response: %s",response.p);
 
 		{
 			char *sptr;
@@ -612,10 +626,13 @@ int http_open(char* url, struct httpdata *hd)
 			}
 		}
 
+		/* If we are relocated, we need to look out for a Location header. */
+		got_location = FALSE;
+
 		do
 		{
 			safe_readstring; /* Think about that: Should we really error out when we get nothing? Could be that the server forgot the trailing empty line... */
-			if (!strncmp(response.p, "Location: ", 10))
+			if (!strncasecmp(response.p, "Location: ", 10))
 			{ /* It is a redirection! */
 				if(!resolve_redirect(&response, &request_url, &purl)){ oom=1, http_failure; }
 
@@ -624,6 +641,7 @@ int http_open(char* url, struct httpdata *hd)
 					warning("relocated to very same place! trying request again without host port");
 					try_without_port = 1;
 				}
+				got_location = TRUE;
 			}
 			else
 			{ /* We got a header line (or the closing empty line). */
@@ -643,10 +661,14 @@ int http_open(char* url, struct httpdata *hd)
 				}
 			}
 		} while(response.p[0] != '\r' && response.p[0] != '\n');
-	} while(relocate && purl.fill && numrelocs++ < HTTP_MAX_RELOCATIONS);
+	} while(relocate && got_location && purl.fill && numrelocs++ < HTTP_MAX_RELOCATIONS);
 	if(relocate)
 	{
-		fprintf (stderr, "Too many HTTP relocations.\n");
+		if(!got_location)
+		error("Server meant to redirect but failed to provide a location!");
+		else
+		error1("Too many HTTP relocations (%i).", numrelocs);
+
 		http_failure;
 	}
 

@@ -11,7 +11,8 @@
 
 #ifndef MPG123_H
 #define MPG123_H
-
+#include "config.h"
+#include "win32_support.h"
 /* everyone needs it */
 #include "compat.h"
 /* import DLL symbols on windows */
@@ -62,6 +63,9 @@ struct parameter
   int force_reopen;
   int test_cpu;
   long realtime;
+#ifdef HAVE_WINDOWS_H
+  int w32_priority;
+#endif
   char *filename;
   long listentry; /* possibility to choose playback of one entry in playlist (0: off, > 0 : select, < 0; just show list*/
   char* listname; /* name of playlist */
@@ -71,7 +75,7 @@ struct parameter
 #ifdef FIFO
 	char* fifo;
 #endif
-#ifndef WIN32
+#if !defined (WIN32) || defined (__CYGWIN__)
 	long timeout; /* timeout for reading in seconds */
 #endif
 	long loop;    /* looping of tracks */

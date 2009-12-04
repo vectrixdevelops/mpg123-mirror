@@ -82,9 +82,13 @@ static void frame_buffercheck(mpg123_handle *fr)
 			        (void*)fr->buffer.p, (void*)fr->buffer.data, ((short*)fr->buffer.p)[2]);
 		}
 		else fr->buffer.fill = 0;
-		fr->firstoff = 0; /* Only enter here once... when you seek, firstoff should be reset. */
+		/* We can only reach this frame again by seeking. And on seeking, firstoff will be recomputed.
+		   So it is safe to null it here (and it makes the if() decision abort earlier). */
+		fr->firstoff = 0;
 	}
-	/* The last interesting (planned) frame: Only use some leading samples. */
+	/* The last interesting (planned) frame: Only use some leading samples.
+	   Note a difference from the above: The last frame and offset are unchanges by seeks.
+	   The lastoff keeps being valid. */
 	if(fr->lastoff && fr->ps.num == fr->lastframe)
 	{
 		off_t byteoff = samples_to_bytes(fr, fr->lastoff);
@@ -92,7 +96,6 @@ static void frame_buffercheck(mpg123_handle *fr)
 		{
 			fr->buffer.fill = byteoff;
 		}
-		fr->lastoff = 0; /* Only enter here once... when you seek, lastoff should be reset. */
 	}
 }
 #endif
@@ -313,7 +316,7 @@ int attribute_align_arg mpg123_par(mpg123_pars *mp, enum mpg123_parms key, long 
 			mp->outscale = val == 0 ? fval : (double)val/SHORT_SCALE;
 		break;
 		case MPG123_TIMEOUT:
-#ifndef WIN32
+#if (!defined (WIN32) || defined (__CYGWIN__))
 			mp->timeout = val >= 0 ? val : 0;
 #else
 			ret = MPG123_NO_TIMEOUT;
@@ -650,13 +653,7 @@ static int get_next_frame(mpg123_handle *mh)
 		/* Or, we are finally done and have a new frame. */
 		else break;
 	} while(1);
-	/* When we start actually using the CRC, this could move into the loop... */
-	/* A question of semantics ... should I fold start_frame and frame_number into firstframe/lastframe? */
-	if(mh->lastframe >= 0 && mh->ps.num > mh->lastframe)
-	{
-		mh->to_decode = mh->to_ignore = FALSE;
-		return MPG123_DONE;
-	}
+
 	if(change)
 	{
 		if(decode_update(mh) < 0)  /* dito... */
@@ -776,6 +773,79 @@ void decode_the_frame(mpg123_handle *fr)
 		}
 	}
 #endif
+}
+
+/*
+	Decode the current frame into the frame structure's buffer, accessible at the location stored in <audio>, with <bytes> bytes available.
+	<num> will contain the last decoded frame number. This function should be called after mpg123_framebyframe_next positioned the stream at a
+	valid mp3 frame. The buffer contents will get lost on the next call to mpg123_framebyframe_next or mpg123_framebyframe_decode.
+	returns
+	MPG123_OK -- successfully decoded or ignored the frame, you get your output data or in case of ignored frames 0 bytes
+	MPG123_DONE -- decoding finished, should not happen
+	MPG123_ERR -- some error occured.
+	MPG123_ERR_NULL -- audio or bytes are not pointing to valid storage addresses
+	MPG123_BAD_HANDLE -- mh has not been initialized
+	MPG123_NO_SPACE -- not enough space in buffer for safe decoding, should not happen
+*/
+int attribute_align_arg mpg123_framebyframe_decode(mpg123_handle *mh, off_t *num, unsigned char **audio, size_t *bytes)
+{
+	ALIGNCHECK(mh);
+	if(bytes == NULL) return MPG123_ERR_NULL;
+	if(audio == NULL) return MPG123_ERR_NULL;
+	if(mh == NULL) return MPG123_BAD_HANDLE;
+	if(mh->buffer.size < mh->outblock) return MPG123_NO_SPACE;
+
+	*bytes = 0;
+	mh->buffer.fill = 0; /* always start fresh */
+	if(!mh->to_decode) return MPG123_OK;
+
+	if(num != NULL) *num = mh->ps.num;
+	debug("decoding");
+	decode_the_frame(mh);
+	mh->to_decode = mh->to_ignore = FALSE;
+	mh->buffer.p = mh->buffer.data;
+#ifdef GAPLESS
+	/* This checks for individual samples to skip, for gapless mode or sample-accurate seek. */
+	frame_buffercheck(mh);
+#endif
+	*audio = mh->buffer.p;
+	*bytes = mh->buffer.fill;
+	return MPG123_OK;
+}
+
+/*
+	Find, read and parse the next mp3 frame while skipping junk and parsing id3 tags, lame headers, etc.
+	Prepares everything for decoding using mpg123_framebyframe_decode.
+	returns
+	MPG123_OK -- new frame was read and parsed, call mpg123_framebyframe_decode to actually decode
+	MPG123_NEW_FORMAT -- new frame was read, it results in changed output format, call mpg123_framebyframe_decode to actually decode
+	MPG123_BAD_HANDLE -- mh has not been initialized
+	MPG123_NEED_MORE  -- more input data is needed to advance to the next frame. supply more input data using mpg123_feed
+*/
+int attribute_align_arg mpg123_framebyframe_next(mpg123_handle *mh)
+{
+	int b;
+	if(mh == NULL) return MPG123_BAD_HANDLE;
+
+	mh->to_decode = mh->to_ignore = FALSE;
+	mh->buffer.fill = 0;
+
+	b = get_next_frame(mh);
+	if(b < 0) return b;
+	debug1("got next frame, %i", mh->to_decode);
+
+	/* mpg123_framebyframe_decode will return MPG123_OK with 0 bytes decoded if mh->to_decode is 0 */
+	if(!mh->to_decode)
+		return MPG123_OK;
+
+	if(mh->ps.new_format)
+	{
+		debug("notifiying new format");
+		mh->ps.new_format = 0;
+		return MPG123_NEW_FORMAT;
+	}
+
+	return MPG123_OK;
 }
 
 /*

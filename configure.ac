@@ -11,7 +11,7 @@ AC_PREREQ(2.57)
 dnl ############# Initialisation
 
 AC_INIT([mpg123], [1.10.0], [mpg123-devel@lists.sourceforge.net])
-LIBMPG123_VERSION=21:2:21
+LIBMPG123_VERSION=22:0:22
 AC_SUBST(LIBMPG123_VERSION)
 
 AC_CONFIG_SRCDIR(src/mpg123.c)
@@ -44,6 +44,7 @@ buffer=enabled # try to build with buffer by default
 dnl ############# Compiler and tools Checks
 
 LT_LDFLAGS=-export-dynamic
+EXEC_LT_LDFLAGS=
 be_static=no
 all_static=no
 AC_MSG_CHECKING([if you are up to something totally static with LDFLAGS/CFLAGS])
@@ -62,6 +63,7 @@ done
 if test "x$be_static" = xyes; then
 	AC_MSG_RESULT([yes])
 	LT_LDFLAGS=-all-static
+	EXEC_LT_LDFLAGS="$LT_LDFLAGS"
 else
 	AC_MSG_RESULT([no])
 fi
@@ -170,6 +172,7 @@ AM_CONDITIONAL( [HAVE_MODULES], [test "x$modules" = xenabled] )
 
 AC_SUBST(MODULE_OBJ)
 AC_SUBST(LT_LDFLAGS)
+AC_SUBST(EXEC_LT_LDFLAGS)
 
 dnl ############## Configurable Options
 
@@ -546,8 +549,25 @@ case $host in
   *-*-dragonfly* | *-*-freebsd* | *-*-midnightbsd* | *-*-mirbsd* | *-*-netbsd* | *-*-openbsd*)
     cpu_type="generic_fpu"
   ;;
-  # Todo: Add default for x86 solaris; need to test it there, too.
+  i386-*-solaris*)
+    cpu_type=x86
+  ;;
+  x86_64-*-solaris*)
+    cpu_type=x86-64_all
+  ;;
   *-*-solaris*)
+    cpu_type="generic_fpu"
+  ;;
+  # os2-emx = OS/2 with some Unix fun; so p.ex. buffer works.
+  # Till we sorted out the assembler troubles, generic CPU is default.
+  i386-pc-os2-emx)
+    cpu_type=generic_fpu
+  ;;
+  x86_64-pc-os2-emx)
+    # We are optimistic hat the future knows OS/2 on x86-64;-)
+    cpu_type=generic_fpu
+  ;;
+  *-pc-os2-emx)
     cpu_type="generic_fpu"
   ;;
   *-dec-osf*)
@@ -913,21 +933,6 @@ if test x"$fifo" = xenabled; then
 	fi
 fi
 
-AC_CHECK_FUNCS( getaddrinfo, [ have_ipv6=yes ], [ have_ipv6=no ] )
-if test x"$ipv6" = xauto; then
-	if test x"$have_ipv6" = xyes; then
-		ipv6=enabled
-	else
-		ipv6=disabled
-	fi
-fi
-if test x"$ipv6" = xenabled; then
-	AC_DEFINE(IPV6, 1, [ Define if IPV6 support is enabled. ])
-	if test x"$have_ipv6" = xno; then
-		AC_MSG_WARN( [ You forced IPv6 code while I think there is no getaddrinfo() available! ] )
-	fi
-fi
-
 dnl ############## Header and Library Checks
 
 # locale headers
@@ -944,6 +949,12 @@ else
   have_network=no
 fi
 
+dnl trying to get that socket lib settled in one line
+AC_SEARCH_LIBS(gethostbyname, nsl socket ws2_32 wsock32) 
+dnl OK, two lines... Solaris needs -lnsl -lsocket
+AC_SEARCH_LIBS(socket, socket ws2_32 wsock32) 
+
+
 if test x"$network" = xauto; then
 	if test x"$have_network" = xyes; then
 		network=enabled
@@ -955,6 +966,22 @@ if test x"$network" = xenabled; then
 	AC_DEFINE(NETWORK, 1, [ Define if network support is enabled. ])
 	if test x"$have_network" = xno; then
 		AC_MSG_WARN( [ You forced network code while I think there is support missing! ] )
+	fi
+fi
+
+AC_CHECK_FUNCS( getaddrinfo, [ have_ipv6=yes ], [ have_ipv6=no ] )
+if test x"$ipv6" = xauto; then
+	if test x"$have_ipv6" = xyes; then
+		ipv6=enabled
+	else
+		ipv6=disabled
+	fi
+fi
+
+if test x"$ipv6" = xenabled; then
+	AC_DEFINE(IPV6, 1, [ Define if IPV6 support is enabled. ])
+	if test x"$have_ipv6" = xno; then
+		AC_MSG_WARN( [ You forced IPv6 code while I think there is no getaddrinfo() available! ] )
 	fi
 fi
 
@@ -1024,11 +1051,6 @@ case $host in
     AC_DEFINE(ABI_ALIGN_FUN, 1, [ Define if your architecture wants/needs/can use attribute_align_arg and alignment checks. It's for 32bit x86... ])
  ;;
 esac
-
-dnl trying to get that socket lib settled in one line
-AC_SEARCH_LIBS(gethostbyname, nsl socket ws2_32 wsock32) 
-dnl OK, two lines... Solaris needs -lnsl -lsocket
-AC_SEARCH_LIBS(socket, socket ws2_32 wsock32) 
 
 s_altivec="synth_altivec dct64_altivec"
 s_i386="dct64_i386"
@@ -1180,10 +1202,10 @@ esac
 case $cpu_type in
   3dnow|3dnow_alone|3dnowext|3dnowext_alone|mmx|mmx_alone|sse|sse_alone|x86|x86_dither)
     case $host in
-      i386-apple-darwin8*)
+      i386-apple-darwin8*|*-apple-darwin10*)
         ADD_LDFLAGS="$ADD_LDFLAGS -Wl,-read_only_relocs,suppress"
       ;;
-      i386-apple-darwin9*|i386-apple-darwin10*)
+      i386-apple-darwin9*)
         ADD_CFLAGS="$ADD_CFLAGS -mmacosx-version-min=10.4 -isysroot /Developer/SDKs/MacOSX10.4u.sdk"
         ADD_LDFLAGS="$ADD_LDFLAGS -Wl,-syslibroot,/Developer/SDKs/MacOSX10.4u.sdk -Wl,-classic_linker -Wl,-read_only_relocs,suppress"
       ;;
@@ -1229,7 +1251,7 @@ fi
 dnl ############## Output module choice
 
 # The full list of supported modules to check, first come, first serve.
-check_modules="alsa oss coreaudio sndio sun win32 esd jack portaudio pulse sdl nas arts openal dummy"
+check_modules="alsa oss coreaudio sndio sun win32 os2 esd jack portaudio pulse sdl nas arts openal dummy"
 # The final list.
 output_modules=
 
@@ -1424,6 +1446,24 @@ do
 				check_failed=yes
 			fi
 		;;
+		os2)
+			OS2_LIBS="-los2me -lmmpm2 -lsocket"
+			AC_CHECK_HEADERS([os2.h])
+			# os2me.h depends on os2.h
+			# Yes, that way of coding it is ugly.
+			if test "x${ac_cv_header_os2_h}" = xyes
+			then
+				AC_CHECK_HEADERS([os2me.h], [], [], [#include <os2.h>])
+			fi
+			if test "x${ac_cv_header_os2_h}" = xyes \
+			   -a   "x${ac_cv_header_os2me_h}" = xyes
+			then
+				output_modules="$output_modules os2"
+				HAVE_OS2=yes
+			else
+				check_failed=yes
+			fi
+		;;
 # from here on only forced tests, untested code
 		hp)
 			# What's the deal with that and alib?
@@ -1455,19 +1495,6 @@ do
 		aix)
 			UNSUPPORTED_AUDIO=yes
 			AC_CHECK_HEADERS([sys/audio.h], [output_modules="$output_modules aix" HAVE_AIX=yes], [check_failed=yes])
-		;;
-		os2)
-			UNSUPPORTED_AUDIO=yes
-			OS2_LIBS="-los2me -lsocket"
-			AC_CHECK_HEADERS([os2.h os2me.h])
-			if test "x${ac_cv_header_os2_h}" = xyes \
-			   -a   "x${ac_cv_header_os2me_h}" = xyes
-			then
-				output_modules="$output_modules os2"
-				HAVE_OS2=yes
-			else
-				check_failed=yes
-			fi
 		;;
 		sgi)
 			UNSUPPORTED_AUDIO=yes
@@ -1808,20 +1835,22 @@ fi
 # Define that always... also without frame index enabled.
 AC_DEFINE_UNQUOTED(INDEX_SIZE, $seektable, [size of the frame index seek table])
 
-# Check if we want Unicode for Win32.
+# Check if we want Unicode for Win32. Cygwin does not need _wopen
+win32_specific_codes=disabled
 win32_unicode=disabled
-AC_MSG_CHECKING([if we want Unicode File Open for Win32])
-AC_ARG_ENABLE(win32_unicode,
-	[  --enable-win32_unicode=[no/yes] Enable Unicode for Win32 ],
-	[   
-	   if test "x$enableval" = xyes; then
-		AC_DEFINE(WANT_WIN32_UNICODE, 1, [ Define to use Unicode for Windows ])
-		win32_unicode=enabled
-		AC_MSG_RESULT([yes])
-	   fi
-	], [AC_MSG_RESULT([no])])
-
-AM_CONDITIONAL([WIN32_USE_UNICODE], [ test "x$win32_unicode" = xenabled])
+AC_CHECK_HEADERS([windows.h], [win32_specific_codes=enabled])
+if test "x$win32_specific_codes" = xenabled; then
+  AC_CHECK_FUNC([_wopen], [win32_unicode=enabled],[win32_unicode=disabled])
+  AC_MSG_CHECKING([if we want Unicode File Open for Win32])
+  if test "x$win32_unicode" = xenabled; then
+    AC_DEFINE([WANT_WIN32_UNICODE], [1], [ Define to use Unicode for Windows ])
+    AC_MSG_RESULT([yes])
+  else
+    AC_MSG_RESULT([no])
+  fi
+fi
+# Use Win32 support codes
+AM_CONDITIONAL([WIN32_CODES], [ test "x$win32_specific_codes" = xenabled ])
 
 dnl ############## Final Output
 

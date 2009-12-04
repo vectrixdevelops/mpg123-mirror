@@ -10,16 +10,12 @@
 #include "mpg123app.h"
 #include "mpg123.h"
 #include "local.h"
-#include "win32conv.h"
 
 #ifdef HAVE_SYS_WAIT_H
 #include <sys/wait.h>
 #endif
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
-#endif
-#ifdef WIN32
-#include <windows.h>
 #endif
 
 #include <errno.h>
@@ -74,7 +70,10 @@ struct parameter param = {
   0 ,	  /* force_reopen, always (re)opens audio device for next song */
   /* test_cpu flag is valid for multi and 3dnow.. even if 3dnow is built alone; ensure it appears only once */
   FALSE , /* normal operation */
-  FALSE,  /* try to run process in 'realtime mode' */   
+  FALSE,  /* try to run process in 'realtime mode' */
+#ifdef HAVE_WINDOWS_H 
+  0, /* win32 process priority */
+#endif
   NULL,  /* wav,cdr,au Filename */
 	0, /* default is to play all titles in playlist */
 	NULL, /* no playlist per default */
@@ -84,7 +83,7 @@ struct parameter param = {
 #ifdef FIFO
 	,NULL
 #endif
-#ifndef WIN32
+#if !defined (WIN32) || defined (__CYGWIN__)
 	,0 /* timeout */
 #endif
 	,1 /* loop */
@@ -415,11 +414,14 @@ topt opts[] = {
 	#ifdef NETWORK
 	{'u', "auth",        GLO_ARG | GLO_CHAR, 0, &httpauth,   0},
 	#endif
-	#ifdef HAVE_SCHED_SETSCHEDULER
+	#if defined (HAVE_SCHED_SETSCHEDULER) || defined (HAVE_WINDOWS_H)
 	/* check why this should be a long variable instead of int! */
 	{'T', "realtime",    GLO_LONG,  0, &param.realtime, TRUE },
 	#else
 	{'T', "realtime",    0,  realtime_not_compiled, 0,           0 },    
+	#endif
+	#ifdef HAVE_WINDOWS_H
+	{0, "priority", GLO_ARG | GLO_INT, 0, &param.w32_priority, 0},
 	#endif
 	{0, "title",         GLO_INT,  0, &param.xterm_title, TRUE },
 	{'w', "wav",         GLO_ARG | GLO_CHAR, set_out_wav, 0, 0 },
@@ -515,13 +517,19 @@ int open_track(char *fname)
 	httpdata_reset(&htd);
 	if(MPG123_OK != mpg123_param(mh, MPG123_ICY_INTERVAL, 0, 0))
 	error1("Cannot (re)set ICY interval: %s", mpg123_strerror(mh));
-	if(!strcmp(fname, "-")) filept = STDIN_FILENO;
+	if(!strcmp(fname, "-"))
+	{
+		filept = STDIN_FILENO;
+#ifdef WIN32
+		_setmode(STDIN_FILENO, _O_BINARY);
+#endif
+	}
 	else if (!strncmp(fname, "http://", 7)) /* http stream */
 	{
 		filept = http_open(fname, &htd);
 		/* now check if we got sth. and if we got sth. good */
 		if(    (filept >= 0) && (htd.content_type.p != NULL)
-			  && !param.ignore_mime && strcmp(htd.content_type.p, "audio/mpeg") && strcmp(htd.content_type.p, "audio/x-mpeg") )
+			  && !param.ignore_mime && !(debunk_mime(htd.content_type.p) & IS_FILE) )
 		{
 			error1("Unknown mpeg MIME type %s - is it perhaps a playlist (use -@)?", htd.content_type.p == NULL ? "<nil>" : htd.content_type.p);
 			error("If you know the stream is mpeg1/2 audio, then please report this as "PACKAGE_NAME" bug");
@@ -917,7 +925,8 @@ int main(int sys_argc, char ** sys_argv)
 	}
 #endif
 
-#ifdef HAVE_SCHED_SETSCHEDULER
+#if defined (HAVE_SCHED_SETSCHEDULER) && !defined (__CYGWIN__)
+/* Cygwin --realtime seems to fail when accessing network, using win32 set priority instead */
 	if (param.realtime) {  /* Get real-time priority */
 	  struct sched_param sp;
 	  fprintf(stderr,"Getting real-time priority\n");
@@ -926,6 +935,11 @@ int main(int sys_argc, char ** sys_argv)
 	  if (sched_setscheduler(0, SCHED_RR, &sp) == -1)
 	    fprintf(stderr,"Can't get real-time priority\n");
 	}
+#endif
+
+#ifdef HAVE_WINDOWS_H
+	/* argument "3" is equivalent to realtime priority class */
+	win32_set_priority( param.realtime ? 3 : param.w32_priority);
 #endif
 
 	if(!param.remote) prepare_playlist(argc, argv);
@@ -1283,8 +1297,13 @@ static void long_usage(int err)
 	#ifdef HAVE_SETPRIORITY
 	fprintf(o,"        --aggressive       tries to get higher priority (nice)\n");
 	#endif
-	#ifdef HAVE_SCHED_SETSCHEDULER
+	#if defined (HAVE_SCHED_SETSCHEDULER) || defined (HAVE_WINDOWS_H)
 	fprintf(o," -T     --realtime         tries to get realtime priority\n");
+	#endif
+	#ifdef HAVE_WINDOWS_H
+	fprintf(o,"        --priority <n>     use specified process priority\n");
+	fprintf(o,"                           accepts -2 to 3 as integer arguments\n");
+	fprintf(o,"                           -2 as idle, 0 as normal and 3 as realtime.\n");
 	#endif
 	fprintf(o," -?     --help             give compact help\n");
 	fprintf(o,"        --longhelp         give this long help listing\n");
