@@ -37,9 +37,7 @@ void frame_default_pars(mpg123_pars *mp)
 #ifndef NO_ICY
 	mp->icy_interval = 0;
 #endif
-#ifndef WIN32
 	mp->timeout = 0;
-#endif
 	mp->resync_limit = 1024;
 #ifdef FRAME_INDEX
 	mp->index_size = INDEX_SIZE;
@@ -67,6 +65,7 @@ void frame_init_par(mpg123_handle *fr, mpg123_pars *mp)
 #ifdef OPT_DITHER
 	fr->dithernoise = NULL;
 #endif
+	fr->layerscratch = NULL;
 	fr->xing_toc = NULL;
 	fr->cpu_opts.type = defdec();
 	fr->cpu_opts.class = decclass(fr->cpu_opts.type);
@@ -86,6 +85,12 @@ void frame_init_par(mpg123_handle *fr, mpg123_pars *mp)
 	invalidate_format(&fr->ps.of);
 	fr->rdat.r_read = NULL;
 	fr->rdat.r_lseek = NULL;
+	fr->rdat.iohandle = NULL;
+	fr->rdat.r_read_handle = NULL;
+	fr->rdat.r_lseek_handle = NULL;
+	fr->rdat.cleanup_handle = NULL;
+	fr->wrapperdata = NULL;
+	fr->wrapperclean = NULL;
 	fr->decoder_change = 1;
 	fr->ps.err = MPG123_OK;
 	if(mp == NULL) frame_default_pars(&fr->p);
@@ -327,6 +332,51 @@ int frame_buffers(mpg123_handle *fr)
 #endif
 #endif
 	}
+
+	/* Layer scratch buffers are of compile-time fixed size, so allocate only once. */
+	if(fr->layerscratch == NULL)
+	{
+		/* Allocate specific layer1/2/3 buffers, so that we know they'll work for SSE. */
+		size_t scratchsize = 0;
+		real *scratcher;
+#ifndef NO_LAYER1
+		scratchsize += sizeof(real) * 2 * SBLIMIT;
+#endif
+#ifndef NO_LAYER2
+		scratchsize += sizeof(real) * 2 * 4 * SBLIMIT;
+#endif
+#ifndef NO_LAYER3
+		scratchsize += sizeof(real) * 2 * SBLIMIT * SSLIMIT; /* hybrid_in */
+		scratchsize += sizeof(real) * 2 * SSLIMIT * SBLIMIT; /* hybrid_out */
+#endif
+		/*
+			Now figure out correct alignment:
+			We need 16 byte minimum, smallest unit of the blocks is 2*SBLIMIT*sizeof(real), which is 64*4=256. Let's do 64bytes as heuristic for cache line (as proven useful in buffs above).
+		*/
+		fr->layerscratch = malloc(scratchsize+63);
+		if(fr->layerscratch == NULL) return -1;
+
+		/* Get aligned part of the memory, then divide it up. */
+		scratcher = aligned_pointer(fr->layerscratch,real,64);
+		/* Those funky pointer casts silence compilers...
+		   One might change the code at hand to really just use 1D arrays, but in practice, that would not make a (positive) difference. */
+#ifndef NO_LAYER1
+		fr->layer1.fraction = (real(*)[SBLIMIT])scratcher;
+		scratcher += 2 * SBLIMIT;
+#endif
+#ifndef NO_LAYER2
+		fr->layer2.fraction = (real(*)[4][SBLIMIT])scratcher;
+		scratcher += 2 * 4 * SBLIMIT;
+#endif
+#ifndef NO_LAYER3
+		fr->layer3.hybrid_in = (real(*)[SBLIMIT][SSLIMIT])scratcher;
+		scratcher += 2 * SBLIMIT * SSLIMIT;
+		fr->layer3.hybrid_out = (real(*)[SSLIMIT][SBLIMIT])scratcher;
+		scratcher += 2 * SSLIMIT * SBLIMIT;
+#endif
+		/* Note: These buffers don't need resetting here. */
+	}
+
 	/* Only reset the buffers we created just now. */
 	frame_decode_buffers_reset(fr);
 
@@ -473,6 +523,7 @@ void frame_free_buffers(mpg123_handle *fr)
 	if(fr->conv16to8_buf != NULL) free(fr->conv16to8_buf);
 	fr->conv16to8_buf = NULL;
 #endif
+	if(fr->layerscratch != NULL) free(fr->layerscratch);
 }
 
 void frame_exit(mpg123_handle *fr)
@@ -497,6 +548,12 @@ void frame_exit(mpg123_handle *fr)
 #endif
 	exit_id3(fr);
 	clear_icy(&fr->icy);
+	/* Clean up possible mess from LFS wrapper. */
+	if(fr->wrapperclean != NULL)
+	{
+		fr->wrapperclean(fr->wrapperdata);
+		fr->wrapperdata = NULL;
+	}
 }
 
 int attribute_align_arg mpg123_get_raw_state(mpg123_handle *mh, struct mpg123_raw_state **ps)
@@ -754,7 +811,11 @@ void frame_gapless_update(mpg123_handle *fr, off_t total_samples)
 	else if(fr->end_s > total_samples)
 	{
 		if(NOQUIET) error2("end sample count smaller than gapless end! (%"OFF_P" < %"OFF_P").", (off_p)total_samples, (off_p)fr->end_s);
-		fr->end_s = total_samples;
+		/* Humbly disabling gapless stuff on track end. */
+		fr->end_s = 0;
+		frame_gapless_realinit(fr);
+		fr->lastframe = -1;
+		fr->lastoff = 0;
 	}
 }
 
@@ -834,6 +895,8 @@ void frame_set_seek(mpg123_handle *fr, off_t sp)
 	debug3("frame_set_seek: begin at %li frames, end at %li; ignore from %li",
 	       (long) fr->firstframe, (long) fr->lastframe, (long) fr->ignoreframe);
 #endif
+	/* Old bit reservoir should be invalid, eh? */
+	fr->bitreservoir = 0;
 }
 
 int attribute_align_arg mpg123_volume_change(mpg123_handle *mh, double change)

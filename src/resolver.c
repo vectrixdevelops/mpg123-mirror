@@ -2,7 +2,7 @@
 	resolver.c: TCP network stuff, for IPv4 and IPv6
 	Oh, and also some URL parsing... extracting host name and such.
 
-	copyright 2008 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 2008-2010 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written Thomas Orgis (based on httpget.c)
 
@@ -15,6 +15,7 @@
 #ifdef NETWORK
 #include "true.h"
 #include "resolver.h"
+#if !defined (WANT_WIN32_SOCKETS)
 #include <netdb.h>
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -22,6 +23,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#endif
 #ifdef HAVE_SYS_SELECT_H
 #include <sys/select.h>
 #endif
@@ -135,6 +137,7 @@ debug4("hostname between %lu and %lu, %lu chars of %s", (unsigned long)pos, (uns
 }
 
 /* Switch between blocking and non-blocking mode. */
+#if !defined (WANT_WIN32_SOCKETS)
 static void nonblock(int sock)
 {
 	int flags = fcntl(sock, F_GETFL);
@@ -219,6 +222,7 @@ static int timeout_connect(int sockfd, const struct sockaddr *serv_addr, socklen
 	}
 }
 
+
 /* So, this then is the only routine that should know about IPv4 or v6 in future. */
 int open_connection(mpg123_string *host, mpg123_string *port)
 {
@@ -273,7 +277,10 @@ int open_connection(mpg123_string *host, mpg123_string *port)
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family   = AF_UNSPEC; /* We accept both IPv4 and IPv6 ... and perhaps IPv8;-) */
 	hints.ai_socktype = SOCK_STREAM;
-
+	hints.ai_flags = 0;
+#ifdef HAVE_GAI_ADDRCONFIG
+	hints.ai_flags |= AI_ADDRCONFIG; /* Only ask for addresses that we have configured interfaces for. */
+#endif
 	addrcount = getaddrinfo(host->p, port->p, &hints, &addrlist);
 
 	if(addrcount <0)
@@ -302,7 +309,7 @@ int open_connection(mpg123_string *host, mpg123_string *port)
 #endif
 	return sock; /* Hopefully, that's an open socket to talk with. */
 }
-
+#endif /* !defined (WANT_WIN32_SOCKETS) */
 #else /* NETWORK */
 
 void resolver_dummy_without_sense()

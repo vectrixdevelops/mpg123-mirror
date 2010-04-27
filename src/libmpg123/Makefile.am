@@ -19,16 +19,14 @@ testcpu_LDADD = getcpuflags.$(OBJEXT)
 CLEANFILES = *.a
 
 
-#lib_LIBRARIES = libmpg123.a
+# The library can have different names, depending on largefile setup.
+# Libtool macros think they're smart. Because of that mpg123.la does not work, it must be libmpg123.la .
 lib_LTLIBRARIES = libmpg123.la
 nodist_include_HEADERS = mpg123.h
 
-#libmpg123_a_LIBADD = @DECODER_OBJ@
-#libmpg123_a_DEPENDENCIES = @DECODER_OBJ@
-
 libmpg123_la_LDFLAGS = -no-undefined -version-info @LIBMPG123_VERSION@ -export-symbols-regex '^mpg123_'
-libmpg123_la_LIBADD = @DECODER_LOBJ@
-libmpg123_la_DEPENDENCIES = @DECODER_LOBJ@
+libmpg123_la_LIBADD = @DECODER_LOBJ@ @LFS_LOBJ@
+libmpg123_la_DEPENDENCIES = @DECODER_LOBJ@ @LFS_LOBJ@
 
 libmpg123_la_SOURCES = \
 	compat.c \
@@ -61,6 +59,7 @@ libmpg123_la_SOURCES = \
 	readers.c \
 	tabinit.c \
 	libmpg123.c \
+	aligncheck.h \
 	mpg123lib_intern.h \
 	mangle.h \
 	getcpuflags.h \
@@ -68,6 +67,7 @@ libmpg123_la_SOURCES = \
 	index.c
 
 EXTRA_libmpg123_la_SOURCES = \
+	lfs_wrap.c \
 	icy.c \
 	icy2utf8.c \
 	l2tables.h \

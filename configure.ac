@@ -10,9 +10,14 @@ AC_PREREQ(2.57)
 
 dnl ############# Initialisation
 
-AC_INIT([mpg123], [1.10.0], [mpg123-devel@lists.sourceforge.net])
-LIBMPG123_VERSION=22:0:22
+AC_INIT([mpg123], [1.12.x-dev], [mpg123-devel@lists.sourceforge.net])
+dnl Increment API_VERSION when the API gets changes (new functions).
+API_VERSION=25
+LIB_PATCHLEVEL=0
+dnl Since we want to be backwards compatible, both sides get set to API_VERSION.
+LIBMPG123_VERSION=$API_VERSION:$LIB_PATCHLEVEL:$API_VERSION
 AC_SUBST(LIBMPG123_VERSION)
+AC_SUBST(API_VERSION)
 
 AC_CONFIG_SRCDIR(src/mpg123.c)
 AC_CONFIG_AUX_DIR(build)
@@ -852,6 +857,8 @@ AC_CHECK_HEADERS([stdio.h stdlib.h string.h unistd.h sched.h sys/ioctl.h sys/typ
 
 dnl ############## Types
 
+dnl Large file support stuff needs cleanup. There are superfluous variables.
+
 dnl Detect large file support, enable switches if needed.
 AC_SYS_LARGEFILE
 dnl If we do have a switch for large files, rename off_t-aware API calls.
@@ -859,19 +866,23 @@ dnl Using the file_offset_bits variable here is fine for linux (possibly Solaris
 dnl Others... we'll have to see.
 dnl Note: I started writing this with with multiline replacements.
 dnl Does not work. Automake insists on putting these into Makefiles where they break things.
-if test "x$ac_cv_sys_file_offset_bits" = x || echo "$ac_cv_sys_file_offset_bits" | grep -q '@<:@^0-9@:>@'; then
+if test "x$ac_cv_sys_file_offset_bits" = x || echo "$ac_cv_sys_file_offset_bits" | grep  '@<:@^0-9@:>@' > /dev/null; then
 	dnl if it has non-numeric chars or is empty... ignore...
 	LARGEFILE_BITS=
 	LARGEFILE_SUFFIX=
-	LARGEFILE_SWITCH=0
+	LFS_LOBJ=
 else
 	LARGEFILE_BITS="$ac_cv_sys_file_offset_bits"
 	LARGEFILE_SUFFIX="_$ac_cv_sys_file_offset_bits"
-	LARGEFILE_SWITCH=1
+	# Add dual-mode wrapper code.
+	LFS_LOBJ=lfs_wrap.lo
 fi
+
+AC_SUBST(LFS_LOBJ)
 
 dnl Insert the function name redefinitions and export symbols as needed.
 dnl ...based on these two variables and manual work in src/libmpg123/mpg123.h.in .
+
 AC_SUBST(LARGEFILE_BITS)
 AC_SUBST(LARGEFILE_SUFFIX)
 AC_SUBST(LARGEFILE_SWITCH)
@@ -938,6 +949,7 @@ dnl ############## Header and Library Checks
 # locale headers
 AC_CHECK_HEADERS([locale.h langinfo.h])
 # Headers for network (http) stuff
+network_type=Unknown
 AC_CHECK_HEADERS([netdb.h sys/param.h sys/socket.h netinet/in.h arpa/inet.h])
 if test "x$ac_cv_header_netdb_h" = "xyes"      &&
    test "x$ac_cv_header_sys_param_h" = "xyes"  &&
@@ -945,45 +957,19 @@ if test "x$ac_cv_header_netdb_h" = "xyes"      &&
    test "x$ac_cv_header_netinet_in_h" = "xyes" &&
    test "x$ac_cv_header_arpa_inet_h"  = "xyes"; then
   have_network=yes
+  network_type=Posix
 else
   have_network=no
 fi
 
 dnl trying to get that socket lib settled in one line
-AC_SEARCH_LIBS(gethostbyname, nsl socket ws2_32 wsock32) 
+AC_SEARCH_LIBS(gethostbyname, nsl socket) 
 dnl OK, two lines... Solaris needs -lnsl -lsocket
-AC_SEARCH_LIBS(socket, socket ws2_32 wsock32) 
-
-
-if test x"$network" = xauto; then
-	if test x"$have_network" = xyes; then
-		network=enabled
-	else
-		network=disabled
-	fi
-fi
-if test x"$network" = xenabled; then
-	AC_DEFINE(NETWORK, 1, [ Define if network support is enabled. ])
-	if test x"$have_network" = xno; then
-		AC_MSG_WARN( [ You forced network code while I think there is support missing! ] )
-	fi
-fi
+AC_SEARCH_LIBS(socket, socket) 
 
 AC_CHECK_FUNCS( getaddrinfo, [ have_ipv6=yes ], [ have_ipv6=no ] )
-if test x"$ipv6" = xauto; then
-	if test x"$have_ipv6" = xyes; then
-		ipv6=enabled
-	else
-		ipv6=disabled
-	fi
-fi
 
-if test x"$ipv6" = xenabled; then
-	AC_DEFINE(IPV6, 1, [ Define if IPV6 support is enabled. ])
-	if test x"$have_ipv6" = xno; then
-		AC_MSG_WARN( [ You forced IPv6 code while I think there is no getaddrinfo() available! ] )
-	fi
-fi
+APR_CHECK_GETADDRINFO_ADDRCONFIG()
 
 # Substitutions for the installable mpg123.h header
 if test "x$ac_cv_header_stdio_h" = "xyes"; then
@@ -1235,8 +1221,8 @@ fi
 for i in $more_sources
 do
   # Echo make sure every file is only once in the list.
-  echo "$DECODER_OBJ" | grep -v -w "$i\.\$(OBJEXT)" && DECODER_OBJ="$DECODER_OBJ $i.\$(OBJEXT)"
-  echo "$DECODER_LOBJ" | grep -v -w "$i\.lo" && DECODER_LOBJ="$DECODER_LOBJ $i.lo"
+  echo "$DECODER_OBJ" | grep -v -w "$i\.\$(OBJEXT)" > /dev/null && DECODER_OBJ="$DECODER_OBJ $i.\$(OBJEXT)"
+  echo "$DECODER_LOBJ" | grep -v -w "$i\.lo" > /dev/null && DECODER_LOBJ="$DECODER_LOBJ $i.lo"
 done
 
 AC_SUBST(DECODER_OBJ)
@@ -1453,7 +1439,14 @@ do
 			# Yes, that way of coding it is ugly.
 			if test "x${ac_cv_header_os2_h}" = xyes
 			then
-				AC_CHECK_HEADERS([os2me.h], [], [], [#include <os2.h>])
+				# We mimick exactly the way how the header will be used.
+				# It seems to be picky...
+				AC_CHECK_HEADERS([os2me.h], [], [], [#define INCL_OS2MM
+#define INCL_DOS
+#define INCL_VIO
+#define INCL_KBD
+#include <os2.h>
+#])
 			fi
 			if test "x${ac_cv_header_os2_h}" = xyes \
 			   -a   "x${ac_cv_header_os2me_h}" = xyes
@@ -1812,7 +1805,7 @@ esac
 
 dnl If using gcc, prevent a bad alignment option from breaking things.
 dnl Let's default to safe 16-byte alignment for any special x86 or altivec stuff.
-if test "x$GCC" = xyes && echo "$CFLAGS" | grep -q 'mpreferred-stack-boundary='; then
+if test "x$GCC" = xyes && echo "$CFLAGS" | grep 'mpreferred-stack-boundary=' > /dev/null; then
 	case $cpu_type in
 		x86 | i586* | mmx | sse | 3dnow* | altivec)
 			AC_MSG_WARN( [ You are trying to mess with stack alignment. I know better. ] )
@@ -1835,22 +1828,147 @@ fi
 # Define that always... also without frame index enabled.
 AC_DEFINE_UNQUOTED(INDEX_SIZE, $seektable, [size of the frame index seek table])
 
+dnl ############## Win32 function checks
 # Check if we want Unicode for Win32. Cygwin does not need _wopen
 win32_specific_codes=disabled
-win32_unicode=disabled
+win32_unicode=Uneeded
+win32_sockets=disabled
+win32_sockets_working=no
+win32_wide_working=no
+win32_winver_bump=no
 AC_CHECK_HEADERS([windows.h], [win32_specific_codes=enabled])
-if test "x$win32_specific_codes" = xenabled; then
+if test "x$win32_specific_codes" = xenabled && test "x$host_os" != "xcygwin"; then
+
+#### Check for Wide functions
   AC_CHECK_FUNC([_wopen], [win32_unicode=enabled],[win32_unicode=disabled])
   AC_MSG_CHECKING([if we want Unicode File Open for Win32])
   if test "x$win32_unicode" = xenabled; then
-    AC_DEFINE([WANT_WIN32_UNICODE], [1], [ Define to use Unicode for Windows ])
     AC_MSG_RESULT([yes])
+    AC_MSG_CHECKING([if Unicode functions working])
+    AC_LINK_IFELSE([[
+      #include <windows.h>
+      #include <stdlib.h>
+      int main()
+      {
+        MultiByteToWideChar (0, 0, NULL, 0, NULL, 0);
+        WideCharToMultiByte (0, 0, NULL, 0, NULL, 0, NULL, NULL);
+        return 0;
+      }
+    ]], [win32_wide_working=yes], [win32_winver_bump=yes])
+    if test "x$win32_wide_working" = xno; then
+      AC_LINK_IFELSE([[
+        #define WINVER 0x501
+        #define _WIN32_WINNT 0x501
+        #include <windows.h>
+        #include <stdlib.h>
+        int main()
+        {
+          MultiByteToWideChar (0, 0, NULL, 0, NULL, 0);
+          WideCharToMultiByte (0, 0, NULL, 0, NULL, 0, NULL, NULL);
+          return 0;
+        }
+      ]], [win32_wide_working=yes], [AC_MSG_RESULT([no])])
+    fi
+    if test "x$win32_wide_working" = xyes; then
+      AC_MSG_RESULT([yes])
+      AC_DEFINE([WANT_WIN32_UNICODE], [1], [ Define to use Unicode for Windows ])
+    fi
+  else
+    AC_MSG_WARN([Unicode File Open for Win32 disabled])
+  fi
+
+#### Check for Network functions
+  AC_CHECK_HEADERS([ws2tcpip.h], [win32_sockets=enabled], [AC_MSG_WARN([Please update your headers to support winsock 2.2.])])
+  AC_MSG_CHECKING([if we want Win32 sockets])
+  if test "x$win32_sockets" = "xenabled" && test "x$network" != "xdisabled"; then
+  AC_MSG_RESULT([yes])
+  AC_MSG_CHECKING([if winsock2 API is available])
+    wsoldlibs="$LIBS"
+    LIBS="$LIBS -lws2_32"
+    AC_LINK_IFELSE([[
+      #include <winsock2.h>
+      #include <ws2tcpip.h>
+      #include <stdlib.h>
+      int main()
+      {
+        getaddrinfo(NULL, NULL, NULL, NULL);
+        freeaddrinfo(NULL);
+        return 0;
+      }
+    ]], [win32_sockets_working=yes], [win32_winver_bump=yes])
+    if test "x$win32_sockets_working" = "xno"; then
+      AC_MSG_CHECKING([deeper if winsock2 API is available])
+      AC_LINK_IFELSE([
+        #define WINVER 0x501
+        #define _WIN32_WINNT 0x501
+        #include <winsock2.h>
+        #include <ws2tcpip.h>
+        #include <stdlib.h>
+        int main()
+        {
+          getaddrinfo(NULL, NULL, NULL, NULL);
+          freeaddrinfo(NULL);
+          return 0;
+        }
+      ], [win32_sockets_working=yes], [AC_MSG_RESULT([no])])
+    fi
+    if test "x$win32_sockets_working" = "xyes"; then
+      AC_MSG_RESULT([yes])
+      AC_DEFINE([WANT_WIN32_SOCKETS], [1], [ Define to use Win32 sockets ])
+      network_type=Winsock2
+      have_network=yes
+      have_ipv6=yes
+    else
+      LIBS="$wsoldlibs"
+      AC_MSG_WARN([Please update your headers to support winsock 2.2.])
+    fi
+  else
+    AC_MSG_RESULT([no])
+  fi
+  AC_MSG_CHECKING([if WINVER and _WIN32_WINNT needs version bumps])
+  if test "x$win32_winver_bump" = "xyes"; then
+    AC_MSG_RESULT([yes])
+    CFLAGS="$CFLAGS -DWINVER=0x0501 -D_WIN32_WINNT=0x0501"
+    # getaddrinfo and freeaddrinfo are available for Win2K and above
+    # Bug: MinGW.org w32api ws2tcpip.h incorrectly wants (_WIN32_WINNT >= 0x0501) for getaddrinfo and freeaddrinfo
+    # MultiByteToWideChar and WideCharToMultiByte are available for Win2K and above
   else
     AC_MSG_RESULT([no])
   fi
 fi
-# Use Win32 support codes
+
+#### Use Win32 support codes
 AM_CONDITIONAL([WIN32_CODES], [ test "x$win32_specific_codes" = xenabled ])
+
+if test x"$network" = xauto; then
+	if test x"$have_network" = xyes; then
+		network=enabled
+	else
+		network=disabled
+	fi
+fi
+if test x"$ipv6" = xauto; then
+	if test x"$have_ipv6" = xyes; then
+		ipv6=enabled
+	else
+		ipv6=disabled
+	fi
+fi
+
+dnl ############## Network enable
+if test x"$network" = xenabled; then
+	AC_DEFINE(NETWORK, 1, [ Define if network support is enabled. ])
+	if test x"$have_network" = xno; then
+		AC_MSG_WARN( [ You forced network code while I think there is support missing! ] )
+	fi
+fi
+
+if test x"$ipv6" = xenabled; then
+	AC_DEFINE(IPV6, 1, [ Define if IPV6 support is enabled. ])
+	if test x"$have_ipv6" = xno; then
+		AC_MSG_WARN( [ You forced IPv6 code while I think there is no getaddrinfo() available! ] )
+	fi
+fi
 
 dnl ############## Final Output
 
@@ -1888,9 +2006,15 @@ echo "
   FIFO support ............ $fifo
   Buffer .................. $buffer
   Network (http streams) .. $network
-  IPv6 (getaddrinfo) ...... $ipv6
-  File offset (if needed) . $ac_cv_sys_file_offset_bits
-  Alignment checks ........ $aligncheck"
+  Network Sockets ......... $network_type
+  IPv6 (getaddrinfo) ...... $ipv6"
+if test x"$LARGEFILE_BITS" = x; then
+  echo "  File offsets ............ default"
+else
+  echo "  File offsets ............ $LARGEFILE_BITS"
+  echo "    The lib will (try to) support default offset size, too."
+fi
+echo "  Alignment checks ........ $aligncheck"
 if test x"$aligncheck" = xenabled; then
 	if test x"$ccalign" != xyes; then
 		echo "   (without effect since special alignment is not employed)"
