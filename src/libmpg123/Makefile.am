@@ -29,6 +29,7 @@ libmpg123_la_LIBADD = @DECODER_LOBJ@ @LFS_LOBJ@
 libmpg123_la_DEPENDENCIES = @DECODER_LOBJ@ @LFS_LOBJ@
 
 libmpg123_la_SOURCES = \
+	intsym.h \
 	compat.c \
 	compat.h \
 	parse.c \
@@ -67,6 +68,7 @@ libmpg123_la_SOURCES = \
 	index.c
 
 EXTRA_libmpg123_la_SOURCES = \
+	lfs_alias.c \
 	lfs_wrap.c \
 	icy.c \
 	icy2utf8.c \

@@ -1,7 +1,7 @@
 /*
 	mpg123: main code of the program (not of the decoder...)
 
-	copyright 1995-2009 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 1995-2010 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Michael Hipp
 */
@@ -40,6 +40,7 @@
 #include "httpget.h"
 #include "metaprint.h"
 #include "httpget.h"
+#include "streamdump.h"
 
 #include "debug.h"
 
@@ -110,6 +111,8 @@ struct parameter param = {
 	,1. /* preload */
 	,-1 /* preframes */
 	,-1 /* gain */
+	,NULL /* stream dump file */
+	,0 /* ICY interval */
 };
 
 mpg123_handle *mh = NULL;
@@ -178,6 +181,8 @@ void prev_track(void)
 void safe_exit(int code)
 {
 	char *dummy, *dammy;
+
+	dump_close();
 #ifdef HAVE_TERMIOS
 	if(param.term_ctrl)
 		term_restore();
@@ -461,6 +466,9 @@ topt opts[] = {
 	{'e', "encoding", GLO_ARG|GLO_CHAR, 0, &param.force_encoding, 0},
 	{0, "preload", GLO_ARG|GLO_DOUBLE, 0, &param.preload, 0},
 	{0, "preframes", GLO_ARG|GLO_LONG, 0, &param.preframes, 0},
+	{0, "skip-id3v2", GLO_INT, set_frameflag, &frameflag, MPG123_SKIP_ID3V2},
+	{0, "streamdump", GLO_ARG|GLO_CHAR, 0, &param.streamdump, 0},
+	{0, "icy-interval", GLO_ARG|GLO_LONG, 0, &param.icy_interval, 0},
 	{0, 0, 0, 0, 0, 0}
 };
 
@@ -544,6 +552,11 @@ int open_track(char *fname)
 	else if (!strncmp(fname, "http://", 7)) /* http stream */
 	{
 #if defined (WANT_WIN32_SOCKETS)
+	if(param.streamdump != NULL)
+	{
+		fprintf(stderr, "\nWarning: win32 networking conflicts with stream dumping. Aborting the dump.\n");
+		dump_close();
+	}
 	/*Use recv instead of stdio functions */
 	win32_net_replace(mh);
 	filept = win32_net_http_open(fname, &htd);
@@ -570,6 +583,14 @@ int open_track(char *fname)
 		error1("Cannot set ICY interval: %s", mpg123_strerror(mh));
 		if(param.verbose > 1) fprintf(stderr, "Info: ICY interval %li\n", (long)htd.icy_interval);
 	}
+
+	if(param.icy_interval > 0)
+	{
+		if(MPG123_OK != mpg123_param(mh, MPG123_ICY_INTERVAL, param.icy_interval, 0))
+		error1("Cannot set ICY interval: %s", mpg123_strerror(mh));
+		if(param.verbose > 1) fprintf(stderr, "Info: Forced ICY interval %li\n", param.icy_interval);
+	}
+
 	debug("OK... going to finally open.");
 	/* Now hook up the decoder on the opened stream or the file. */
 	if(network_sockets_used) 
@@ -582,6 +603,7 @@ int open_track(char *fname)
 		return 0;
 	}
 	debug("Track successfully opened.");
+
 	fresh = TRUE;
 	return 1;
 }
@@ -925,6 +947,9 @@ int main(int sys_argc, char ** sys_argv)
 	}
 	mpg123_delete_pars(mp); /* Don't need the parameters anymore ,they're in the handle now. */
 
+	/* Prepare stream dumping, possibly replacing mpg123 reader. */
+	if(dump_open(mh) != 0) safe_exit(78);
+
 	/* Now either check caps myself or query buffer for that. */
 	audio_capabilities(ao, mh);
 
@@ -1214,6 +1239,7 @@ static void long_usage(int err)
 
 	fprintf(o,"\ninput options\n\n");
 	fprintf(o," -k <n> --skip <n>         skip n frames at beginning\n");
+	fprintf(o,"        --skip-id3v2       skip ID3v2 tags without parsing\n");
 	fprintf(o," -n     --frames <n>       play only <n> frames of every stream\n");
 	fprintf(o,"        --fuzzy            Enable fuzzy seeks (guessing byte offsets or using approximate seek points from Xing TOC)\n");
 	fprintf(o," -y     --no-resync        DISABLES resync on error (--resync is deprecated)\n");
@@ -1232,6 +1258,8 @@ static void long_usage(int err)
 	fprintf(o,"        --index-size <n>   change size of frame index\n");
 	fprintf(o,"        --preframes  <n>   number of frames to decode in advance after seeking (to keep layer 3 bit reservoir happy)\n");
 	fprintf(o,"        --resync-limit <n> Set number of bytes to search for valid MPEG data; <0 means search whole stream.\n");
+	fprintf(o,"        --streamdump <f>   Dump a copy of input data (as read by libmpg123) to given file.\n");
+	fprintf(o,"        --icy-interval <n> Enforce ICY interval in bytes (for playing a stream dump.\n");
 	fprintf(o,"\noutput/processing options\n\n");
 	fprintf(o," -o <o> --output <o>       select audio output module\n");
 	fprintf(o,"        --list-modules     list the available modules\n");

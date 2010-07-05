@@ -14,6 +14,7 @@
 #define MPG123_ENCODINGS 10
 
 #include "config.h" /* Load this before _anything_ */
+#include "intsym.h" /* Prefixing of internal symbols that still are public in a static lib. */
 
 /* ABI conformance for other compilers.
    mpg123 needs 16byte-aligned stack for SSE and friends.
@@ -24,8 +25,14 @@
 #    define attribute_align_arg __attribute__((force_align_arg_pointer))
 /* The gcc that can align the stack does not need the check... nor does it work with gcc 4.3+, anyway. */
 #else
+
 #    define attribute_align_arg
-#    define NEED_ALIGNCHECK /* Other compilers get code to catch misaligned stack. */
+/* Other compilers get code to catch misaligned stack.
+   Well, except Sun Studio, which accepts the aligned attribute but does not honor it. */
+#if !defined(__SUNPRO_C)
+#    define NEED_ALIGNCHECK
+#endif
+
 #endif
 #endif
 #else

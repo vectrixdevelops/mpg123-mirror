@@ -143,7 +143,7 @@ struct mpg123_handle_struct
 
 #ifndef NO_LAYER3
 #if (defined OPT_3DNOW || defined OPT_3DNOWEXT)
-		void (*dct36)(real *,real *,real *,real *,real *);
+		void (*the_dct36)(real *,real *,real *,real *,real *);
 #endif
 #endif
 
@@ -364,8 +364,4 @@ void frame_set_seek(mpg123_handle *fr, off_t sp);
 off_t frame_tell_seek(mpg123_handle *fr);
 /* Take a copy of the Xing VBR TOC for fuzzy seeking. */
 int frame_fill_toc(mpg123_handle *fr, unsigned char* in);
-
-
-/* adjust volume to current outscale and rva values if wanted */
-void do_rva(mpg123_handle *fr);
 #endif

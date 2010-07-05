@@ -464,7 +464,6 @@ int attribute_align_arg mpg123_open(mpg123_handle *mh, const char *path)
 	if(mh == NULL) return MPG123_ERR;
 
 	mpg123_close(mh);
-	frame_reset(mh);
 	return open_stream(mh, path, -1);
 }
 
@@ -474,7 +473,6 @@ int attribute_align_arg mpg123_open_fd(mpg123_handle *mh, int fd)
 	if(mh == NULL) return MPG123_ERR;
 
 	mpg123_close(mh);
-	frame_reset(mh);
 	return open_stream(mh, NULL, fd);
 }
 
@@ -484,7 +482,6 @@ int attribute_align_arg mpg123_open_handle(mpg123_handle *mh, void *iohandle)
 	if(mh == NULL) return MPG123_ERR;
 
 	mpg123_close(mh);
-	frame_reset(mh);
 	if(mh->rdat.r_read_handle == NULL)
 	{
 		mh->ps.err = MPG123_BAD_CUSTOM_IO;
@@ -499,7 +496,6 @@ int attribute_align_arg mpg123_open_feed(mpg123_handle *mh)
 	if(mh == NULL) return MPG123_ERR;
 
 	mpg123_close(mh);
-	frame_reset(mh);
 	return open_feed(mh);
 }
 
@@ -590,7 +586,7 @@ int decode_update(mpg123_handle *mh)
 	return 0;
 }
 
-size_t attribute_align_arg mpg123_safe_buffer()
+size_t attribute_align_arg mpg123_safe_buffer(void)
 {
 	/* real is the largest possible output (it's 32bit float, 32bit int or 64bit double). */
 	return sizeof(real)*2*1152*NTOM_MAX;
@@ -702,7 +698,7 @@ static int zero_byte(mpg123_handle *fr)
 	Not part of the api. This just decodes the frame and fills missing bits with zeroes.
 	There can be frames that are broken and thus make do_layer() fail.
 */
-void decode_the_frame(mpg123_handle *fr)
+static void decode_the_frame(mpg123_handle *fr)
 {
 	size_t needed_bytes = samples_to_bytes(fr, frame_expect_outsamples(fr)); 	fr->clip += (fr->do_layer)(fr);
 	/*fprintf(stderr, "frame %"OFF_P": got %"SIZE_P" / %"SIZE_P"\n", fr->ps.num,(size_p)fr->buffer.fill, (size_p)needed_bytes);*/
@@ -1047,9 +1043,11 @@ static int init_track(mpg123_handle *mh)
 
 int attribute_align_arg mpg123_getformat(mpg123_handle *mh, long *rate, int *channels, int *encoding)
 {
+	int b;
 	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
-	if(init_track(mh) == MPG123_ERR) return MPG123_ERR;
+	b = init_track(mh);
+	if(b < 0) return b;
 
 	if(rate != NULL) *rate = mh->ps.of.rate;
 	if(channels != NULL) *channels = mh->ps.of.channels;
@@ -1582,6 +1580,8 @@ int attribute_align_arg mpg123_close(mpg123_handle *mh)
 		invalidate_format(&mh->ps.of);
 		mh->ps.new_format = 0;
 	}
+	/* Always reset the frame buffers on close, so we cannot forget it in funky opening routines (wrappers, even). */
+	frame_reset(mh);
 	return MPG123_OK;
 }
 

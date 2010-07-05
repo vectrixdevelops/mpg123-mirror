@@ -9,11 +9,10 @@ AC_PREREQ(2.57)
 
 
 dnl ############# Initialisation
-
-AC_INIT([mpg123], [1.12.x-dev], [mpg123-devel@lists.sourceforge.net])
+AC_INIT([mpg123], [1.13.0], [mpg123-devel@lists.sourceforge.net])
 dnl Increment API_VERSION when the API gets changes (new functions).
-API_VERSION=25
-LIB_PATCHLEVEL=0
+API_VERSION=27
+LIB_PATCHLEVEL=1
 dnl Since we want to be backwards compatible, both sides get set to API_VERSION.
 LIBMPG123_VERSION=$API_VERSION:$LIB_PATCHLEVEL:$API_VERSION
 AC_SUBST(LIBMPG123_VERSION)
@@ -868,27 +867,15 @@ dnl Note: I started writing this with with multiline replacements.
 dnl Does not work. Automake insists on putting these into Makefiles where they break things.
 if test "x$ac_cv_sys_file_offset_bits" = x || echo "$ac_cv_sys_file_offset_bits" | grep  '@<:@^0-9@:>@' > /dev/null; then
 	dnl if it has non-numeric chars or is empty... ignore...
-	LARGEFILE_BITS=
-	LARGEFILE_SUFFIX=
 	LFS_LOBJ=
 else
-	LARGEFILE_BITS="$ac_cv_sys_file_offset_bits"
-	LARGEFILE_SUFFIX="_$ac_cv_sys_file_offset_bits"
 	# Add dual-mode wrapper code.
 	LFS_LOBJ=lfs_wrap.lo
 fi
 
-AC_SUBST(LFS_LOBJ)
-
-dnl Insert the function name redefinitions and export symbols as needed.
-dnl ...based on these two variables and manual work in src/libmpg123/mpg123.h.in .
-
-AC_SUBST(LARGEFILE_BITS)
-AC_SUBST(LARGEFILE_SUFFIX)
-AC_SUBST(LARGEFILE_SWITCH)
-
 # Using the lower level macros instead of AC_TYPE_* for compatibility with not freshest autoconf.
 AC_CHECK_TYPE(size_t, unsigned long)
+AC_CHECK_TYPE(uintptr_t, unsigned long)
 AC_CHECK_TYPE(ssize_t, long)
 AC_CHECK_TYPE(off_t,  long int)
 AC_CHECK_TYPE(int32_t, int)
@@ -900,6 +887,32 @@ AC_CHECK_SIZEOF(ssize_t,4)
 AC_CHECK_SIZEOF(off_t,4)
 AC_CHECK_SIZEOF(int32_t)
 AC_CHECK_SIZEOF(long,4)
+
+# The alias functions want to know the native off_t bits.
+# "Native" also means large file offsets, if enabled, it's what is native to the mpg123 library.
+if test "x$ac_cv_sizeof_long" = "x"; then 
+  AC_MSG_ERROR([Cannot determine sizeof(long)?])
+else
+  LFS_ALIAS_BITS=`expr "$ac_cv_sizeof_long" "*" "8"`
+  AC_DEFINE_UNQUOTED([LFS_ALIAS_BITS], $LFS_ALIAS_BITS,
+    [Define this to the size of long type in bits, used for LFS small/native alias functions.])
+fi
+
+lfs_alias=enabled
+AC_ARG_ENABLE(lfs-alias,
+              [  --disable-lfs-alias disable alias wrappers for largefile bitness (mpg123_seek_32 in addition to mpg123_seek, mpg123_seek_64 as alias on x86-64) ],
+              [
+                if test "x$enableval" = xno; then
+                  lfs_alias="disabled"
+                fi
+              ], [])
+
+if test "x$lfs_alias" = "xenabled"; then
+  LFS_LOBJ="$LFS_LOBJ lfs_alias.lo"
+fi
+
+AC_SUBST(LFS_LOBJ)
+
 
 dnl ############## Function Checks
 
@@ -1044,13 +1057,13 @@ s_i486="$s_i386 synth_i486 dct64_i486"
 s_i586="$s_i386 synth_i586"
 s_i586d="$s_i386 synth_i586_dither"
 s_3dnow="$s_i386 synth_3dnow dct64_3dnow equalizer_3dnow"
-s_3dnowext="$s_i386 dct64_3dnowext dct64_mmx tabinit_mmx synth_3dnowext"
+s_3dnowext="$s_i386 dct64_3dnowext tabinit_mmx synth_3dnowext"
 if test "x$layer3" = "xenabled"; then
   s_3dnow="$s_3dnow dct36_3dnow"
   s_3dnowext="$s_3dnowext dct36_3dnowext"
 fi
 s_mmx="$s_i386 dct64_mmx tabinit_mmx synth_mmx"
-s_sse="$s_i386 dct64_mmx tabinit_mmx dct64_sse dct64_sse_float synth_sse_float synth_stereo_sse_float synth_sse_s32 synth_stereo_sse_s32 "
+s_sse="$s_i386 tabinit_mmx dct64_sse dct64_sse_float synth_sse_float synth_stereo_sse_float synth_sse_s32 synth_stereo_sse_s32 "
 s_x86_64="dct64_x86_64 dct64_x86_64_float synth_x86_64_float synth_x86_64_s32 synth_stereo_x86_64_float synth_stereo_x86_64_s32"
 s_x86multi="getcpuflags"
 s_dither="dither"
@@ -2014,6 +2027,8 @@ else
   echo "  File offsets ............ $LARGEFILE_BITS"
   echo "    The lib will (try to) support default offset size, too."
 fi
+echo "  LFS alias symbols ....... $lfs_alias ($LFS_ALIAS_BITS)"
+
 echo "  Alignment checks ........ $aligncheck"
 if test x"$aligncheck" = xenabled; then
 	if test x"$ccalign" != xyes; then

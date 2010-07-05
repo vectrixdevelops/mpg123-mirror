@@ -1,7 +1,7 @@
 /*
 	frame: Heap of routines dealing with the core mpg123 data structure.
 
-	copyright 2008-9 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 2008-2010 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Thomas Orgis
 */
@@ -14,11 +14,26 @@ static void frame_fixed_reset(mpg123_handle *fr);
 
 /* that's doubled in decode_ntom.c */
 #define NTOM_MUL (32768)
-#define aligned_pointer(p,type,alignment) \
-	(((char*)(p)-(char*)NULL) % (alignment)) \
-	? (type*)((char*)(p) + (alignment) - (((char*)(p)-(char*)NULL) % (alignment))) \
-	: (type*)(p)
-void frame_default_pars(mpg123_pars *mp)
+
+#define aligned_pointer(p, type, alignment) align_the_pointer(p, alignment)
+static void *align_the_pointer(void *base, unsigned int alignment)
+{
+	/*
+		Work in unsigned integer realm, explicitly.
+		Tricking the compiler into integer operations like % by invoking base-NULL is dangerous: It results into ptrdiff_t, which gets negative on big addresses. Big screw up, that.
+		I try to do it "properly" here: Casting only to uintptr_t and no artihmethic with void*.
+	*/
+	uintptr_t baseval = (uintptr_t)(char*)base;
+	uintptr_t aoff = baseval % alignment;
+
+	debug3("align_the_pointer: pointer %p is off by %u from %u",
+	       base, (unsigned int)aoff, alignment);
+
+	if(aoff) return (char*)base+alignment-aoff;
+	else     return base;
+}
+
+static void frame_default_pars(mpg123_pars *mp)
 {
 	mp->outscale = 1.0;
 #ifdef GAPLESS
@@ -400,7 +415,7 @@ int frame_buffers_reset(mpg123_handle *fr)
 	return 0;
 }
 
-void frame_icy_reset(mpg123_handle* fr)
+static void frame_icy_reset(mpg123_handle* fr)
 {
 #ifndef NO_ICY
 	if(fr->icy.data != NULL) free(fr->icy.data);
@@ -410,7 +425,7 @@ void frame_icy_reset(mpg123_handle* fr)
 #endif
 }
 
-void frame_free_toc(mpg123_handle *fr)
+static void frame_free_toc(mpg123_handle *fr)
 {
 	if(fr->xing_toc != NULL){ free(fr->xing_toc); fr->xing_toc = NULL; }
 }
@@ -511,7 +526,7 @@ static void frame_fixed_reset(mpg123_handle *fr)
 	fr->freeformat_framesize = -1;
 }
 
-void frame_free_buffers(mpg123_handle *fr)
+static void frame_free_buffers(mpg123_handle *fr)
 {
 	if(fr->rawbuffs != NULL) free(fr->rawbuffs);
 	fr->rawbuffs = NULL;
@@ -606,7 +621,7 @@ int attribute_align_arg mpg123_info(mpg123_handle *mh, struct mpg123_frameinfo *
 		- guess wildly from mean framesize and offset of first frame / beginning of file.
 */
 
-off_t frame_fuzzy_find(mpg123_handle *fr, off_t want_frame, off_t* get_frame)
+static off_t frame_fuzzy_find(mpg123_handle *fr, off_t want_frame, off_t* get_frame)
 {
 	/* Default is to go to the beginning. */
 	off_t ret = fr->ps.audio_start;
