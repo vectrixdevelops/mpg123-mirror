@@ -1,3 +1,8 @@
+1.12.4
+---
+- Fix formatting of meta data printout in UTF-8 (string length computing).
+  As a collorary, ID3v1 data is reduced to ASCII in UTF-8 environment, as we do never know what specific encoding that has.
+
 1.12.3
 ---
 - Fix a long-standing bug that subtly broke http streaming with ICY meta data when reading a bit more quickly, like when using the buffer.
