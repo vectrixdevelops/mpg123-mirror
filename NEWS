@@ -1,3 +1,8 @@
+1.12.5
+---
+- Fix bug with the new meta data printout of the mpg123 app; embedded null bytes in UTF-8 strings in non-UTF-8 environment would trigger buffer overflow.
+  Thanks to Jakub Bogusz of PLD Linux for the tip. And yes, shame on Thomas for changing working string handling code. At all.
+
 1.12.4
 ---
 - Fix formatting of meta data printout in UTF-8 (string length computing).
