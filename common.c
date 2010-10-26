@@ -621,6 +621,7 @@ double compute_tpf(struct frame *fr)
 
 long compute_buffer_offset(struct frame *fr)
 {
+#ifndef NOXFERMEM
 	long bufsize;
 	
 	/*
@@ -640,6 +641,9 @@ long compute_buffer_offset(struct frame *fr)
 		return bufsize/2;
 	else
 		return bufsize;
+#else
+	return 0;
+#endif
 }
 
 void print_stat(struct frame *fr,int no,long buffsize,struct audio_info_struct *ai)

@@ -86,6 +86,7 @@ static int stream_back_frame(struct reader *rds,struct frame *fr,int num)
 	/* Skipping back/forth requires a bit more work in buffered mode. 
 	 * See mapped_back_frame(). 
 	 */
+#ifndef NOXFERMEM
 	if(param.usebuffer)
 		bytes += (long)(xfermem_get_usedspace(buffermem) /
 			(buffermem->buf[0] * buffermem->buf[1]
@@ -95,6 +96,7 @@ static int stream_back_frame(struct reader *rds,struct frame *fr,int num)
 /*
 		bytes += (long)(compute_buffer_offset(fr)*compute_bpf(fr));
 */	
+#endif
 	if(lseek(rds->filept,-bytes,SEEK_CUR) < 0)
 		return -1;
 

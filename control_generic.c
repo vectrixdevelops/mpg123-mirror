@@ -79,7 +79,11 @@ void generic_sendstat (struct frame *fr, int no)
 	/ so that they can also used here (performance problems?).
 	/ isn't there an easier way to compute the time? */
 
+#ifndef NOXFERMEM
 	buffsize = xfermem_get_usedspace(buffermem);
+#else
+	buffsize = 0;
+#endif
 	if (!rd || !fr)
 		return;
 	bpf = compute_bpf(fr);
@@ -318,12 +322,16 @@ void control_generic (struct frame *fr)
 	}
 
 	/* quit gracefully */
+
+#ifndef NOXFERMEM
 	if (param.usebuffer) {
 		kill(buffer_pid, SIGINT);
 		xfermem_done_writer(buffermem);
 		waitpid(buffer_pid, NULL, 0);
 		xfermem_done(buffermem);
-	} else {
+	} else
+#endif
+	{
 		audio_flush(param.outmode, &ai);
 		free(pcm_sample);
 	}
