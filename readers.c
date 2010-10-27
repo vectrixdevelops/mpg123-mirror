@@ -106,12 +106,14 @@ static int stream_back_frame(struct reader *rds,struct frame *fr,int num)
 	/* Skipping back/forth requires a bit more work in buffered mode. 
 	 * See mapped_back_frame(). 
 	 */
+#ifndef NOXFERMEM
 	if(param.usebuffer)
 		bytes += (long)(xfermem_get_usedspace(buffermem) /
 			(buffermem->buf[0] * buffermem->buf[1]
 				* (buffermem->buf[2] & AUDIO_FORMAT_MASK ?
 					16.0 : 8.0 ))
 				* (tabsel_123[fr->lsf][fr->lay-1][fr->bitrate_index] << 10));
+#endif
 /*
 		bytes += (long)(compute_buffer_offset(fr)*compute_bpf(fr));
 */	

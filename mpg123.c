@@ -1091,9 +1091,9 @@ tc_hack:
 			select(0, NULL, NULL, NULL, &wait170);
 		}
 	}
-#endif
 	if(param.verbose)
 		print_stat(&fr,frameNum,xfermem_get_usedspace(buffermem),&ai); 
+#endif
 #ifdef TERM_CONTROL
 	if(param.term_ctrl)
 		term_restore();
