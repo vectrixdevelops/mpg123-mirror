@@ -768,6 +768,12 @@ int mpgraw_open(
 				rs->error = error_code( rs );
 		}
 
+		if( !rs->error )
+		{
+			if( failed( mpg123_param (rs->mh, MPG123_ADD_FLAGS, MPG123_SKIP_ID3V2, 0)))
+				rs->error = error_code (rs);
+		}
+
 		if( ! rs->error )
 		{
             if(samplerate == 0)
