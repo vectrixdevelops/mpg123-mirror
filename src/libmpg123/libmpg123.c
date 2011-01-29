@@ -1,7 +1,7 @@
 /*
 	libmpg123: MPEG Audio Decoder library
 
-	copyright 1995-2009 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 1995-2010 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 
 */
@@ -22,40 +22,6 @@
 
 static int initialized = 0;
 
-#define ALIGNCHECK(mh)
-#define ALIGNCHECKK
-/* On compilers that support data alignment but not the automatic stack realignment.
-   We check for properly aligned stack before risking a crash because of badly compiled
-   client program. */
-#if (defined CCALIGN) && (defined NEED_ALIGNCHECK) && ((defined DEBUG) || (defined CHECK_ALIGN))
-
-/* Common building block. */
-#define ALIGNMAINPART \
-	/* minimum size of 16 bytes, not all compilers would align a smaller piece of data */ \
-	double ALIGNED(16) altest[2]; \
-	debug2("testing alignment, with %lu %% 16 = %lu", \
-		(unsigned long)altest, (unsigned long)((size_t)altest % 16)); \
-	if((size_t)altest % 16 != 0)
-
-#undef ALIGNCHECK
-#define ALIGNCHECK(mh) \
-	ALIGNMAINPART \
-	{ \
-		error("Stack variable is not aligned! Your combination of compiler/library is dangerous!"); \
-		if(mh != NULL) mh->err = MPG123_BAD_ALIGN; \
-\
-		return MPG123_ERR; \
-	}
-#undef ALIGNCHECKK
-#define ALIGNCHECKK \
-	ALIGNMAINPART \
-	{ \
-		error("Stack variable is not aligned! Your combination of compiler/library is dangerous!"); \
-		return MPG123_BAD_ALIGN; \
-	}
-
-#endif
-
 #ifdef GAPLESS
 /*
 	Take the buffer after a frame decode (strictly: it is the data from frame fr->num!) and cut samples out.
@@ -65,6 +31,23 @@ static void frame_buffercheck(mpg123_handle *fr)
 {
 	/* When we have no accurate position, gapless code does not make sense. */
 	if(!fr->accurate) return;
+
+	/* Important: We first cut samples from the end, then cut from beginning (including left-shift of the buffer).
+	   This order works also for the case where firstframe == lastframe. */
+
+	/* The last interesting (planned) frame: Only use some leading samples.
+	   Note a difference from the below: The last frame and offset are unchanges by seeks.
+	   The lastoff keeps being valid. */
+	if(fr->lastframe > -1 && fr->num >= fr->lastframe)
+	{
+		/* There can be more than one frame of padding at the end, so we ignore the whole frame if we are beyond lastframe. */
+		off_t byteoff = (fr->num == fr->lastframe) ? samples_to_bytes(fr, fr->lastoff) : 0;
+		if((off_t)fr->buffer.fill > byteoff)
+		{
+			fr->buffer.fill = byteoff;
+		}
+		debug1("Cut frame buffer on end of stream, fill now %"SIZE_P" bytes.", (size_p)fr->buffer.fill);
+	}
 
 	/* The first interesting frame: Skip some leading samples. */
 	if(fr->firstoff && fr->num == fr->firstframe)
@@ -82,24 +65,15 @@ static void frame_buffercheck(mpg123_handle *fr)
 			        (void*)fr->buffer.p, (void*)fr->buffer.data, ((short*)fr->buffer.p)[2]);
 		}
 		else fr->buffer.fill = 0;
-		fr->firstoff = 0; /* Only enter here once... when you seek, firstoff should be reset. */
-	}
-	/* The last interesting (planned) frame: Only use some leading samples. */
-	if(fr->lastoff && fr->num == fr->lastframe)
-	{
-		off_t byteoff = samples_to_bytes(fr, fr->lastoff);
-		if((off_t)fr->buffer.fill > byteoff)
-		{
-			fr->buffer.fill = byteoff;
-		}
-		fr->lastoff = 0; /* Only enter here once... when you seek, lastoff should be reset. */
+		/* We can only reach this frame again by seeking. And on seeking, firstoff will be recomputed.
+		   So it is safe to null it here (and it makes the if() decision abort earlier). */
+		fr->firstoff = 0;
 	}
 }
 #endif
 
 int attribute_align_arg mpg123_init(void)
 {
-	ALIGNCHECKK
 	if((sizeof(short) != 2) || (sizeof(long) < 4)) return MPG123_BAD_TYPES;
 
 	if(initialized) return MPG123_OK; /* no need to initialize twice */
@@ -132,17 +106,7 @@ mpg123_handle attribute_align_arg *mpg123_parnew(mpg123_pars *mp, const char* de
 {
 	mpg123_handle *fr = NULL;
 	int err = MPG123_OK;
-#if (defined CCALIGN) && (defined NEED_ALIGNCHECK) && ((defined DEBUG) || (defined CHECK_ALIGN))
-#ifdef CCALIGN
-	double ALIGNED(16) altest[4];
-	if(((size_t)altest) % 16 != 0)
-	{
-		error("Stack variable is not aligned! Your combination of compiler/library is dangerous!");
-		*error = MPG123_BAD_ALIGN;
-		return NULL;
-	}
-#endif
-#endif
+
 	if(initialized) fr = (mpg123_handle*) malloc(sizeof(mpg123_handle));
 	else err = MPG123_NOT_INITIALIZED;
 	if(fr != NULL)
@@ -190,7 +154,7 @@ mpg123_handle attribute_align_arg *mpg123_parnew(mpg123_pars *mp, const char* de
 int attribute_align_arg mpg123_decoder(mpg123_handle *mh, const char* decoder)
 {
 	enum optdec dt = dectype(decoder);
-	ALIGNCHECK(mh);
+
 	if(mh == NULL) return MPG123_ERR;
 
 	if(dt == nodec)
@@ -226,7 +190,7 @@ int attribute_align_arg mpg123_decoder(mpg123_handle *mh, const char* decoder)
 int attribute_align_arg mpg123_param(mpg123_handle *mh, enum mpg123_parms key, long val, double fval)
 {
 	int r;
-	ALIGNCHECK(mh);
+
 	if(mh == NULL) return MPG123_ERR;
 	r = mpg123_par(&mh->p, key, val, fval);
 	if(r != MPG123_OK){ mh->err = r; r = MPG123_ERR; }
@@ -246,7 +210,7 @@ int attribute_align_arg mpg123_param(mpg123_handle *mh, enum mpg123_parms key, l
 int attribute_align_arg mpg123_par(mpg123_pars *mp, enum mpg123_parms key, long val, double fval)
 {
 	int ret = MPG123_OK;
-	ALIGNCHECKK
+
 	if(mp == NULL) return MPG123_BAD_PARS;
 	switch(key)
 	{
@@ -313,10 +277,10 @@ int attribute_align_arg mpg123_par(mpg123_pars *mp, enum mpg123_parms key, long 
 			mp->outscale = val == 0 ? fval : (double)val/SHORT_SCALE;
 		break;
 		case MPG123_TIMEOUT:
-#ifndef WIN32
+#ifdef TIMEOUT_READ
 			mp->timeout = val >= 0 ? val : 0;
 #else
-			ret = MPG123_NO_TIMEOUT;
+			if(val > 0) ret = MPG123_NO_TIMEOUT;
 #endif
 		break;
 		case MPG123_RESYNC_LIMIT:
@@ -342,7 +306,7 @@ int attribute_align_arg mpg123_par(mpg123_pars *mp, enum mpg123_parms key, long 
 int attribute_align_arg mpg123_getparam(mpg123_handle *mh, enum mpg123_parms key, long *val, double *fval)
 {
 	int r;
-	ALIGNCHECK(mh);
+
 	if(mh == NULL) return MPG123_ERR;
 	r = mpg123_getpar(&mh->p, key, val, fval);
 	if(r != MPG123_OK){ mh->err = r; r = MPG123_ERR; }
@@ -352,7 +316,7 @@ int attribute_align_arg mpg123_getparam(mpg123_handle *mh, enum mpg123_parms key
 int attribute_align_arg mpg123_getpar(mpg123_pars *mp, enum mpg123_parms key, long *val, double *fval)
 {
 	int ret = 0;
-	ALIGNCHECKK
+
 	if(mp == NULL) return MPG123_BAD_PARS;
 	switch(key)
 	{
@@ -419,7 +383,7 @@ int attribute_align_arg mpg123_getstate(mpg123_handle *mh, enum mpg123_state key
 	int ret = MPG123_OK;
 	long theval = 0;
 	double thefval = 0.;
-	ALIGNCHECK(mh);
+
 	if(mh == NULL) return MPG123_ERR;
 
 	switch(key)
@@ -440,7 +404,6 @@ int attribute_align_arg mpg123_getstate(mpg123_handle *mh, enum mpg123_state key
 
 int attribute_align_arg mpg123_eq(mpg123_handle *mh, enum mpg123_channels channel, int band, double val)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 	if(band < 0 || band > 31){ mh->err = MPG123_BAD_BAND; return MPG123_ERR; }
 	switch(channel)
@@ -461,7 +424,7 @@ int attribute_align_arg mpg123_eq(mpg123_handle *mh, enum mpg123_channels channe
 double attribute_align_arg mpg123_geteq(mpg123_handle *mh, enum mpg123_channels channel, int band)
 {
 	double ret = 0.;
-	ALIGNCHECK(mh);
+
 	if(mh == NULL) return MPG123_ERR;
 
 	/* Handle this gracefully. When there is no band, it has no volume. */
@@ -483,31 +446,38 @@ double attribute_align_arg mpg123_geteq(mpg123_handle *mh, enum mpg123_channels 
 /* plain file access, no http! */
 int attribute_align_arg mpg123_open(mpg123_handle *mh, const char *path)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 
 	mpg123_close(mh);
-	frame_reset(mh);
 	return open_stream(mh, path, -1);
 }
 
 int attribute_align_arg mpg123_open_fd(mpg123_handle *mh, int fd)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 
 	mpg123_close(mh);
-	frame_reset(mh);
 	return open_stream(mh, NULL, fd);
+}
+
+int attribute_align_arg mpg123_open_handle(mpg123_handle *mh, void *iohandle)
+{
+	if(mh == NULL) return MPG123_ERR;
+
+	mpg123_close(mh);
+	if(mh->rdat.r_read_handle == NULL)
+	{
+		mh->err = MPG123_BAD_CUSTOM_IO;
+		return MPG123_ERR;
+	}
+	return open_stream_handle(mh, iohandle);
 }
 
 int attribute_align_arg mpg123_open_feed(mpg123_handle *mh)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 
 	mpg123_close(mh);
-	frame_reset(mh);
 	return open_feed(mh);
 }
 
@@ -515,19 +485,33 @@ int attribute_align_arg mpg123_replace_reader( mpg123_handle *mh,
                            ssize_t (*r_read) (int, void *, size_t),
                            off_t   (*r_lseek)(int, off_t, int) )
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
+
+	mpg123_close(mh);
 	mh->rdat.r_read = r_read;
 	mh->rdat.r_lseek = r_lseek;
 	return MPG123_OK;
 }
 
+int attribute_align_arg mpg123_replace_reader_handle( mpg123_handle *mh,
+                           ssize_t (*r_read) (void*, void *, size_t),
+                           off_t   (*r_lseek)(void*, off_t, int),
+                           void    (*cleanup)(void*)  )
+{
+	if(mh == NULL) return MPG123_ERR;
+
+	mpg123_close(mh);
+	mh->rdat.r_read_handle = r_read;
+	mh->rdat.r_lseek_handle = r_lseek;
+	mh->rdat.cleanup_handle = cleanup;
+	return MPG123_OK;
+}
 
 int decode_update(mpg123_handle *mh)
 {
 	long native_rate;
 	int b;
-	ALIGNCHECK(mh);
+
 	native_rate = frame_freq(mh);
 
 	b = frame_output_format(mh); /* Select the new output format based on given constraints. */
@@ -547,7 +531,7 @@ int decode_update(mpg123_handle *mh)
 		case 2:
 			mh->down_sample_sblimit = SBLIMIT>>(mh->down_sample);
 			/* With downsampling I get less samples per frame */
-			mh->outblock = samples_to_bytes(mh, (spf(mh)>>mh->down_sample));
+			mh->outblock = samples_to_storage(mh, (spf(mh)>>mh->down_sample));
 		break;
 #ifndef NO_NTOM
 		case 3:
@@ -559,10 +543,10 @@ int decode_update(mpg123_handle *mh)
 				mh->down_sample_sblimit /= frame_freq(mh);
 			}
 			else mh->down_sample_sblimit = SBLIMIT;
-			mh->outblock = mh->af.encsize * mh->af.channels *
-			               ( ( NTOM_MUL-1+spf(mh)
+			mh->outblock = samples_to_storage(mh,
+			                 ( ( NTOM_MUL-1+spf(mh)
 			                   * (((size_t)NTOM_MUL*mh->af.rate)/frame_freq(mh))
-			                 )/NTOM_MUL );
+			                 )/NTOM_MUL ));
 		}
 		break;
 #endif
@@ -582,7 +566,7 @@ int decode_update(mpg123_handle *mh)
 	return 0;
 }
 
-size_t attribute_align_arg mpg123_safe_buffer()
+size_t attribute_align_arg mpg123_safe_buffer(void)
 {
 	/* real is the largest possible output (it's 32bit float, 32bit int or 64bit double). */
 	return sizeof(real)*2*1152*NTOM_MAX;
@@ -650,13 +634,7 @@ static int get_next_frame(mpg123_handle *mh)
 		/* Or, we are finally done and have a new frame. */
 		else break;
 	} while(1);
-	/* When we start actually using the CRC, this could move into the loop... */
-	/* A question of semantics ... should I fold start_frame and frame_number into firstframe/lastframe? */
-	if(mh->lastframe >= 0 && mh->num > mh->lastframe)
-	{
-		mh->to_decode = mh->to_ignore = FALSE;
-		return MPG123_DONE;
-	}
+
 	if(change)
 	{
 		if(decode_update(mh) < 0)  /* dito... */
@@ -665,25 +643,28 @@ static int get_next_frame(mpg123_handle *mh)
 debug1("new format: %i", mh->new_format);
 
 		mh->decoder_change = 0;
-#ifdef GAPLESS
 		if(mh->fresh)
 		{
+#ifdef GAPLESS
 			int b=0;
 			/* Prepare offsets for gapless decoding. */
 			debug1("preparing gapless stuff with native rate %li", frame_freq(mh));
 			frame_gapless_realinit(mh);
 			frame_set_frameseek(mh, mh->num);
+#endif
 			mh->fresh = 0;
+#ifdef GAPLESS
 			/* Could this possibly happen? With a real big gapless offset... */
 			if(mh->num < mh->firstframe) b = get_next_frame(mh);
 			if(b < 0) return b; /* Could be error, need for more, new format... */
-		}
 #endif
+		}
 	}
 	return MPG123_OK;
 }
 
 /* Assumption: A buffer full of zero samples can be constructed by repetition of this byte.
+   Oh, and it handles some format conversion.
    Only to be used by decode_the_frame() ... */
 static int zero_byte(mpg123_handle *fr)
 {
@@ -698,9 +679,9 @@ static int zero_byte(mpg123_handle *fr)
 	Not part of the api. This just decodes the frame and fills missing bits with zeroes.
 	There can be frames that are broken and thus make do_layer() fail.
 */
-void decode_the_frame(mpg123_handle *fr)
+static void decode_the_frame(mpg123_handle *fr)
 {
-	size_t needed_bytes = samples_to_bytes(fr, frame_outs(fr, fr->num+1)-frame_outs(fr, fr->num));
+	size_t needed_bytes = samples_to_storage(fr, frame_expect_outsamples(fr));
 	fr->clip += (fr->do_layer)(fr);
 	/*fprintf(stderr, "frame %"OFF_P": got %"SIZE_P" / %"SIZE_P"\n", fr->num,(size_p)fr->buffer.fill, (size_p)needed_bytes);*/
 	/* There could be less data than promised.
@@ -736,47 +717,7 @@ void decode_the_frame(mpg123_handle *fr)
 		}
 	}
 #endif
-	/* Handle unsigned output formats via reshifting after decode here. */
-#ifndef NO_32BIT
-	if(fr->af.encoding == MPG123_ENC_UNSIGNED_32)
-	{ /* 32bit signed -> unsigned */
-		size_t i;
-		int32_t *ssamples;
-		uint32_t *usamples;
-		ssamples = (int32_t*)fr->buffer.data;
-		usamples = (uint32_t*)fr->buffer.data;
-		debug("converting output to unsigned 32 bit integer");
-		for(i=0; i<fr->buffer.fill/sizeof(int32_t); ++i)
-		{
-			/* Different strategy since we don't have a larger type at hand.
-				 Also watch out for silly +-1 fun because integer constants are signed in C90! */
-			if(ssamples[i] >= 0)
-			usamples[i] = (uint32_t)ssamples[i] + 2147483647+1;
-			/* The smalles value goes zero. */
-			else if(ssamples[i] == ((int32_t)-2147483647-1))
-			usamples[i] = 0;
-			/* Now -value is in the positive range of signed int ... so it's a possible value at all. */
-			else
-			usamples[i] = (uint32_t)2147483647+1 - (uint32_t)(-ssamples[i]);
-		}
-	}
-#endif
-#ifndef NO_16BIT
-	if(fr->af.encoding == MPG123_ENC_UNSIGNED_16)
-	{
-		size_t i;
-		short *ssamples;
-		unsigned short *usamples;
-		ssamples = (short*)fr->buffer.data;
-		usamples = (unsigned short*)fr->buffer.data;
-		debug("converting output to unsigned 16 bit integer");
-		for(i=0; i<fr->buffer.fill/sizeof(short); ++i)
-		{
-			long tmp = (long)ssamples[i]+32768;
-			usamples[i] = (unsigned short)tmp;
-		}
-	}
-#endif
+	postprocess_buffer(fr);
 }
 
 /*
@@ -793,7 +734,6 @@ void decode_the_frame(mpg123_handle *fr)
 */
 int attribute_align_arg mpg123_framebyframe_decode(mpg123_handle *mh, off_t *num, unsigned char **audio, size_t *bytes)
 {
-	ALIGNCHECK(mh);
 	if(bytes == NULL) return MPG123_ERR_NULL;
 	if(audio == NULL) return MPG123_ERR_NULL;
 	if(mh == NULL) return MPG123_BAD_HANDLE;
@@ -835,8 +775,8 @@ int attribute_align_arg mpg123_framebyframe_next(mpg123_handle *mh)
 	mh->buffer.fill = 0;
 
 	b = get_next_frame(mh);
-
-	if(b == MPG123_NEED_MORE) return MPG123_NEED_MORE;
+	if(b < 0) return b;
+	debug1("got next frame, %i", mh->to_decode);
 
 	/* mpg123_framebyframe_decode will return MPG123_OK with 0 bytes decoded if mh->to_decode is 0 */
 	if(!mh->to_decode)
@@ -848,9 +788,6 @@ int attribute_align_arg mpg123_framebyframe_next(mpg123_handle *mh)
 		mh->new_format = 0;
 		return MPG123_NEW_FORMAT;
 	}
-
-	if(b < 0) return b;
-	debug1("got next frame, %i", mh->to_decode);
 
 	return MPG123_OK;
 }
@@ -869,7 +806,6 @@ int attribute_align_arg mpg123_framebyframe_next(mpg123_handle *mh)
 */
 int attribute_align_arg mpg123_decode_frame(mpg123_handle *mh, off_t *num, unsigned char **audio, size_t *bytes)
 {
-	ALIGNCHECK(mh);
 	if(bytes != NULL) *bytes = 0;
 	if(mh == NULL) return MPG123_ERR;
 	if(mh->buffer.size < mh->outblock) return MPG123_NO_SPACE;
@@ -923,7 +859,14 @@ int attribute_align_arg mpg123_feed(mpg123_handle *mh, const unsigned char *in, 
 		if(in != NULL)
 		{
 			if(feed_more(mh, in, size) != 0) return MPG123_ERR;
-			else return MPG123_OK;
+			else
+			{
+				/* The need for more data might have triggered an error.
+				   This one is outdated now with the new data. */
+				if(mh->err == MPG123_ERR_READER) mh->err = MPG123_OK;
+
+				return MPG123_OK;
+			}
 		}
 		else
 		{
@@ -952,7 +895,7 @@ int attribute_align_arg mpg123_decode(mpg123_handle *mh, const unsigned char *in
 {
 	int ret = MPG123_OK;
 	size_t mdone = 0;
-	ALIGNCHECK(mh);
+
 	if(done != NULL) *done = 0;
 	if(mh == NULL) return MPG123_ERR;
 	if(inmemsize > 0 && mpg123_feed(mh, inmemory, inmemsize) != MPG123_OK)
@@ -1016,7 +959,7 @@ decodeend:
 long attribute_align_arg mpg123_clip(mpg123_handle *mh)
 {
 	long ret = 0;
-	ALIGNCHECK(mh);
+
 	if(mh != NULL)
 	{
 		ret = mh->clip;
@@ -1040,9 +983,11 @@ static int init_track(mpg123_handle *mh)
 
 int attribute_align_arg mpg123_getformat(mpg123_handle *mh, long *rate, int *channels, int *encoding)
 {
-	ALIGNCHECK(mh);
+	int b;
+
 	if(mh == NULL) return MPG123_ERR;
-	if(init_track(mh) == MPG123_ERR) return MPG123_ERR;
+	b = init_track(mh);
+	if(b < 0) return b;
 
 	if(rate != NULL) *rate = mh->af.rate;
 	if(channels != NULL) *channels = mh->af.channels;
@@ -1054,7 +999,7 @@ int attribute_align_arg mpg123_getformat(mpg123_handle *mh, long *rate, int *cha
 off_t attribute_align_arg mpg123_timeframe(mpg123_handle *mh, double seconds)
 {
 	off_t b;
-	ALIGNCHECK(mh);
+
 	if(mh == NULL) return MPG123_ERR;
 	b = init_track(mh);
 	if(b<0) return b;
@@ -1071,7 +1016,6 @@ off_t attribute_align_arg mpg123_timeframe(mpg123_handle *mh, double seconds)
 */
 off_t attribute_align_arg mpg123_tell(mpg123_handle *mh)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 	if(track_need_init(mh)) return 0;
 	/* Now we have all the info at hand. */
@@ -1103,7 +1047,6 @@ off_t attribute_align_arg mpg123_tell(mpg123_handle *mh)
 
 off_t attribute_align_arg mpg123_tellframe(mpg123_handle *mh)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 	if(mh->num < mh->firstframe) return mh->firstframe;
 	if(mh->to_decode) return mh->num;
@@ -1113,7 +1056,6 @@ off_t attribute_align_arg mpg123_tellframe(mpg123_handle *mh)
 
 off_t attribute_align_arg mpg123_tell_stream(mpg123_handle *mh)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 	/* mh->rd is at least a bad_reader, so no worry. */
 	return mh->rd->tell(mh);
@@ -1147,7 +1089,7 @@ static int do_the_seek(mpg123_handle *mh)
 	if(mh->down_sample == 3)
 	{
 		ntom_set_ntom(mh, fnum);
-		debug3("fixed ntom for frame %"OFF_P" to %lu, num=%"OFF_P, fnum, mh->ntom_val[0], mh->num);
+		debug3("fixed ntom for frame %"OFF_P" to %lu, num=%"OFF_P, (off_p)fnum, mh->ntom_val[0], (off_p)mh->num);
 	}
 #endif
 	b = mh->rd->seek_frame(mh, fnum);
@@ -1164,7 +1106,7 @@ off_t attribute_align_arg mpg123_seek(mpg123_handle *mh, off_t sampleoff, int wh
 {
 	int b;
 	off_t pos;
-	ALIGNCHECK(mh);
+
 	pos = mpg123_tell(mh); /* adjusted samples */
 	/* pos < 0 also can mean that simply a former seek failed at the lower levels.
 	  In that case, we only allow absolute seeks. */
@@ -1214,7 +1156,7 @@ off_t attribute_align_arg mpg123_feedseek(mpg123_handle *mh, off_t sampleoff, in
 {
 	int b;
 	off_t pos;
-	ALIGNCHECK(mh);
+
 	pos = mpg123_tell(mh); /* adjusted samples */
 	debug3("seek from %li to %li (whence=%i)", (long)pos, (long)sampleoff, whence);
 	/* The special seek error handling does not apply here... there is no lowlevel I/O. */
@@ -1268,7 +1210,7 @@ off_t attribute_align_arg mpg123_seek_frame(mpg123_handle *mh, off_t offset, int
 {
 	int b;
 	off_t pos = 0;
-	ALIGNCHECK(mh);
+
 	if(mh == NULL) return MPG123_ERR;
 	if((b=init_track(mh)) < 0) return b;
 
@@ -1303,7 +1245,6 @@ off_t attribute_align_arg mpg123_seek_frame(mpg123_handle *mh, off_t offset, int
 
 int attribute_align_arg mpg123_set_filesize(mpg123_handle *mh, off_t size)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 
 	mh->rdat.filelen = size;
@@ -1314,7 +1255,7 @@ off_t attribute_align_arg mpg123_length(mpg123_handle *mh)
 {
 	int b;
 	off_t length;
-	ALIGNCHECK(mh);
+
 	if(mh == NULL) return MPG123_ERR;
 	b = init_track(mh);
 	if(b<0) return b;
@@ -1329,10 +1270,18 @@ off_t attribute_align_arg mpg123_length(mpg123_handle *mh)
 	else if(mh->rdat.filelen == 0) return mpg123_tell(mh); /* we could be in feeder mode */
 	else return MPG123_ERR; /* No length info there! */
 
+	debug1("mpg123_length: internal sample length: %"OFF_P, (off_p)length);
+
 	length = frame_ins2outs(mh, length);
+	debug1("mpg123_length: external sample length: %"OFF_P, (off_p)length);
 #ifdef GAPLESS
-	if(mh->end_os > 0 && length > mh->end_os) length = mh->end_os;
-	length -= mh->begin_os;
+	if(mh->p.flags & MPG123_GAPLESS)
+	{
+		debug2("mpg123_length: begin_os = %"OFF_P", end_os = %"OFF_P, (off_p)mh->begin_os, (off_p)mh->end_os);
+		if(mh->end_os > 0 && length > mh->end_os) length = mh->end_os;
+		length -= mh->begin_os;
+		debug1("mpg123_length: after gapless correction: %"OFF_P, (off_p)length);
+	}
 #endif
 	return length;
 }
@@ -1342,7 +1291,7 @@ int attribute_align_arg mpg123_scan(mpg123_handle *mh)
 	int b;
 	off_t backframe;
 	int to_decode, to_ignore;
-	ALIGNCHECK(mh);
+
 	if(mh == NULL) return MPG123_ERR;
 	if(!(mh->rdat.flags & READER_SEEKABLE)){ mh->err = MPG123_NO_SEEK; return MPG123_ERR; }
 	/* Scan through the _whole_ file, since the current position is no count but computed assuming constant samples per frame. */
@@ -1362,11 +1311,13 @@ int attribute_align_arg mpg123_scan(mpg123_handle *mh)
 	/* One frame must be there now. */
 	mh->track_frames = 1;
 	mh->track_samples = spf(mh); /* Internal samples. */
+	debug("TODO: We should disable gapless code when encountering inconsistent spf(mh)!");
 	while(read_frame(mh) == 1)
 	{
 		++mh->track_frames;
 		mh->track_samples += spf(mh);
 	}
+	debug2("Scanning yielded %"OFF_P" track samples, %"OFF_P" frames.", (off_p)mh->track_samples, (off_p)mh->track_frames);
 #ifdef GAPLESS
 	/* Also, think about usefulness of that extra value track_samples ... it could be used for consistency checking. */
 	frame_gapless_update(mh, mh->track_samples);
@@ -1386,7 +1337,6 @@ int attribute_align_arg mpg123_meta_check(mpg123_handle *mh)
 
 int attribute_align_arg mpg123_id3(mpg123_handle *mh, mpg123_id3v1 **v1, mpg123_id3v2 **v2)
 {
-	ALIGNCHECK(mh);
 	if(v1 != NULL) *v1 = NULL;
 	if(v2 != NULL) *v2 = NULL;
 	if(mh == NULL) return MPG123_ERR;
@@ -1410,7 +1360,6 @@ int attribute_align_arg mpg123_id3(mpg123_handle *mh, mpg123_id3v1 **v1, mpg123_
 
 int attribute_align_arg mpg123_icy(mpg123_handle *mh, char **icy_meta)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 #ifndef NO_ICY
 	if(icy_meta == NULL)
@@ -1432,11 +1381,6 @@ int attribute_align_arg mpg123_icy(mpg123_handle *mh, char **icy_meta)
 	return MPG123_ERR;
 #endif
 }
-
-/*
-	Simple utility functions that do not possibly call code with extra alignment requirements do not use the ALIGNCHECK.
-	I am aware of the chance that the compiler could have introduced such code outside assembly functions, but such a modern compiler (gcc) can also honour attribute_align_arg.
-*/
 
 char* attribute_align_arg mpg123_icy2utf8(const char* icy_text)
 {
@@ -1512,7 +1456,6 @@ int mpg123_store_utf8(mpg123_string *sb, enum mpg123_text_encoding enc, const un
 
 int attribute_align_arg mpg123_index(mpg123_handle *mh, off_t **offsets, off_t *step, size_t *fill)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 	if(offsets == NULL || step == NULL || fill == NULL)
 	{
@@ -1533,7 +1476,6 @@ int attribute_align_arg mpg123_index(mpg123_handle *mh, off_t **offsets, off_t *
 
 int attribute_align_arg mpg123_set_index(mpg123_handle *mh, off_t *offsets, off_t step, size_t fill)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 #ifdef FRAME_INDEX
 	if(step == 0)
@@ -1555,7 +1497,6 @@ int attribute_align_arg mpg123_set_index(mpg123_handle *mh, off_t *offsets, off_
 
 int attribute_align_arg mpg123_close(mpg123_handle *mh)
 {
-	ALIGNCHECK(mh);
 	if(mh == NULL) return MPG123_ERR;
 	if(mh->rd != NULL && mh->rd->close != NULL) mh->rd->close(mh);
 	mh->rd = NULL;
@@ -1565,6 +1506,8 @@ int attribute_align_arg mpg123_close(mpg123_handle *mh)
 		invalidate_format(&mh->af);
 		mh->new_format = 0;
 	}
+	/* Always reset the frame buffers on close, so we cannot forget it in funky opening routines (wrappers, even). */
+	frame_reset(mh);
 	return MPG123_OK;
 }
 
@@ -1621,6 +1564,8 @@ static const char *mpg123_error[] =
 	"Feature not in this build."
 	,"Some bad value has been provided."
 	,"Low-level seeking has failed (call to lseek(), usually)."
+	,"Custom I/O obviously not prepared."
+	,"Overflow in LFS (large file support) conversion."
 };
 
 const char* attribute_align_arg mpg123_plain_strerror(int errcode)

@@ -35,7 +35,7 @@ static int builtin_get_formats(struct audio_output_struct *ao)
 		return 0;
 	}
 	else if(param.outmode == DECODE_AU) return MPG123_ENC_SIGNED_16|MPG123_ENC_UNSIGNED_8|MPG123_ENC_ULAW_8;
-	else if(param.outmode == DECODE_WAV) return MPG123_ENC_SIGNED_16|MPG123_ENC_UNSIGNED_8|MPG123_ENC_FLOAT_32|MPG123_ENC_SIGNED_32;
+	else if(param.outmode == DECODE_WAV) return MPG123_ENC_SIGNED_16|MPG123_ENC_UNSIGNED_8|MPG123_ENC_FLOAT_32|MPG123_ENC_SIGNED_24|MPG123_ENC_SIGNED_32;
 	else return MPG123_ENC_ANY;
 }
 static int builtin_close(struct audio_output_struct *ao)
@@ -266,7 +266,9 @@ static const struct enc_desc encdesc[] =
 	{ MPG123_ENC_ALAW_8, "a-law (8 bit)", "alaw ", 4 },
 	{ MPG123_ENC_FLOAT_32, "float (32 bit)", "f32 ", 3 },
 	{ MPG123_ENC_SIGNED_32, "signed 32 bit", "s32 ", 3 },
-	{ MPG123_ENC_UNSIGNED_32, "unsigned 32 bit", "u32 ", 3 }
+	{ MPG123_ENC_UNSIGNED_32, "unsigned 32 bit", "u32 ", 3 },
+	{ MPG123_ENC_SIGNED_24, "signed 24 bit", "s24 ", 3 },
+	{ MPG123_ENC_UNSIGNED_24, "unsigned 24 bit", "u24 ", 3 }
 };
 #define KNOWN_ENCS (sizeof(encdesc)/sizeof(struct enc_desc))
 
@@ -668,3 +670,53 @@ int reset_output(audio_output_t *ao)
 	}
 	else return 0;
 }
+
+int set_pitch(mpg123_handle *fr, audio_output_t *ao, double new_pitch)
+{
+	int ret = 1;
+	double old_pitch = param.pitch;
+	long rate;
+	int channels, format;
+	int smode = 0;
+
+	/* Be safe, check support. */
+	if(mpg123_getformat(fr, &rate, &channels, &format) != MPG123_OK)
+	{
+		/* We might just not have a track handy. */
+		error("There is no current audio format, cannot apply pitch. This might get fixed in future.");
+		return 0;
+	}
+
+	if(param.usebuffer)
+	{
+		error("No runtime pitch change with output buffer, sorry.");
+		return 0;
+	}
+
+	param.pitch = new_pitch;
+	if(param.pitch < -0.99) param.pitch = -0.99;
+
+	if(channels == 1) smode = MPG123_MONO;
+	if(channels == 2) smode = MPG123_STEREO;
+
+	output_pause(ao);
+	/* Remember: This takes param.pitch into account. */
+	audio_capabilities(ao, fr);
+	if(!(mpg123_format_support(fr, rate, format) & smode))
+	{
+		/* Note: When using --pitch command line parameter, you can go higher
+		   because a lower decoder sample rate is automagically chosen.
+		   Here, we'd need to switch decoder rate during track... good? */
+		error("Reached a hardware limit there with pitch!");
+		param.pitch = old_pitch;
+		audio_capabilities(ao, fr);
+		ret = 0;
+	}
+	ao->format   = format;
+	ao->channels = channels;
+	ao->rate     = pitch_rate(rate);
+	reset_output(ao);
+	output_unpause(ao);
+	return ret;
+}
+

@@ -31,6 +31,41 @@ EXTRA_DIST = \
 	ports/MSVC++/2008/mpglib/mpglib.vcproj \
 	ports/MSVC++/2008/libmpg123/libmpg123.vcproj \
 	ports/MSVC++/2008/scan/scan.vcproj \
+	ports/MSVC++/2008/dump_seekindex/dump_seekindex.vcproj \
+	ports/MSVC++/2008clr/2008clr.sln \
+	ports/MSVC++/2008clr/mpg123clr/advanced.cpp \
+	ports/MSVC++/2008clr/mpg123clr/advanced.h \
+	ports/MSVC++/2008clr/mpg123clr/AssemblyInfo.cpp \
+	ports/MSVC++/2008clr/mpg123clr/dllmain.cpp \
+	ports/MSVC++/2008clr/mpg123clr/enum.h \
+	ports/MSVC++/2008clr/mpg123clr/error.cpp \
+	ports/MSVC++/2008clr/mpg123clr/error.h \
+	ports/MSVC++/2008clr/mpg123clr/id3v1.cpp \
+	ports/MSVC++/2008clr/mpg123clr/id3v1.h \
+	ports/MSVC++/2008clr/mpg123clr/id3v2.cpp \
+	ports/MSVC++/2008clr/mpg123clr/id3v2.h \
+	ports/MSVC++/2008clr/mpg123clr/mpg123clr.cpp \
+	ports/MSVC++/2008clr/mpg123clr/mpg123clr.h \
+	ports/MSVC++/2008clr/mpg123clr/mpg123clr.rc \
+	ports/MSVC++/2008clr/mpg123clr/mpg123clr.vcproj \
+	ports/MSVC++/2008clr/mpg123clr/ReadMe.txt \
+	ports/MSVC++/2008clr/mpg123clr/resource.h \
+	ports/MSVC++/2008clr/mpg123clr/stdafx.cpp \
+	ports/MSVC++/2008clr/mpg123clr/stdafx.h \
+	ports/MSVC++/2008clr/mpg123clr/string.cpp \
+	ports/MSVC++/2008clr/mpg123clr/string.h \
+	ports/MSVC++/2008clr/mpg123clr/targetver.h \
+	ports/MSVC++/2008clr/mpg123clr/text.cpp \
+	ports/MSVC++/2008clr/mpg123clr/text.h \
+	ports/MSVC++/2008clr/examples/feedseekclr/feedseekclr.csproj \
+	ports/MSVC++/2008clr/examples/feedseekclr/Program.cs \
+	ports/MSVC++/2008clr/examples/feedseekclr/Properties/AssemblyInfo.cs \
+	ports/MSVC++/2008clr/examples/ReplaceReaderclr/ReplaceReaderclr.csproj \
+	ports/MSVC++/2008clr/examples/ReplaceReaderclr/Program.cs \
+	ports/MSVC++/2008clr/examples/ReplaceReaderclr/Properties/AssemblyInfo.cs \
+	ports/MSVC++/2008clr/examples/scanclr/scanclr.csproj \
+	ports/MSVC++/2008clr/examples/scanclr/Program.cs \
+	ports/MSVC++/2008clr/examples/scanclr/Properties/AssemblyInfo.cs \
 	ports/MSVC++/CMP3Stream/libMPG123/libMPG123.vcproj \
 	ports/MSVC++/CMP3Stream/libMPG123/PLACE_LIBMPG123_SOURCES_HERE \
 	ports/MSVC++/CMP3Stream/README \
@@ -49,4 +84,3 @@ EXTRA_DIST = \
 	ports/Sony_PSP/readers.c.patch \
 	ports/mpg123_.pas \
 	scripts/benchmark-cpu.pl
-

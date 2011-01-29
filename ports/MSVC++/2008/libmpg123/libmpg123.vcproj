@@ -118,7 +118,7 @@
 				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="true"
 				EnableEnhancedInstructionSet="1"
-				FloatingPointModel="2"
+				FloatingPointModel="0"
 				RuntimeTypeInfo="false"
 				WarningLevel="3"
 				DebugInformationFormat="3"
@@ -207,9 +207,9 @@
 				AdditionalLibraryDirectories="&quot;$(ProjectDir)\Debug&quot;"
 				GenerateDebugInformation="true"
 				AssemblyDebug="1"
-				BaseAddress="0x63000000"
-				RandomizedBaseAddress="1"
-				FixedBaseAddress="2"
+				BaseAddress=""
+				RandomizedBaseAddress="2"
+				FixedBaseAddress="1"
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -270,7 +270,7 @@
 				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="true"
 				EnableEnhancedInstructionSet="1"
-				FloatingPointModel="2"
+				FloatingPointModel="0"
 				RuntimeTypeInfo="false"
 				WarningLevel="3"
 				WarnAsError="false"
@@ -291,9 +291,9 @@
 				Name="VCLinkerTool"
 				OutputFile="$(SolutionDir)Release\$(ProjectName).dll"
 				GenerateDebugInformation="true"
-				BaseAddress="0x63000000"
-				RandomizedBaseAddress="1"
-				FixedBaseAddress="2"
+				BaseAddress=""
+				RandomizedBaseAddress="2"
+				FixedBaseAddress="1"
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -423,7 +423,7 @@
 				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="true"
 				EnableEnhancedInstructionSet="1"
-				FloatingPointModel="2"
+				FloatingPointModel="0"
 				RuntimeTypeInfo="false"
 				WarningLevel="3"
 				DebugInformationFormat="3"
@@ -493,7 +493,8 @@
 				ExceptionHandling="0"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
-				FloatingPointModel="2"
+				EnableEnhancedInstructionSet="0"
+				FloatingPointModel="0"
 				RuntimeTypeInfo="false"
 				WarningLevel="3"
 				WarnAsError="false"
@@ -582,7 +583,7 @@
 				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="false"
 				EnableEnhancedInstructionSet="1"
-				FloatingPointModel="2"
+				FloatingPointModel="0"
 				RuntimeTypeInfo="false"
 				WarningLevel="3"
 				WarnAsError="false"
@@ -665,7 +666,7 @@
 				ExceptionHandling="0"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
-				FloatingPointModel="2"
+				FloatingPointModel="0"
 				RuntimeTypeInfo="false"
 				WarningLevel="3"
 				WarnAsError="false"
@@ -754,7 +755,7 @@
 				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="false"
 				EnableEnhancedInstructionSet="1"
-				FloatingPointModel="2"
+				FloatingPointModel="0"
 				RuntimeTypeInfo="false"
 				WarningLevel="3"
 				WarnAsError="false"
@@ -996,6 +997,10 @@
 		</File>
 		<File
 			RelativePath="..\..\..\..\src\libmpg123\equalizer_3dnow.S"
+			>
+		</File>
+		<File
+			RelativePath="..\..\..\..\src\libmpg123\feature.c"
 			>
 		</File>
 		<File

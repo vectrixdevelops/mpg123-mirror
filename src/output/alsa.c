@@ -35,6 +35,13 @@ static const struct {
 	{ SND_PCM_FORMAT_MU_LAW, MPG123_ENC_ULAW_8      },
 	{ SND_PCM_FORMAT_S32,    MPG123_ENC_SIGNED_32   },
 	{ SND_PCM_FORMAT_U32,    MPG123_ENC_UNSIGNED_32 },
+#ifdef WORDS_BIGENDIAN
+	{ SND_PCM_FORMAT_S24_3BE, MPG123_ENC_SIGNED_24   },
+	{ SND_PCM_FORMAT_U24_3BE, MPG123_ENC_UNSIGNED_24 },
+#else
+	{ SND_PCM_FORMAT_S24_3LE, MPG123_ENC_SIGNED_24   },
+	{ SND_PCM_FORMAT_U24_3LE, MPG123_ENC_UNSIGNED_24 },
+#endif
 	{ SND_PCM_FORMAT_FLOAT,  MPG123_ENC_FLOAT_32    },
 	{ SND_PCM_FORMAT_FLOAT64, MPG123_ENC_FLOAT_64   }
 };
@@ -151,7 +158,8 @@ static int open_alsa(audio_output_t *ao)
 	snd_pcm_t *pcm=NULL;
 	debug1("open_alsa with %p", ao->userptr);
 
-	snd_lib_error_set_handler(AOQUIET ? error_ignorer : NULL);
+	if(AOQUIET) snd_lib_error_set_handler(error_ignorer);
+
 	pcm_name = ao->device ? ao->device : "default";
 	if (snd_pcm_open(&pcm, pcm_name, SND_PCM_STREAM_PLAYBACK, 0) < 0) {
 		if(!AOQUIET) error1("cannot open device %s", pcm_name);

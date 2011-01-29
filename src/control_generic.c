@@ -9,11 +9,9 @@
 
 #include "mpg123app.h"
 #include <stdarg.h>
-#ifndef WIN32
+#if !defined (WIN32) || defined (__CYGWIN__)
 #include <sys/wait.h>
 #include <sys/socket.h>
-#else
-#include <winsock.h>
 #endif
 #include <fcntl.h>
 #include <errno.h>
@@ -27,11 +25,16 @@
 #define MODE_PAUSED 2
 
 extern int buffer_pid;
+extern audio_output_t *ao;
+
 #ifdef FIFO
 #include <sys/stat.h>
 int control_file = STDIN_FILENO;
 #else
 #define control_file STDIN_FILENO
+#ifdef WANT_WIN32_FIFO
+#error Control interface does not work on win32 stdin
+#endif /* WANT_WIN32_FIFO */
 #endif
 FILE *outstream;
 static int mode = MODE_STOPPED;
@@ -256,13 +259,15 @@ int control_generic (mpg123_handle *fr)
 #ifndef WIN32
  	setlinebuf(outstream);
 #else /* perhaps just use setvbuf as it's C89 */
+	/*
 	fprintf(outstream, "You are on Win32 and want to use the control interface... tough luck: We need a replacement for select on STDIN first.\n");
 	return 0;
 	setvbuf(outstream, (char*)NULL, _IOLBF, 0);
+	*/
 #endif
 	/* the command behaviour is different, so is the ID */
 	/* now also with version for command availability */
-	fprintf(outstream, "@R MPG123 (ThOr) v5\n");
+	fprintf(outstream, "@R MPG123 (ThOr) v6\n");
 #ifdef FIFO
 	if(param.fifo)
 	{
@@ -271,6 +276,7 @@ int control_generic (mpg123_handle *fr)
 			error("You wanted an empty FIFO name??");
 			return 1;
 		}
+#ifndef WANT_WIN32_FIFO
 		unlink(param.fifo);
 		if(mkfifo(param.fifo, 0666) == -1)
 		{
@@ -278,7 +284,12 @@ int control_generic (mpg123_handle *fr)
 			return 1;
 		}
 		debug("going to open named pipe ... blocking until someone gives command");
+#endif /* WANT_WIN32_FIFO */
+#ifdef WANT_WIN32_FIFO
+		control_file = win32_fifo_mkfifo(param.fifo);
+#else
 		control_file = open(param.fifo,O_RDONLY);
+#endif /* WANT_WIN32_FIFO */
 		debug("opened");
 	}
 #endif
@@ -291,7 +302,11 @@ int control_generic (mpg123_handle *fr)
 		FD_SET(control_file, &fds);
 		/* play frame if no command needs to be processed */
 		if (mode == MODE_PLAYING) {
+#ifdef WANT_WIN32_FIFO
+			n = win32_fifo_read_peek(&tv);
+#else
 			n = select(32, &fds, NULL, NULL, &tv);
+#endif
 			if (n == 0) {
 				if (!play_frame())
 				{
@@ -331,7 +346,11 @@ int control_generic (mpg123_handle *fr)
 		else {
 			/* wait for command */
 			while (1) {
+#ifdef WANT_WIN32_FIFO
+				n = win32_fifo_read_peek(NULL);
+#else
 				n = select(32, &fds, NULL, NULL, NULL);
+#endif
 				if (n > 0)
 					break;
 			}
@@ -355,14 +374,23 @@ int control_generic (mpg123_handle *fr)
 
 			/* read as much as possible, maybe multiple commands */
 			/* When there is nothing to read (EOF) or even an error, it is the end */
-			if((len = read(control_file, buf, REMOTE_BUFFER_SIZE)) < 1)
+#ifdef WANT_WIN32_FIFO
+			len = win32_fifo_read(buf,REMOTE_BUFFER_SIZE);
+#else
+			len = read(control_file, buf, REMOTE_BUFFER_SIZE);
+#endif
+			if(len < 1)
 			{
 #ifdef FIFO
 				if(len == 0 && param.fifo)
 				{
 					debug("fifo ended... reopening");
+#ifdef WANT_WIN32_FIFO
+					win32_fifo_mkfifo(param.fifo);
+#else
 					close(control_file);
 					control_file = open(param.fifo,O_RDONLY|O_NONBLOCK);
+#endif
 					if(control_file < 0){ error1("open of fifo failed... %s", strerror(errno)); break; }
 					continue;
 				}
@@ -455,7 +483,8 @@ int control_generic (mpg123_handle *fr)
 					off_t pos = mpg123_tell(fr);
 					off_t len = mpg123_length(fr);
 					/* I need to have portable printf specifiers that do not truncate the type... more autoconf... */
-					generic_sendmsg("SAMPLE %li %li", (long)pos, (long)len);
+					if(len < 0) generic_sendmsg("E %s", mpg123_strerror(fr));
+					else generic_sendmsg("SAMPLE %li %li", (long)pos, (long)len);
 					continue;
 				}
 
@@ -501,12 +530,13 @@ int control_generic (mpg123_handle *fr)
 					generic_sendmsg("H VOLUME/V <percent>: set volume in % (0..100...); float value");
 					generic_sendmsg("H RVA off|(mix|radio)|(album|audiophile): set rva mode");
 					generic_sendmsg("H EQ/E <channel> <band> <value>: set equalizer value for frequency band 0 to 31 on channel %i (left) or %i (right) or %i (both)", MPG123_LEFT, MPG123_RIGHT, MPG123_LR);
-					 generic_sendmsg("H EQFILE <filename>: load EQ settings from a file");
+					generic_sendmsg("H EQFILE <filename>: load EQ settings from a file");
 					generic_sendmsg("H SHOWEQ: show all equalizer settings (as <channel> <band> <value> lines in a SHOWEQ block (like TAG))");
 					generic_sendmsg("H SEEK/K <sample>|<+offset>|<-offset>: jump to output sample position <samples> or change position by offset");
 					generic_sendmsg("H SCAN: scan through the file, building seek index");
 					generic_sendmsg("H SAMPLE: print out the sample position and total number of samples");
 					generic_sendmsg("H SEQ <bass> <mid> <treble>: simple eq setting...");
+					generic_sendmsg("H PITCH <[+|-]value>: adjust playback speed (+0.01 is 1 %% faster)");
 					generic_sendmsg("H SILENCE: be silent during playback (meaning silence in text form)");
 					generic_sendmsg("H STATE: Print auxilliary state info in several lines (just try it to see what info is there).");
 					generic_sendmsg("H TAG/T: Print all available (ID3) tag info, for ID3v2 that gives output of all collected text fields, using the ID3v2.3/4 4-character names.");
@@ -650,6 +680,19 @@ int control_generic (mpg123_handle *fr)
 						continue;
 					}
 
+					/* PITCH (playback speed) in percent */
+					if(!strcasecmp(cmd, "PITCH"))
+					{
+						double p;
+						if(sscanf(arg, "%lf", &p) == 1)
+						{
+							set_pitch(fr, ao, p);
+							generic_sendmsg("PITCH %f", param.pitch);
+						}
+						else generic_sendmsg("E invalid arguments for PITCH: %s", arg);
+						continue;
+					}
+
 					/* RVA mode */
 					if(!strcasecmp(cmd, "RVA"))
 					{
@@ -704,8 +747,12 @@ int control_generic (mpg123_handle *fr)
 #endif
 	debug("closing control");
 #ifdef FIFO
+#if WANT_WIN32_FIFO
+	win32_fifo_close();
+#else
 	close(control_file); /* be it FIFO or STDIN */
 	if(param.fifo) unlink(param.fifo);
+#endif /* WANT_WIN32_FIFO */
 #endif
 	debug("control_generic returning");
 	return 0;

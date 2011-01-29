@@ -32,7 +32,6 @@
 #ifdef NETWORK
 #include "resolver.h"
 
-#define HTTP_MAX_RELOCATIONS 20
 #include <errno.h>
 #include "true.h"
 #endif
@@ -85,10 +84,23 @@ static const char** mimes[] = { mime_file, mime_m3u, mime_pls, NULL };
 int debunk_mime(const char* mime)
 {
 	int i,j;
+	size_t len;
 	int r = 0;
+	char *aux;
+	/* Watch out for such: "audio/x-mpegurl; charset=utf-8" */
+	aux = strchr(mime, ';');
+	if(aux != NULL)
+	{
+		fprintf(stderr, "Warning: additional info in content-type ignored (%s)\n", aux+1);
+		/* Just compare up to before the ";". */
+		len = aux-mime;
+	}
+	/* Else, compare the whole string -- including the end. */
+	else len = strlen(mime)+1;
+
 	for(i=0; mimes[i]    != NULL; ++i)
 	for(j=0; mimes[i][j] != NULL; ++j)
-	if(!strcmp(mimes[i][j], mime)) goto debunk_result;
+	if(!strncasecmp(mimes[i][j], mime, len)) goto debunk_result;
 
 debunk_result:
 	if(mimes[i] != NULL)
@@ -106,8 +118,8 @@ debunk_result:
 
 
 #ifdef NETWORK
-
-int writestring (int fd, mpg123_string *string)
+#if !defined (WANT_WIN32_SOCKETS)
+static int writestring (int fd, mpg123_string *string)
 {
 	size_t result, bytes;
 	char *ptr = string->p;
@@ -115,7 +127,8 @@ int writestring (int fd, mpg123_string *string)
 
 	while(bytes)
 	{
-		if((result = write(fd, ptr, bytes)) < 0 && errno != EINTR)
+		result = write(fd, ptr, bytes);
+		if(result < 0 && errno != EINTR)
 		{
 			perror ("writing http string");
 			return FALSE;
@@ -131,8 +144,10 @@ int writestring (int fd, mpg123_string *string)
 	return TRUE;
 }
 
-size_t readstring (mpg123_string *string, size_t maxlen, FILE *f)
+static size_t readstring (mpg123_string *string, size_t maxlen, FILE *f)
 {
+	int err;
+	debug2("Attempting readstring on %d for %"SIZE_P" bytes", f ? fileno(f) : 0, (size_p)maxlen);
 	string->fill = 0;
 	while(maxlen == 0 || string->fill < maxlen)
 	{
@@ -143,8 +158,9 @@ size_t readstring (mpg123_string *string, size_t maxlen, FILE *f)
 			string->fill = 0;
 			return 0;
 		}
+		err = read(fileno(f),string->p+string->fill,1);
 		/* Whoa... reading one byte at a time... one could ensure the line break in another way, but more work. */
-		if( read(fileno(f),string->p+string->fill,1) == 1)
+		if( err == 1)
 		{
 			string->fill++;
 			if(string->p[string->fill-1] == '\n') break;
@@ -169,6 +185,7 @@ size_t readstring (mpg123_string *string, size_t maxlen, FILE *f)
 	}
 	return string->fill;
 }
+#endif /* WANT_WIN32_SOCKETS */
 
 void encode64 (char *source,char *destination)
 {
@@ -233,17 +250,11 @@ void get_header_string(mpg123_string *response, const char *fieldname, mpg123_st
 	}
 }
 
-/* needed for HTTP/1.1 non-pipelining mode */
-/* #define CONN_HEAD "Connection: close\r\n" */
-#define CONN_HEAD ""
-
 /* shoutcsast meta data: 1=on, 0=off */
-static const char *icy_yes = "Icy-MetaData: 1\r\n";
-static const char *icy_no  = "Icy-MetaData: 0\r\n";
 
 char *httpauth = NULL;
 
-static size_t accept_length(void)
+size_t accept_length(void)
 {
 	int i,j;
 	static size_t l = 0;
@@ -257,7 +268,7 @@ static size_t accept_length(void)
 }
 
 /* Returns TRUE or FALSE for success. */
-static int proxy_init(struct httpdata *hd)
+int proxy_init(struct httpdata *hd)
 {
 	int ret = TRUE;
 	/* If we don't have explicit proxy given, probe the environment. */
@@ -318,7 +329,7 @@ static int append_accept(mpg123_string *s)
 	What about converting them to "+" instead? Would make things a lot easier.
 	Or, on the other hand... what about avoiding HTML encoding at all?
 */
-static int translate_url(const char *url, mpg123_string *purl)
+int translate_url(const char *url, mpg123_string *purl)
 {
 	const char *sptr;
 	/* The length of purl is upper bound by 3*strlen(url) + 1 if
@@ -359,7 +370,7 @@ static int translate_url(const char *url, mpg123_string *purl)
 	return TRUE;
 }
 
-static int fill_request(mpg123_string *request, mpg123_string *host, mpg123_string *port, mpg123_string *httpauth1, int *try_without_port)
+int fill_request(mpg123_string *request, mpg123_string *host, mpg123_string *port, mpg123_string *httpauth1, int *try_without_port)
 {
 	char* ttemp;
 	int ret = TRUE;
@@ -434,7 +445,7 @@ static int fill_request(mpg123_string *request, mpg123_string *host, mpg123_stri
 
 	return ret;
 }
-
+#if !defined (WANT_WIN32_SOCKETS)
 static int resolve_redirect(mpg123_string *response, mpg123_string *request_url, mpg123_string *purl)
 {
 	debug1("request_url:%s", request_url->p);
@@ -442,7 +453,7 @@ static int resolve_redirect(mpg123_string *response, mpg123_string *request_url,
 	if(!mpg123_copy_string(request_url, purl)) return FALSE;
 
 	/* We may strip it down to a prefix ot totally. */
-	if(strncmp(response->p, "Location: http://", 17))
+	if(strncasecmp(response->p, "Location: http://", 17))
 	{ /* OK, only partial strip, need prefix for relative path. */
 		char* ptmp = NULL;
 		/* though it's not RFC (?), accept relative URIs as wget does */
@@ -483,7 +494,8 @@ int http_open(char* url, struct httpdata *hd)
 	int sock = -1;
 	int oom  = 0;
 	int relocate, numrelocs = 0;
-	FILE *myfile;
+	int got_location = FALSE;
+	FILE *myfile = NULL;
 	/*
 		workaround for http://www.global24music.com/rautemusik/files/extreme/isdn.pls
 		this site's apache gives me a relocation to the same place when I give the port in Host request field
@@ -560,13 +572,13 @@ int http_open(char* url, struct httpdata *hd)
 		if(!fill_request(&request, &host, &port, &httpauth1, &try_without_port)){ oom=1; goto exit; }
 
 		httpauth1.fill = 0; /* We use the auth data from the URL only once. */
-
-		if((sock = open_connection(&host, &port)) < 0)
+		debug2("attempting to open_connection to %s:%s", host.p, port.p);
+		sock = open_connection(&host, &port);
+		if(sock < 0)
 		{
 			error1("Unable to establish connection to %s", host.fill ? host.p : "");
 			goto exit;
 		}
-
 #define http_failure close(sock); sock=-1; goto exit;
 		
 		if(param.verbose > 2) fprintf(stderr, "HTTP request:\n%s\n",request.p);
@@ -589,9 +601,9 @@ int http_open(char* url, struct httpdata *hd)
 		{ \
 			error("readstring failed"); \
 			http_failure; \
-		}
+		} \
+		if(param.verbose > 2) fprintf(stderr, "HTTP in: %s", response.p);
 		safe_readstring;
-		if(param.verbose > 2)	fprintf(stderr, "HTTP response: %s",response.p);
 
 		{
 			char *sptr;
@@ -612,10 +624,13 @@ int http_open(char* url, struct httpdata *hd)
 			}
 		}
 
+		/* If we are relocated, we need to look out for a Location header. */
+		got_location = FALSE;
+
 		do
 		{
 			safe_readstring; /* Think about that: Should we really error out when we get nothing? Could be that the server forgot the trailing empty line... */
-			if (!strncmp(response.p, "Location: ", 10))
+			if (!strncasecmp(response.p, "Location: ", 10))
 			{ /* It is a redirection! */
 				if(!resolve_redirect(&response, &request_url, &purl)){ oom=1, http_failure; }
 
@@ -624,6 +639,7 @@ int http_open(char* url, struct httpdata *hd)
 					warning("relocated to very same place! trying request again without host port");
 					try_without_port = 1;
 				}
+				got_location = TRUE;
 			}
 			else
 			{ /* We got a header line (or the closing empty line). */
@@ -643,10 +659,14 @@ int http_open(char* url, struct httpdata *hd)
 				}
 			}
 		} while(response.p[0] != '\r' && response.p[0] != '\n');
-	} while(relocate && purl.fill && numrelocs++ < HTTP_MAX_RELOCATIONS);
+	} while(relocate && got_location && purl.fill && numrelocs++ < HTTP_MAX_RELOCATIONS);
 	if(relocate)
 	{
-		fprintf (stderr, "Too many HTTP relocations.\n");
+		if(!got_location)
+		error("Server meant to redirect but failed to provide a location!");
+		else
+		error1("Too many HTTP relocations (%i).", numrelocs);
+
 		http_failure;
 	}
 
@@ -663,6 +683,7 @@ exit: /* The end as well as the exception handling point... */
 	mpg123_free_string(&httpauth1);
 	return sock;
 }
+#endif /*WANT_WIN32_SOCKETS*/
 
 #else /* NETWORK */
 

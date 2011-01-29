@@ -1,5 +1,35 @@
 Changes in libmpg123 libtool interface versions...
 
+29.0.29
+	- New decoder: ARM neon.
+	- Added support for 24 bit output (dumb byte-chopping of 32 bit output).
+
+28.0.28
+	- Add mpg123_strlen().
+
+27.0.27
+	- Implictly disable seeking on streams when client enforced ICY parsing.
+	  This helps debugging dumps of http streams.
+
+26.0.26
+	- Added mpg123_encsize().
+	- Added flag MPG123_SKIP_ID3V2.
+
+25.0.25
+	- Version increase to mark the point where the split between normal and large-file-enabled library vanishes again. The world did not like it.
+	  Now Thomas lost some days of recreation and sleep to give it a dual-mode libmpg123 on large-file-sensitive systems.
+
+24.0.24
+	- Introduce mpg123_replace_reader_handle() and mpg123_open_handle()
+	  ... this is also in preparation for the next version which will drop the separated large-file library again, due to public display of dismay.
+	- Add the experimental mpg123_framebyframe_decode to the off_t-sensitive functions.
+
+23.0.23
+	- Version increase to mark the point where the explicit split between normal and large-file-enabled library has been introduced.
+
+22.0.22
+	- Experimental framebyframe API added.
+
 21.0.21
 	- Added support of unicode file names under windows via UTF-8 argument to mpg123_open.
 	- Added mpg123_feature(), for example to test for the above behaviour.

@@ -35,7 +35,7 @@ mask:
 	.long	0
 	
 	.text
-	ALIGN16,,15
+	ALIGN16
 .globl ASM_NAME(dct64_sse)
 ASM_NAME(dct64_sse):
 	pushl		%ebp
@@ -451,7 +451,4 @@ ASM_NAME(dct64_sse):
 	popl		%ebp
 	ret
 
-/* Mark non-executable stack. */
-#if defined(__linux__) && defined(__ELF__)
-.section .note.GNU-stack,"",%progbits
-#endif
+NONEXEC_STACK

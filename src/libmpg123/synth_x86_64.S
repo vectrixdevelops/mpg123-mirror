@@ -54,7 +54,7 @@ ASM_NAME(maxmin_x86_64):
 	.long   -32769
 	.long   -32769
 	.text
-	ALIGN16,,15
+	ALIGN16
 .globl ASM_NAME(synth_1to1_x86_64_asm)
 ASM_NAME(synth_1to1_x86_64_asm):
 #ifdef _WIN64 /* should save xmm6-15 */
@@ -241,7 +241,4 @@ Loop_start_2:
 #endif
 	ret
 
-/* Mark non-executable stack. */
-#if defined(__linux__) && defined(__ELF__)
-.section .note.GNU-stack,"",%progbits
-#endif
+NONEXEC_STACK

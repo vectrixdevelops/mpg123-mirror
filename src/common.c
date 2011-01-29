@@ -11,10 +11,6 @@
 #include <fcntl.h>
 #include "common.h"
 
-#ifdef WIN32
-#include <winsock.h>
-#endif
-
 #include "debug.h"
 
 const char* rva_name[3] = { "off", "mix", "album" };
@@ -22,7 +18,7 @@ static const char *modes[5] = {"Stereo", "Joint-Stereo", "Dual-Channel", "Single
 static const char *smodes[5] = { "stereo", "joint-stereo", "dual-channel", "mono", "invalid" };
 static const char *layers[4] = { "Unknown" , "I", "II", "III" };
 static const char *versions[4] = {"1.0", "2.0", "2.5", "x.x" };
-static const int samples_pre_frame[4][4] =
+static const int samples_per_frame[4][4] =
 {
 	{ -1,384,1152,1152 },	/* MPEG 1 */
 	{ -1,384,1152,576 },	/* MPEG 2 */
@@ -31,7 +27,7 @@ static const int samples_pre_frame[4][4] =
 };
 
 
-#if !defined(WIN32) && defined(HAVE_SIGNAL_H)
+#if (!defined(WIN32) || defined (__CYGWIN__)) && defined(HAVE_SIGNAL_H)
 void (*catchsignal(int signum, void(*handler)()))()
 {
   struct sigaction new_sa;
@@ -95,7 +91,7 @@ void print_header(mpg123_handle *mh)
 	{
 		case MPG123_CBR:
 			if(i.bitrate) fprintf(stderr, "%d kbit/s", i.bitrate);
-			else fprintf(stderr, "%d kbit/s (free format)", (int)((double)i.framesize*8*i.rate*0.001/samples_pre_frame[i.version][i.layer]+0.5));
+			else fprintf(stderr, "%d kbit/s (free format)", (int)((double)(i.framesize+4)*8*i.rate*0.001/samples_per_frame[i.version][i.layer]+0.5));
 			break;
 		case MPG123_VBR: fprintf(stderr, "VBR"); break;
 		case MPG123_ABR: fprintf(stderr, "%d kbit/s ABR", i.abr_rate); break;
@@ -117,7 +113,7 @@ void print_header_compact(mpg123_handle *mh)
 	{
 		case MPG123_CBR:
 			if(i.bitrate) fprintf(stderr, "%d kbit/s", i.bitrate);
-			else fprintf(stderr, "%d kbit/s (free format)", (int)((double)i.framesize*8*i.rate*0.001/samples_pre_frame[i.version][i.layer]+0.5));
+			else fprintf(stderr, "%d kbit/s (free format)", (int)((double)i.framesize*8*i.rate*0.001/samples_per_frame[i.version][i.layer]+0.5));
 			break;
 		case MPG123_VBR: fprintf(stderr, "VBR"); break;
 		case MPG123_ABR: fprintf(stderr, "%d kbit/s ABR", i.abr_rate); break;

@@ -15,6 +15,7 @@
 #define MPG123_COMPAT_H
 
 #include "config.h"
+#include "intsym.h"
 
 #ifdef HAVE_STDLIB_H
 /* realloc, size_t */
@@ -128,7 +129,15 @@ typedef long ssize_p;
  * @param[in] mbptr Pointer to multibyte string.
  * @return file descriptor (>=0) or error code.
  */
-int compat_open(const char *filename, int mode);
+int compat_open(const char *filename, int flags);
+
+/**
+ * Closing a file handle can be platform specific.
+ * This function takes a file descriptor that is to be closed.
+ * @param[in] infd File descriptor to be closed.
+ * @return 0 if the file was successfully closed. A return value of -1 indicates an error.
+ */
+int compat_close(int infd);
 
 /* Those do make sense in a separate file, but I chose to include them in compat.c because that's the one source whose object is shared between mpg123 and libmpg123 -- and both need the functionality internally. */
 
@@ -144,7 +153,7 @@ int compat_open(const char *filename, int mode);
  *
  * WideCharToMultiByte - http://msdn.microsoft.com/en-us/library/dd374130(VS.85).aspx
  */
-int win32_wide_utf8 (const wchar_t * const wptr, const char **const mbptr, size_t * const buflen);
+int win32_wide_utf8(const wchar_t * const wptr, char **mbptr, size_t * buflen);
 
 /**
  * win32_mbc2uni
@@ -158,7 +167,12 @@ int win32_wide_utf8 (const wchar_t * const wptr, const char **const mbptr, size_
  * MultiByteToWideChar - http://msdn.microsoft.com/en-us/library/dd319072(VS.85).aspx
  */
 
-int win32_utf8_wide (const char *const mbptr, const wchar_t ** const wptr, size_t * const buflen);
+int win32_utf8_wide(const char *const mbptr, wchar_t **wptr, size_t *buflen);
+#endif
+
+/* That one comes from Tellie on OS/2, needed in resolver. */
+#ifdef __KLIBC__
+typedef int socklen_t;
 #endif
 
 #endif

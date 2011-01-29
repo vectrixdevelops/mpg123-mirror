@@ -44,7 +44,7 @@ ASM_NAME(maxmin_s32):
 	.long   -956301312
 	.long   -956301312
 	.text
-	ALIGN16,,15
+	ALIGN16
 .globl ASM_NAME(synth_1to1_s32_sse_asm)
 ASM_NAME(synth_1to1_s32_sse_asm):
 	pushl		%ebp
@@ -303,7 +303,4 @@ Loop_start_2:
 	
 	ret
 
-/* Mark non-executable stack. */
-#if defined(__linux__) && defined(__ELF__)
-.section .note.GNU-stack,"",%progbits
-#endif
+NONEXEC_STACK

@@ -20,7 +20,7 @@
 #define TEMP(n) (12+16*n)(%esp)
 
 /*
-	int synth_1to1_real_stereo_sse_asm(real *window, real *b0l, real *b0r, real *samples, int bo1);
+	int synth_1to1_real_s_sse_asm(real *window, real *b0l, real *b0r, real *samples, int bo1);
 	return value: number of clipped samples (0)
 */
 
@@ -36,9 +36,9 @@ ASM_NAME(scale_sse):
 	.long   939524096
 	.long   939524096
 	.text
-	ALIGN16,,15
-.globl ASM_NAME(synth_1to1_real_stereo_sse_asm)
-ASM_NAME(synth_1to1_real_stereo_sse_asm):
+	ALIGN16
+.globl ASM_NAME(synth_1to1_real_s_sse_asm)
+ASM_NAME(synth_1to1_real_s_sse_asm):
 	pushl		%ebp
 	movl		%esp, %ebp
 	andl		$-16, %esp
@@ -413,7 +413,4 @@ Loop_start_2:
 	
 	ret
 
-/* Mark non-executable stack. */
-#if defined(__linux__) && defined(__ELF__)
-.section .note.GNU-stack,"",%progbits
-#endif
+NONEXEC_STACK

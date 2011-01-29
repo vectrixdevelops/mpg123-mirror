@@ -1,7 +1,7 @@
 /*
 	module.c: modular code loader
 
-	copyright 1995-2009 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 1995-2011 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Nicholas J Humfrey
 */
@@ -20,7 +20,6 @@
 #error Cannot build without LTDL library support
 #endif
 
-#define MODULE_FILE_SUFFIX		".la"
 #define MODULE_SYMBOL_PREFIX 	"mpg123_"
 #define MODULE_SYMBOL_SUFFIX 	"_module_info"
 
@@ -49,6 +48,8 @@ static char *get_module_dir()
 	if(dir != NULL)
 	{
 		size_t l = strlen(defaultdir);
+
+		if(param.verbose > 1) fprintf(stderr, "Using default module dir: %s\n", defaultdir);
 		moddir = malloc(l+1);
 		if(moddir != NULL)
 		{
@@ -76,7 +77,7 @@ static char *get_module_dir()
 				snprintf(moddir, l+1, "%s/%s", binpath, testpath);
 
 				moddir[l] = 0;
-				debug1("Looking for module dir: %s", moddir);
+				if(param.verbose > 1) fprintf(stderr, "Looking for module dir: %s\n", moddir);
 
 				dir = opendir(moddir);
 				closedir(dir);
@@ -86,7 +87,7 @@ static char *get_module_dir()
 			}
 		}
 	}
-	debug1("module dir: %s", moddir != NULL ? moddir : "<nil>");
+	if(param.verbose > 1) fprintf(stderr, "Module dir: %s\n", moddir != NULL ? moddir : "<nil>");
 	return moddir;
 }
 
@@ -121,21 +122,25 @@ open_module( const char* type, const char* name )
 		goto om_bad;
 	}
 	/* Work out the path of the module to open */
-	module_path_len = strlen(type) + 1 + strlen(name) + strlen(MODULE_FILE_SUFFIX) + 1;
+	/* Note that we need to open ./file, not just file! */
+	module_path_len = 2 + strlen(type) + 1 + strlen(name) + strlen(MODULE_FILE_SUFFIX) + 1;
 	module_path = malloc( module_path_len );
 	if (module_path == NULL) {
 		error1( "Failed to allocate memory for module name: %s", strerror(errno) );
 		goto om_bad;
 	}
-	snprintf( module_path, module_path_len, "%s_%s%s", type, name, MODULE_FILE_SUFFIX );
+	snprintf( module_path, module_path_len, "./%s_%s%s", type, name, MODULE_FILE_SUFFIX );
 	/* Display the path of the module created */
-	debug1( "Module path: %s", module_path );
+	if(param.verbose > 1) fprintf(stderr, "Module path: %s\n", module_path );
 
 	/* Open the module */
 	handle = lt_dlopen( module_path );
 	free( module_path );
 	if (handle==NULL) {
 		error2( "Failed to open module %s: %s", name, lt_dlerror() );
+		if(param.verbose > 1)
+		fprintf(stderr, "Note: This could be because of braindead path in the .la file...\n");
+
 		goto om_bad;
 	}
 	
@@ -255,8 +260,12 @@ void list_modules()
 				/* Extract the module type */
 				module_type = strdup( dp->d_name );
 				uscore_pos = strchr( module_type, '_' );
-				if (uscore_pos==NULL) continue;
-				if (uscore_pos>=module_type+strlen(module_type)+1) continue;
+				if (uscore_pos==NULL || (uscore_pos>=module_type+strlen(module_type)+1) )
+				{
+					free(module_type);
+					continue;
+				}
+				
 				*uscore_pos = '\0';
 				
 				/* Extract the short name of the module */
@@ -273,6 +282,7 @@ void list_modules()
 				}
 				
 				free( module_name );
+				free( module_type );
 			}
 		}
 	}

@@ -11,10 +11,18 @@
 
 #ifndef MPG123_H
 #define MPG123_H
+#include "config.h"
 
 /* everyone needs it */
 #include "compat.h"
 /* import DLL symbols on windows */
+
+#include "xfermem.h"
+#include "httpget.h"
+#ifndef BUILDING_OUTPUT_MODULES
+#include "win32_support.h"
+#endif
+
 #if defined(WIN32) && defined(DYNAMIC_BUILD)
 #define LINK_MPG123_DLL
 #endif
@@ -22,9 +30,6 @@
 #define MPG123_REMOTE
 #define REMOTE_BUFFER_SIZE 2048
 #define MAXOUTBURST 32768
-
-#include "xfermem.h"
-#include "httpget.h"
 
 #ifdef __GNUC__
 #define INLINE inline
@@ -62,6 +67,9 @@ struct parameter
   int force_reopen;
   int test_cpu;
   long realtime;
+#ifdef HAVE_WINDOWS_H
+  int w32_priority;
+#endif
   char *filename;
   long listentry; /* possibility to choose playback of one entry in playlist (0: off, > 0 : select, < 0; just show list*/
   char* listname; /* name of playlist */
@@ -71,9 +79,7 @@ struct parameter
 #ifdef FIFO
 	char* fifo;
 #endif
-#ifndef WIN32
 	long timeout; /* timeout for reading in seconds */
-#endif
 	long loop;    /* looping of tracks */
 	int delay;
 	int index;    /* index / scan through files before playback */
@@ -100,6 +106,8 @@ struct parameter
 	double preload; /* buffer preload size (fraction of full buffer) */
 	long preframes;
 	long gain; /* audio output gain, for selected outputs */
+	char* streamdump;
+	long icy_interval;
 };
 
 extern char *equalfile;

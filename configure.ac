@@ -9,10 +9,14 @@ AC_PREREQ(2.57)
 
 
 dnl ############# Initialisation
-
-AC_INIT([mpg123], [1.10.0], [mpg123-devel@lists.sourceforge.net])
-LIBMPG123_VERSION=21:1:21
+AC_INIT([mpg123], [1.13.0], [mpg123-devel@lists.sourceforge.net])
+dnl Increment API_VERSION when the API gets changes (new functions).
+API_VERSION=29
+LIB_PATCHLEVEL=1
+dnl Since we want to be backwards compatible, both sides get set to API_VERSION.
+LIBMPG123_VERSION=$API_VERSION:$LIB_PATCHLEVEL:$API_VERSION
 AC_SUBST(LIBMPG123_VERSION)
+AC_SUBST(API_VERSION)
 
 AC_CONFIG_SRCDIR(src/mpg123.c)
 AC_CONFIG_AUX_DIR(build)
@@ -44,6 +48,7 @@ buffer=enabled # try to build with buffer by default
 dnl ############# Compiler and tools Checks
 
 LT_LDFLAGS=-export-dynamic
+EXEC_LT_LDFLAGS=
 be_static=no
 all_static=no
 AC_MSG_CHECKING([if you are up to something totally static with LDFLAGS/CFLAGS])
@@ -62,6 +67,7 @@ done
 if test "x$be_static" = xyes; then
 	AC_MSG_RESULT([yes])
 	LT_LDFLAGS=-all-static
+	EXEC_LT_LDFLAGS="$LT_LDFLAGS"
 else
 	AC_MSG_RESULT([no])
 fi
@@ -77,7 +83,7 @@ dnl "Checking for egrep is broken after removal of libltdl stuff... checks use $
 AC_PROG_EGREP
 AC_C_CONST
 AC_INLINE
-
+AC_C_BIGENDIAN
 
 dnl ############# Use Libtool for dynamic module loading
 
@@ -170,6 +176,7 @@ AM_CONDITIONAL( [HAVE_MODULES], [test "x$modules" = xenabled] )
 
 AC_SUBST(MODULE_OBJ)
 AC_SUBST(LT_LDFLAGS)
+AC_SUBST(EXEC_LT_LDFLAGS)
 
 dnl ############## Configurable Options
 
@@ -198,23 +205,6 @@ AC_ARG_ENABLE(nagging,
                 fi
               ],
               [ nagging="disabled" ]
-)
-
-AC_ARG_ENABLE(aligncheck,
-              [  --enable-aligncheck=[no/yes] turn on checks for stack alignment in the API if compiler supports alignment attributes, default is enabled],
-              [
-                if test "x$enableval" = xyes
-                then
-                  aligncheck="enabled"
-                  AC_DEFINE(CHECK_ALIGN, 1, [ Define if checking of stack alignment is wanted. ])
-                else
-                  aligncheck="disabled"
-                fi
-              ],
-              [
-                aligncheck="enabled"
-                AC_DEFINE(CHECK_ALIGN, 1, [ Define if checking of stack alignment is wanted. ])
-              ]
 )
 
 if test x"$debugging" = xenabled; then
@@ -426,7 +416,7 @@ AC_ARG_ENABLE(8bit,
 
 int32=enabled
 AC_ARG_ENABLE(32bit,
-              [  --disable-32bit=[no/yes] no 32 bit integer output ],
+              [  --disable-32bit=[no/yes] no 32 bit integer output (also 24 bit) ],
               [
                 if test "x$enableval" = xno; then
                   int32="disabled"
@@ -463,6 +453,7 @@ AC_ARG_WITH([cpu], [
   --with-cpu=x86-64       Use code optimized for x86-64 processors (AMD64 and Intel64, including dithered generic)
   --with-cpu=altivec      Use code optimized for Altivec processors (PowerPC G4 and G5)
   --with-cpu=ppc_nofpu    Use code optimized for PowerPC processors with fixed point arithmetic (experimental)
+  --with-cpu=neon         Use code optimized for ARM NEON SIMD engine (Cortex-A series)
   --with-cpu=arm_nofpu    Use code optimized for ARM processors with fixed point arithmetic (experimental)
 ])
 
@@ -546,8 +537,25 @@ case $host in
   *-*-dragonfly* | *-*-freebsd* | *-*-midnightbsd* | *-*-mirbsd* | *-*-netbsd* | *-*-openbsd*)
     cpu_type="generic_fpu"
   ;;
-  # Todo: Add default for x86 solaris; need to test it there, too.
+  i386-*-solaris*)
+    cpu_type=x86
+  ;;
+  x86_64-*-solaris*)
+    cpu_type=x86-64_all
+  ;;
   *-*-solaris*)
+    cpu_type="generic_fpu"
+  ;;
+  # os2-emx = OS/2 with some Unix fun; so p.ex. buffer works.
+  # Till we sorted out the assembler troubles, generic CPU is default.
+  i386-pc-os2-emx)
+    cpu_type=generic_fpu
+  ;;
+  x86_64-pc-os2-emx)
+    # We are optimistic hat the future knows OS/2 on x86-64;-)
+    cpu_type=generic_fpu
+  ;;
+  *-pc-os2-emx)
     cpu_type="generic_fpu"
   ;;
   *-dec-osf*)
@@ -677,7 +685,7 @@ else
 fi
 
 if test "x$int32" = "xdisabled"; then
-  AC_DEFINE(NO_32BIT, 1, [ Define to disable 32 bit integer output. ])
+  AC_DEFINE(NO_32BIT, 1, [ Define to disable 32 bit and 24 bit integer output. ])
 else
   s_fpu="$s_fpu synth_s32"
 fi
@@ -786,6 +794,16 @@ dnl ############## Modules
 # Dummy audio output module is always supported
 output_modules="dummy"
 
+# Decide on module file suffix. Setting it != .la allows removal of .la files.
+AC_ARG_WITH([module-suffix], [
+  --with-module-suffix=.la            (default) Use libtool's .la files for loading modules.
+  --with-module-suffix=[.so|.dll|...] Specify the native module file suffix to bypass .la files.
+])
+if test x"$with_module_suffix" = x; then
+  with_module_suffix=.la
+fi
+AC_DEFINE_UNQUOTED( MODULE_FILE_SUFFIX, "$with_module_suffix", [The suffix for module files.] )
+
 dnl ############## Assembler, compiler properties
 
 # based on posting from John Dalgliesh <johnd@defyne.org> on ffmpeg (LGPL) mailing list
@@ -832,6 +850,8 @@ AC_CHECK_HEADERS([stdio.h stdlib.h string.h unistd.h sched.h sys/ioctl.h sys/typ
 
 dnl ############## Types
 
+dnl Large file support stuff needs cleanup. There are superfluous variables.
+
 dnl Detect large file support, enable switches if needed.
 AC_SYS_LARGEFILE
 dnl If we do have a switch for large files, rename off_t-aware API calls.
@@ -839,25 +859,17 @@ dnl Using the file_offset_bits variable here is fine for linux (possibly Solaris
 dnl Others... we'll have to see.
 dnl Note: I started writing this with with multiline replacements.
 dnl Does not work. Automake insists on putting these into Makefiles where they break things.
-if test "x$ac_cv_sys_file_offset_bits" = x || echo "$ac_cv_sys_file_offset_bits" | grep -q '@<:@^0-9@:>@'; then
+if test "x$ac_cv_sys_file_offset_bits" = x || echo "$ac_cv_sys_file_offset_bits" | $GREP  '@<:@^0-9@:>@' > /dev/null; then
 	dnl if it has non-numeric chars or is empty... ignore...
-	LARGEFILE_BITS=
-	LARGEFILE_SUFFIX=
-	LARGEFILE_SWITCH=0
+	LFS_LOBJ=
 else
-	LARGEFILE_BITS="$ac_cv_sys_file_offset_bits"
-	LARGEFILE_SUFFIX="_$ac_cv_sys_file_offset_bits"
-	LARGEFILE_SWITCH=1
+	# Add dual-mode wrapper code.
+	LFS_LOBJ=lfs_wrap.lo
 fi
-
-dnl Insert the function name redefinitions and export symbols as needed.
-dnl ...based on these two variables and manual work in src/libmpg123/mpg123.h.in .
-AC_SUBST(LARGEFILE_BITS)
-AC_SUBST(LARGEFILE_SUFFIX)
-AC_SUBST(LARGEFILE_SWITCH)
 
 # Using the lower level macros instead of AC_TYPE_* for compatibility with not freshest autoconf.
 AC_CHECK_TYPE(size_t, unsigned long)
+AC_CHECK_TYPE(uintptr_t, unsigned long)
 AC_CHECK_TYPE(ssize_t, long)
 AC_CHECK_TYPE(off_t,  long int)
 AC_CHECK_TYPE(int32_t, int)
@@ -869,6 +881,45 @@ AC_CHECK_SIZEOF(ssize_t,4)
 AC_CHECK_SIZEOF(off_t,4)
 AC_CHECK_SIZEOF(int32_t)
 AC_CHECK_SIZEOF(long,4)
+
+# The alias functions want to know the native off_t bits.
+# "Native" also means large file offsets, if enabled, it's what is native to the mpg123 library.
+if test "x$ac_cv_sizeof_long" = "x"; then 
+  AC_MSG_ERROR([Cannot determine sizeof(long)?])
+else
+  LFS_ALIAS_BITS=`expr "$ac_cv_sizeof_long" "*" "8"`
+  AC_DEFINE_UNQUOTED([LFS_ALIAS_BITS], $LFS_ALIAS_BITS,
+    [Define this to the size of long type in bits, used for LFS small/native alias functions.])
+fi
+
+lfs_alias=enabled
+AC_ARG_ENABLE(lfs-alias,
+              [  --disable-lfs-alias disable alias wrappers for largefile bitness (mpg123_seek_32 in addition to mpg123_seek, mpg123_seek_64 as alias on x86-64) ],
+              [
+                if test "x$enableval" = xno; then
+                  lfs_alias="disabled"
+                fi
+              ],
+              [
+                case $host in
+                *-cygwin*)
+                  lfs_alias="disabled"
+                  AC_MSG_NOTICE([lfs-alias disabled for Cygwin, use --enable-lfs-alias explicitly to enable, only if you know what you are doing])
+                ;;
+                esac
+
+              ])
+
+AC_MSG_CHECKING([if we want to enable alias wrappers for largefile])
+if test "x$lfs_alias" = "xenabled"; then
+  AC_MSG_RESULT([yes])
+  LFS_LOBJ="$LFS_LOBJ lfs_alias.lo"
+else
+  AC_MSG_RESULT([no])
+fi
+
+AC_SUBST(LFS_LOBJ)
+
 
 dnl ############## Function Checks
 
@@ -899,40 +950,12 @@ AC_CHECK_FUNCS( atoll )
 
 AC_CHECK_FUNCS( mkfifo, [ have_mkfifo=yes ], [ have_mkfifo=no ] )
 
-if test x"$fifo" = xauto; then
-	if test x"$have_mkfifo" = xyes; then
-		fifo=enabled
-	else
-		fifo=disabled
-	fi
-fi
-if test x"$fifo" = xenabled; then
-	AC_DEFINE(FIFO, 1, [ Define if FIFO support is enabled. ])
-	if test x"$have_mkfifo" = xno; then
-		AC_MSG_WARN( [ You forced FIFO code while I think there is no mkfifo() available! ] )
-	fi
-fi
-
-AC_CHECK_FUNCS( getaddrinfo, [ have_ipv6=yes ], [ have_ipv6=no ] )
-if test x"$ipv6" = xauto; then
-	if test x"$have_ipv6" = xyes; then
-		ipv6=enabled
-	else
-		ipv6=disabled
-	fi
-fi
-if test x"$ipv6" = xenabled; then
-	AC_DEFINE(IPV6, 1, [ Define if IPV6 support is enabled. ])
-	if test x"$have_ipv6" = xno; then
-		AC_MSG_WARN( [ You forced IPv6 code while I think there is no getaddrinfo() available! ] )
-	fi
-fi
-
 dnl ############## Header and Library Checks
 
 # locale headers
 AC_CHECK_HEADERS([locale.h langinfo.h])
 # Headers for network (http) stuff
+network_type=Unknown
 AC_CHECK_HEADERS([netdb.h sys/param.h sys/socket.h netinet/in.h arpa/inet.h])
 if test "x$ac_cv_header_netdb_h" = "xyes"      &&
    test "x$ac_cv_header_sys_param_h" = "xyes"  &&
@@ -940,23 +963,19 @@ if test "x$ac_cv_header_netdb_h" = "xyes"      &&
    test "x$ac_cv_header_netinet_in_h" = "xyes" &&
    test "x$ac_cv_header_arpa_inet_h"  = "xyes"; then
   have_network=yes
+  network_type=Posix
 else
   have_network=no
 fi
 
-if test x"$network" = xauto; then
-	if test x"$have_network" = xyes; then
-		network=enabled
-	else
-		network=disabled
-	fi
-fi
-if test x"$network" = xenabled; then
-	AC_DEFINE(NETWORK, 1, [ Define if network support is enabled. ])
-	if test x"$have_network" = xno; then
-		AC_MSG_WARN( [ You forced network code while I think there is support missing! ] )
-	fi
-fi
+dnl trying to get that socket lib settled in one line
+AC_SEARCH_LIBS(gethostbyname, nsl socket) 
+dnl OK, two lines... Solaris needs -lnsl -lsocket
+AC_SEARCH_LIBS(socket, socket) 
+
+AC_CHECK_FUNCS( getaddrinfo, [ have_ipv6=yes ], [ have_ipv6=no ] )
+
+APR_CHECK_GETADDRINFO_ADDRCONFIG()
 
 # Substitutions for the installable mpg123.h header
 if test "x$ac_cv_header_stdio_h" = "xyes"; then
@@ -1025,27 +1044,23 @@ case $host in
  ;;
 esac
 
-dnl trying to get that socket lib settled in one line
-AC_SEARCH_LIBS(gethostbyname, nsl socket ws2_32 wsock32) 
-dnl OK, two lines... Solaris needs -lnsl -lsocket
-AC_SEARCH_LIBS(socket, socket ws2_32 wsock32) 
-
 s_altivec="synth_altivec dct64_altivec"
 s_i386="dct64_i386"
 s_i486="$s_i386 synth_i486 dct64_i486"
 s_i586="$s_i386 synth_i586"
 s_i586d="$s_i386 synth_i586_dither"
 s_3dnow="$s_i386 synth_3dnow dct64_3dnow equalizer_3dnow"
-s_3dnowext="$s_i386 dct64_3dnowext dct64_mmx tabinit_mmx synth_3dnowext"
+s_3dnowext="$s_i386 dct64_3dnowext tabinit_mmx synth_3dnowext"
 if test "x$layer3" = "xenabled"; then
   s_3dnow="$s_3dnow dct36_3dnow"
   s_3dnowext="$s_3dnowext dct36_3dnowext"
 fi
 s_mmx="$s_i386 dct64_mmx tabinit_mmx synth_mmx"
-s_sse="$s_i386 dct64_mmx tabinit_mmx dct64_sse dct64_sse_float synth_sse_float synth_stereo_sse_float synth_sse_s32 synth_stereo_sse_s32 "
+s_sse="$s_i386 tabinit_mmx dct64_sse dct64_sse_float synth_sse_float synth_stereo_sse_float synth_sse_s32 synth_stereo_sse_s32 "
 s_x86_64="dct64_x86_64 dct64_x86_64_float synth_x86_64_float synth_x86_64_s32 synth_stereo_x86_64_float synth_stereo_x86_64_s32"
 s_x86multi="getcpuflags"
 s_dither="dither"
+s_neon="dct64_neon dct64_neon_float synth_neon_float synth_neon_s32 synth_stereo_neon_float synth_stereo_neon_s32"
 
 # choose optimized 16bit decoder for SSE, quality or fast
 # note: supporting deactivation of output formats for these decoders would need more logic here
@@ -1053,10 +1068,12 @@ if test "x$integers" = "xquality"; then
   s_sse="$s_sse synth_sse_accurate synth_stereo_sse_accurate"
   s_x86_64="$s_x86_64 synth_x86_64_accurate synth_stereo_x86_64_accurate"
   s_arm="synth_arm_accurate"
+  s_neon="$s_neon synth_neon_accurate synth_stereo_neon_accurate"
 else
   s_sse="$s_sse synth_sse" # no stereo
   s_x86_64="$s_x86_64 synth_x86_64 synth_stereo_x86_64"
   s_arm="synth_arm"
+  s_neon="$s_neon synth_neon synth_stereo_neon"
 fi
 
 dnl CPU specific compiler flags and sources
@@ -1105,6 +1122,10 @@ dnl Not disabling buffer for float mode... check that this is OK now!
         AC_MSG_RESULT([no])
     fi
     rm -f conftest.o conftest.c
+  ;;
+  neon)
+    ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_NEON -DREAL_IS_FLOAT"
+    more_sources="$s_neon $s_fpu"
   ;;
   i386) 
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_I386 -DREAL_IS_FLOAT"
@@ -1180,10 +1201,10 @@ esac
 case $cpu_type in
   3dnow|3dnow_alone|3dnowext|3dnowext_alone|mmx|mmx_alone|sse|sse_alone|x86|x86_dither)
     case $host in
-      i386-apple-darwin8*)
+      i386-apple-darwin8*|*-apple-darwin10*)
         ADD_LDFLAGS="$ADD_LDFLAGS -Wl,-read_only_relocs,suppress"
       ;;
-      i386-apple-darwin9*|i386-apple-darwin10*)
+      i386-apple-darwin9*)
         ADD_CFLAGS="$ADD_CFLAGS -mmacosx-version-min=10.4 -isysroot /Developer/SDKs/MacOSX10.4u.sdk"
         ADD_LDFLAGS="$ADD_LDFLAGS -Wl,-syslibroot,/Developer/SDKs/MacOSX10.4u.sdk -Wl,-classic_linker -Wl,-read_only_relocs,suppress"
       ;;
@@ -1206,15 +1227,15 @@ AC_ARG_ENABLE(feature_report,
 	],
 	[AC_MSG_RESULT([yes])])
 
-if test "x$feature_report" == xenabled; then
+if test "x$feature_report" = xenabled; then
 	more_sources="$more_sources feature"
 fi
 
 for i in $more_sources
 do
   # Echo make sure every file is only once in the list.
-  echo "$DECODER_OBJ" | grep -v -w "$i\.\$(OBJEXT)" && DECODER_OBJ="$DECODER_OBJ $i.\$(OBJEXT)"
-  echo "$DECODER_LOBJ" | grep -v -w "$i\.lo" && DECODER_LOBJ="$DECODER_LOBJ $i.lo"
+  echo "$DECODER_OBJ" | $GREP -v -w "$i\.\$(OBJEXT)" > /dev/null && DECODER_OBJ="$DECODER_OBJ $i.\$(OBJEXT)"
+  echo "$DECODER_LOBJ" | $GREP -v -w "$i\.lo" > /dev/null && DECODER_LOBJ="$DECODER_LOBJ $i.lo"
 done
 
 AC_SUBST(DECODER_OBJ)
@@ -1229,7 +1250,7 @@ fi
 dnl ############## Output module choice
 
 # The full list of supported modules to check, first come, first serve.
-check_modules="alsa oss coreaudio sndio sun win32 esd jack portaudio pulse sdl nas arts openal dummy"
+check_modules="alsa oss coreaudio sndio sun win32 os2 esd jack portaudio pulse sdl nas arts openal dummy"
 # The final list.
 output_modules=
 
@@ -1424,6 +1445,31 @@ do
 				check_failed=yes
 			fi
 		;;
+		os2)
+			OS2_LIBS="-los2me -lmmpm2 -lsocket"
+			AC_CHECK_HEADERS([os2.h])
+			# os2me.h depends on os2.h
+			# Yes, that way of coding it is ugly.
+			if test "x${ac_cv_header_os2_h}" = xyes
+			then
+				# We mimick exactly the way how the header will be used.
+				# It seems to be picky...
+				AC_CHECK_HEADERS([os2me.h], [], [], [#define INCL_OS2MM
+#define INCL_DOS
+#define INCL_VIO
+#define INCL_KBD
+#include <os2.h>
+#])
+			fi
+			if test "x${ac_cv_header_os2_h}" = xyes \
+			   -a   "x${ac_cv_header_os2me_h}" = xyes
+			then
+				output_modules="$output_modules os2"
+				HAVE_OS2=yes
+			else
+				check_failed=yes
+			fi
+		;;
 # from here on only forced tests, untested code
 		hp)
 			# What's the deal with that and alib?
@@ -1455,19 +1501,6 @@ do
 		aix)
 			UNSUPPORTED_AUDIO=yes
 			AC_CHECK_HEADERS([sys/audio.h], [output_modules="$output_modules aix" HAVE_AIX=yes], [check_failed=yes])
-		;;
-		os2)
-			UNSUPPORTED_AUDIO=yes
-			OS2_LIBS="-los2me -lsocket"
-			AC_CHECK_HEADERS([os2.h os2me.h])
-			if test "x${ac_cv_header_os2_h}" = xyes \
-			   -a   "x${ac_cv_header_os2me_h}" = xyes
-			then
-				output_modules="$output_modules os2"
-				HAVE_OS2=yes
-			else
-				check_failed=yes
-			fi
 		;;
 		sgi)
 			UNSUPPORTED_AUDIO=yes
@@ -1785,7 +1818,7 @@ esac
 
 dnl If using gcc, prevent a bad alignment option from breaking things.
 dnl Let's default to safe 16-byte alignment for any special x86 or altivec stuff.
-if test "x$GCC" = xyes && echo "$CFLAGS" | grep -q 'mpreferred-stack-boundary='; then
+if test "x$GCC" = xyes && echo "$CFLAGS" | $GREP 'mpreferred-stack-boundary=' > /dev/null; then
 	case $cpu_type in
 		x86 | i586* | mmx | sse | 3dnow* | altivec)
 			AC_MSG_WARN( [ You are trying to mess with stack alignment. I know better. ] )
@@ -1808,20 +1841,203 @@ fi
 # Define that always... also without frame index enabled.
 AC_DEFINE_UNQUOTED(INDEX_SIZE, $seektable, [size of the frame index seek table])
 
-# Check if we want Unicode for Win32.
-win32_unicode=disabled
-AC_MSG_CHECKING([if we want Unicode File Open for Win32])
-AC_ARG_ENABLE(win32_unicode,
-	[  --enable-win32_unicode=[no/yes] Enable Unicode for Win32 ],
-	[   
-	   if test "x$enableval" = xyes; then
-		AC_DEFINE(WANT_WIN32_UNICODE, 1, [ Define to use Unicode for Windows ])
-		win32_unicode=enabled
-		AC_MSG_RESULT([yes])
-	   fi
-	], [AC_MSG_RESULT([no])])
+dnl ############## Win32 function checks
+# Check if we want Unicode for Win32. Cygwin does not need _wopen
+win32_specific_codes=disabled
+win32_unicode=unneeded
+win32_sockets=disabled
+win32_sockets_working=no
+win32_wide_working=no
+win32_winver_bump=no
+AC_CHECK_HEADERS([windows.h], [win32_specific_codes=enabled])
+if test "x$win32_specific_codes" = xenabled && test "x$host_os" != "xcygwin"; then
 
-AM_CONDITIONAL([WIN32_USE_UNICODE], [ test "x$win32_unicode" == xenabled])
+#### Check for Wide functions
+  AC_CHECK_FUNC([_wopen], [win32_unicode=enabled],[win32_unicode=disabled])
+  AC_MSG_CHECKING([if we want Unicode File Open for Win32])
+  if test "x$win32_unicode" = xenabled; then
+    AC_MSG_RESULT([yes])
+    AC_MSG_CHECKING([if Unicode functions working])
+    AC_LINK_IFELSE([[
+      #include <windows.h>
+      #include <stdlib.h>
+      int main()
+      {
+        MultiByteToWideChar (0, 0, NULL, 0, NULL, 0);
+        WideCharToMultiByte (0, 0, NULL, 0, NULL, 0, NULL, NULL);
+        return 0;
+      }
+    ]], [win32_wide_working=yes], [win32_winver_bump=yes])
+    if test "x$win32_wide_working" = xno; then
+      AC_LINK_IFELSE([[
+        #define WINVER 0x501
+        #define _WIN32_WINNT 0x501
+        #include <windows.h>
+        #include <stdlib.h>
+        int main()
+        {
+          MultiByteToWideChar (0, 0, NULL, 0, NULL, 0);
+          WideCharToMultiByte (0, 0, NULL, 0, NULL, 0, NULL, NULL);
+          return 0;
+        }
+      ]], [win32_wide_working=yes], [AC_MSG_RESULT([no])])
+    fi
+    if test "x$win32_wide_working" = xyes; then
+      AC_MSG_RESULT([yes])
+      AC_DEFINE([WANT_WIN32_UNICODE], [1], [ Define to use Unicode for Windows ])
+    fi
+  else
+    AC_MSG_WARN([Unicode File Open for Win32 disabled])
+  fi
+
+#### Check for Network functions
+  AC_CHECK_HEADERS([ws2tcpip.h], [win32_sockets=enabled], [AC_MSG_WARN([Please update your headers to support winsock 2.2.])])
+  AC_MSG_CHECKING([if we want Win32 sockets])
+  if test "x$win32_sockets" = "xenabled" && test "x$network" != "xdisabled"; then
+  AC_MSG_RESULT([yes])
+  AC_MSG_CHECKING([if winsock2 API is available])
+    wsoldlibs="$LIBS"
+    LIBS="$LIBS -lws2_32"
+    AC_LINK_IFELSE([[
+      #include <winsock2.h>
+      #include <ws2tcpip.h>
+      #include <stdlib.h>
+      int main()
+      {
+        getaddrinfo(NULL, NULL, NULL, NULL);
+        freeaddrinfo(NULL);
+        return 0;
+      }
+    ]], [win32_sockets_working=yes], [win32_winver_bump=yes])
+    if test "x$win32_sockets_working" = "xno"; then
+      AC_MSG_CHECKING([deeper if winsock2 API is available])
+      AC_LINK_IFELSE([
+        #define WINVER 0x501
+        #define _WIN32_WINNT 0x501
+        #include <winsock2.h>
+        #include <ws2tcpip.h>
+        #include <stdlib.h>
+        int main()
+        {
+          getaddrinfo(NULL, NULL, NULL, NULL);
+          freeaddrinfo(NULL);
+          return 0;
+        }
+      ], [win32_sockets_working=yes], [AC_MSG_RESULT([no])])
+    fi
+    if test "x$win32_sockets_working" = "xyes"; then
+      AC_MSG_RESULT([yes])
+      AC_DEFINE([WANT_WIN32_SOCKETS], [1], [ Define to use Win32 sockets ])
+      network_type=Winsock2
+      have_network=yes
+      have_ipv6=yes
+    else
+      LIBS="$wsoldlibs"
+      AC_MSG_WARN([Please update your headers to support winsock 2.2.])
+    fi
+  else
+    AC_MSG_RESULT([no])
+  fi
+
+#### Check for Win32 Named Pipe functions
+win32_fifo_working=no
+if test x$win32_specific_codes = xenabled; then
+  AC_MSG_CHECKING([if we have Named Pipes])
+  if test "x$fifo" != "xdisabled"; then
+    AC_LINK_IFELSE([[
+    #include <windows.h>
+      int main(){
+        CreateNamedPipeA(NULL,PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED,PIPE_TYPE_BYTE,1,255,255,0,NULL);
+        CreateNamedPipeW(NULL,PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED,PIPE_TYPE_BYTE,1,255,255,0,NULL);
+        return 0;
+      }]],[win32_fifo_working=yes],[win32_winver_bump=yes])
+    if test "x$win32_fifo_working" != "xyes"; then
+    AC_LINK_IFELSE([[
+    #define WINVER 0x501
+    #define _WIN32_WINNT 0x501
+    #include <windows.h>
+      int main(){
+        CreateNamedPipeA(NULL,PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED,PIPE_TYPE_BYTE,1,255,255,0,NULL);
+        CreateNamedPipeW(NULL,PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED,PIPE_TYPE_BYTE,1,255,255,0,NULL);
+        return 0;
+      }]],[win32_fifo_working=yes],[win32_fifo_working=no])
+    fi
+  fi
+  have_mkfifo=$win32_fifo_working
+  if test "x$win32_fifo_working" = "xyes"; then
+    AC_MSG_RESULT([yes])
+    AC_DEFINE([WANT_WIN32_FIFO], [1], [ Define to use Win32 named pipes ])
+  else
+    AC_MSG_RESULT([no])
+  fi
+fi
+
+#### WINVER Bump
+if test x$win32_specific_codes = xenabled; then
+  AC_MSG_CHECKING([if WINVER and _WIN32_WINNT needs version bumps])
+  if test "x$win32_winver_bump" = "xyes"; then
+    AC_MSG_RESULT([yes])
+    AC_DEFINE([WINVER], [0x0501], [ WinXP and above for ipv6 ])
+    AC_DEFINE([_WIN32_WINNT], [0x0501], [ WinXP and above for ipv6 ])
+    # getaddrinfo and freeaddrinfo are available for Win2K and above
+    # Bug: MinGW.org w32api ws2tcpip.h incorrectly wants (_WIN32_WINNT >= 0x0501) for getaddrinfo and freeaddrinfo
+    # MultiByteToWideChar and WideCharToMultiByte are available for Win2K and above
+  else
+    AC_MSG_RESULT([no])
+  fi
+fi
+
+fi #END OF WIN32 CHECKS
+
+#### Use Win32 support codes
+AM_CONDITIONAL([WIN32_CODES], [ test "x$win32_specific_codes" = xenabled ])
+
+if test x"$network" = xauto; then
+	if test x"$have_network" = xyes; then
+		network=enabled
+	else
+		network=disabled
+	fi
+fi
+if test x"$ipv6" = xauto; then
+	if test x"$have_ipv6" = xyes; then
+		ipv6=enabled
+	else
+		ipv6=disabled
+	fi
+fi
+
+dnl ############## FIFO enable
+
+if test x"$fifo" = xauto; then
+	if test x"$have_mkfifo" = xyes; then
+		fifo=enabled
+	else
+		fifo=disabled
+	fi
+fi
+
+if test x"$fifo" = xenabled; then
+	AC_DEFINE(FIFO, 1, [ Define if FIFO support is enabled. ])
+	if test x"$have_mkfifo" = xno; then
+		AC_MSG_WARN( [ You forced FIFO code while I think there is no mkfifo() available! ] )
+	fi
+fi
+
+dnl ############## Network enable
+if test x"$network" = xenabled; then
+	AC_DEFINE(NETWORK, 1, [ Define if network support is enabled. ])
+	if test x"$have_network" = xno; then
+		AC_MSG_WARN( [ You forced network code while I think there is support missing! ] )
+	fi
+fi
+
+if test x"$ipv6" = xenabled; then
+	AC_DEFINE(IPV6, 1, [ Define if IPV6 support is enabled. ])
+	if test x"$have_ipv6" = xno; then
+		AC_MSG_WARN( [ You forced IPv6 code while I think there is no getaddrinfo() available! ] )
+	fi
+fi
 
 dnl ############## Final Output
 
@@ -1851,7 +2067,7 @@ echo "
   $PACKAGE_NAME $PACKAGE_VERSION
 
   Install path ............ $prefix
-  CPU Optimisation......... $cpu_type
+  CPU Optimization ........ $cpu_type
   Compiler Optimization ... $with_optimization
   Gapless Support ......... $gapless
   Debugging ............... $debugging
@@ -1859,9 +2075,17 @@ echo "
   FIFO support ............ $fifo
   Buffer .................. $buffer
   Network (http streams) .. $network
-  IPv6 (getaddrinfo) ...... $ipv6
-  File offset (if needed) . $ac_cv_sys_file_offset_bits
-  Alignment checks ........ $aligncheck"
+  Network Sockets ......... $network_type
+  IPv6 (getaddrinfo) ...... $ipv6"
+if test x"$LARGEFILE_BITS" = x; then
+  echo "  File offsets ............ default"
+else
+  echo "  File offsets ............ $LARGEFILE_BITS"
+  echo "    The lib will (try to) support default offset size, too."
+fi
+echo "  LFS alias symbols ....... $lfs_alias ($LFS_ALIAS_BITS)"
+
+echo "  Alignment checks ........ $aligncheck"
 if test x"$aligncheck" = xenabled; then
 	if test x"$ccalign" != xyes; then
 		echo "   (without effect since special alignment is not employed)"
@@ -1888,13 +2112,14 @@ echo -n "
   Output formats (nofpu will disable all but 16 or 8 bit!):
   8 bit integer ........... $int8
   16 bit integer .......... $int16
-  32 bit integer .......... $int32
+  32/24 bit integer ....... $int32
   real (32 bit float) ..... $real
 "
 # just an empty line
 echo
 
 echo "  Modules ................. $modules"
+echo "  Module suffix ........... $with_module_suffix"
 echo "  Checked audio modules ... $check_modules
   Detected audio support ..$output_modules
   Default output module ... $default_output_module

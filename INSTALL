@@ -31,6 +31,8 @@ You want:
 
 - headers and lib for certain audio output drivers (libasound for alsa, sdl for sdl...)
 
+- libtool's libltdl for runtime output modules (this used to be included, but now we rely on an existing install)
+
 
 1. New installation via GNU autotools
 
@@ -46,11 +48,17 @@ Run
 
 for a list of possible parameters you can specify. The obvious are --prefix and the normal GNU autotool bunch, but others include what audio subsystem to use and what CPU optimizations to build in.
 For the optimizations (decoder choice), the default on 32bit x86 systems since version 0.66 is a build that combines all possible optimizations and chooses one at runtime (see --cpu, --list-cpu and --test-cpu parameters).
-Update: x86 build includes all but i586_dither, which is a bit bigger due to the dither noise; use x86_dither to get it into the bunch, too.
 
-Another posibly important choice is --with-seektable=<number> for setting the size for the table of stored frame addresses to make seeking faster. When you want a minimal memory footprint, you can set number to 0. Seeking will always start from the beginning, then - being accurate, but rather slow, what doesn't matter if you don't use interactive seeking forth and back.
+Another possibly important choice is --with-seektable=<number> for setting the size for the table of stored frame addresses to make seeking faster. When you want a minimal memory footprint, you can set number to 0. Seeking will always start from the beginning, then - being accurate, but rather slow, what doesn't matter if you don't use interactive seeking forth and back.
 
 There are various library features you can leave out via --disable options (like output formats, resampling modes). Please note that this is only configured/tested for the generic (fpu) decoder, not optimized ones. Perhaps that changes in future.
+
+1a. Large file support
+
+The libmpg123 API includes the generic off_t type for file offsets and thus is subject to shape-shifting on systems that change off_t depending on build flags.
+To deal with the incompatibilities that can cause, the library needs to separate code paths for small and large off_t.
+Since version 1.12.0, a large-file-enabled libmpg123 (the default set by configure) provides a dual-mode ABI. Depending on _FILE_OFFSET_BITS, the mpg123.h header file selects different library symbols to use for your app.
+In both large-file and normal mode, the library should just work for your app.
 
 
 2. The classic way via the provided Makefile
@@ -59,6 +67,7 @@ No, the Makefile is not provided anymore. Even if autotools is complicated, it i
 You can dig in SVN for MakeLegacy.sh and src/Makefile.legacy and src/config.h.legacy, if you want.
 
 Again, to be clear: There is no classic way anymore.
+
 
 3. Do something different on a special platform/compiler/...
 

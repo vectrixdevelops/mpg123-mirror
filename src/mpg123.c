@@ -1,7 +1,7 @@
 /*
 	mpg123: main code of the program (not of the decoder...)
 
-	copyright 1995-2009 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 1995-2010 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Michael Hipp
 */
@@ -10,16 +10,12 @@
 #include "mpg123app.h"
 #include "mpg123.h"
 #include "local.h"
-#include "win32conv.h"
 
 #ifdef HAVE_SYS_WAIT_H
 #include <sys/wait.h>
 #endif
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
-#endif
-#ifdef WIN32
-#include <windows.h>
 #endif
 
 #include <errno.h>
@@ -44,6 +40,7 @@
 #include "httpget.h"
 #include "metaprint.h"
 #include "httpget.h"
+#include "streamdump.h"
 
 #include "debug.h"
 
@@ -74,7 +71,10 @@ struct parameter param = {
   0 ,	  /* force_reopen, always (re)opens audio device for next song */
   /* test_cpu flag is valid for multi and 3dnow.. even if 3dnow is built alone; ensure it appears only once */
   FALSE , /* normal operation */
-  FALSE,  /* try to run process in 'realtime mode' */   
+  FALSE,  /* try to run process in 'realtime mode' */
+#ifdef HAVE_WINDOWS_H 
+  0, /* win32 process priority */
+#endif
   NULL,  /* wav,cdr,au Filename */
 	0, /* default is to play all titles in playlist */
 	NULL, /* no playlist per default */
@@ -84,9 +84,7 @@ struct parameter param = {
 #ifdef FIFO
 	,NULL
 #endif
-#ifndef WIN32
 	,0 /* timeout */
-#endif
 	,1 /* loop */
 	,0 /* delay */
 	,0 /* index */
@@ -113,6 +111,8 @@ struct parameter param = {
 	,1. /* preload */
 	,-1 /* preframes */
 	,-1 /* gain */
+	,NULL /* stream dump file */
+	,0 /* ICY interval */
 };
 
 mpg123_handle *mh = NULL;
@@ -134,7 +134,11 @@ size_t bufferblock = 0;
 static int intflag = FALSE;
 static int skip_tracks = 0;
 int OutputDescriptor;
+
 static int filept = -1;
+
+static int network_sockets_used = 0; /* Win32 socket open/close Support */
+
 char *binpath; /* Path to myself. */
 
 /* File-global storage of command line arguments.
@@ -177,6 +181,8 @@ void prev_track(void)
 void safe_exit(int code)
 {
 	char *dummy, *dammy;
+
+	dump_close();
 #ifdef HAVE_TERMIOS
 	if(param.term_ctrl)
 		term_restore();
@@ -189,10 +195,12 @@ void safe_exit(int code)
 
 	httpdata_free(&htd);
 
-#ifdef WIN32_WANT_UNICODE
+#ifdef WANT_WIN32_UNICODE
 	win32_cmdline_free(argc, argv); /* This handles the premature argv == NULL, too. */
 #endif
-
+#if defined (WANT_WIN32_UNICODE)
+	win32_net_deinit();
+#endif
 	/* It's ugly... but let's just fix this still-reachable memory chunk of static char*. */
 	split_dir_file("", &dummy, &dammy);
 	exit(code);
@@ -201,7 +209,7 @@ void safe_exit(int code)
 /* returns 1 if reset_audio needed instead */
 static void set_output_module( char *arg )
 {
-	int i;
+	unsigned int i;
 		
 	/* Search for a colon and set the device if found */
 	for(i=0; i< strlen( arg ); i++) {
@@ -318,7 +326,7 @@ static void set_out_stdout1(char *arg)
 	#endif
 }
 
-#ifndef HAVE_SCHED_SETSCHEDULER
+#if !defined (HAVE_SCHED_SETSCHEDULER) && !defined (HAVE_WINDOWS_H)
 static void realtime_not_compiled(char *arg)
 {
 	fprintf(stderr,"Option '-T / --realtime' not compiled into this binary.\n");
@@ -415,11 +423,14 @@ topt opts[] = {
 	#ifdef NETWORK
 	{'u', "auth",        GLO_ARG | GLO_CHAR, 0, &httpauth,   0},
 	#endif
-	#ifdef HAVE_SCHED_SETSCHEDULER
+	#if defined (HAVE_SCHED_SETSCHEDULER) || defined (HAVE_WINDOWS_H)
 	/* check why this should be a long variable instead of int! */
 	{'T', "realtime",    GLO_LONG,  0, &param.realtime, TRUE },
 	#else
 	{'T', "realtime",    0,  realtime_not_compiled, 0,           0 },    
+	#endif
+	#ifdef HAVE_WINDOWS_H
+	{0, "priority", GLO_ARG | GLO_INT, 0, &param.w32_priority, 0},
 	#endif
 	{0, "title",         GLO_INT,  0, &param.xterm_title, TRUE },
 	{'w', "wav",         GLO_ARG | GLO_CHAR, set_out_wav, 0, 0 },
@@ -440,9 +451,7 @@ topt opts[] = {
 #ifdef FIFO
 	{0, "fifo", GLO_ARG | GLO_CHAR, 0, &param.fifo,  0},
 #endif
-#ifndef WIN32
 	{0, "timeout", GLO_ARG | GLO_LONG, 0, &param.timeout, 0},
-#endif
 	{0, "loop", GLO_ARG | GLO_LONG, 0, &param.loop, 0},
 	{'i', "index", GLO_INT, 0, &param.index, 1},
 	{'D', "delay", GLO_ARG | GLO_INT, 0, &param.delay, 0},
@@ -457,6 +466,10 @@ topt opts[] = {
 	{'e', "encoding", GLO_ARG|GLO_CHAR, 0, &param.force_encoding, 0},
 	{0, "preload", GLO_ARG|GLO_DOUBLE, 0, &param.preload, 0},
 	{0, "preframes", GLO_ARG|GLO_LONG, 0, &param.preframes, 0},
+	{0, "skip-id3v2", GLO_INT, set_frameflag, &frameflag, MPG123_SKIP_ID3V2},
+	{0, "streamdump", GLO_ARG|GLO_CHAR, 0, &param.streamdump, 0},
+	{0, "icy-interval", GLO_ARG|GLO_LONG, 0, &param.icy_interval, 0},
+	{0, "ignore-streamlength", GLO_INT, set_frameflag, &frameflag, MPG123_IGNORE_STREAMLENGTH},
 	{0, 0, 0, 0, 0, 0}
 };
 
@@ -508,6 +521,20 @@ static void reset_audio(long rate, int channels, int format)
 #endif
 }
 
+static int open_track_fd (void)
+{
+	/* Let reader handle invalid filept */
+	if(mpg123_open_fd(mh, filept) != MPG123_OK)
+	{
+		error2("Cannot open fd %i: %s", filept, mpg123_strerror(mh));
+		return 0;
+	}
+	debug("Track successfully opened.");
+	fresh = TRUE;
+	return 1;
+	/*1 for success, 0 for failure */
+}
+
 /* 1 on success, 0 on failure */
 int open_track(char *fname)
 {
@@ -515,13 +542,34 @@ int open_track(char *fname)
 	httpdata_reset(&htd);
 	if(MPG123_OK != mpg123_param(mh, MPG123_ICY_INTERVAL, 0, 0))
 	error1("Cannot (re)set ICY interval: %s", mpg123_strerror(mh));
-	if(!strcmp(fname, "-")) filept = STDIN_FILENO;
+	if(!strcmp(fname, "-"))
+	{
+		filept = STDIN_FILENO;
+#ifdef WIN32
+		_setmode(STDIN_FILENO, _O_BINARY);
+#endif
+		return open_track_fd();
+	}
 	else if (!strncmp(fname, "http://", 7)) /* http stream */
 	{
-		filept = http_open(fname, &htd);
+#if defined (WANT_WIN32_SOCKETS)
+	if(param.streamdump != NULL)
+	{
+		fprintf(stderr, "\nWarning: win32 networking conflicts with stream dumping. Aborting the dump.\n");
+		dump_close();
+	}
+	/*Use recv instead of stdio functions */
+	win32_net_replace(mh);
+	filept = win32_net_http_open(fname, &htd);
+#else
+	filept = http_open(fname, &htd);
+#endif
+	network_sockets_used = 1;
+/* utf-8 encoded URLs might not work under Win32 */
+		
 		/* now check if we got sth. and if we got sth. good */
 		if(    (filept >= 0) && (htd.content_type.p != NULL)
-			  && !param.ignore_mime && strcmp(htd.content_type.p, "audio/mpeg") && strcmp(htd.content_type.p, "audio/x-mpeg") )
+			  && !param.ignore_mime && !(debunk_mime(htd.content_type.p) & IS_FILE) )
 		{
 			error1("Unknown mpeg MIME type %s - is it perhaps a playlist (use -@)?", htd.content_type.p == NULL ? "<nil>" : htd.content_type.p);
 			error("If you know the stream is mpeg1/2 audio, then please report this as "PACKAGE_NAME" bug");
@@ -536,15 +584,19 @@ int open_track(char *fname)
 		error1("Cannot set ICY interval: %s", mpg123_strerror(mh));
 		if(param.verbose > 1) fprintf(stderr, "Info: ICY interval %li\n", (long)htd.icy_interval);
 	}
+
+	if(param.icy_interval > 0)
+	{
+		if(MPG123_OK != mpg123_param(mh, MPG123_ICY_INTERVAL, param.icy_interval, 0))
+		error1("Cannot set ICY interval: %s", mpg123_strerror(mh));
+		if(param.verbose > 1) fprintf(stderr, "Info: Forced ICY interval %li\n", param.icy_interval);
+	}
+
 	debug("OK... going to finally open.");
 	/* Now hook up the decoder on the opened stream or the file. */
-	if(filept > -1)
+	if(network_sockets_used) 
 	{
-		if(mpg123_open_fd(mh, filept) != MPG123_OK)
-		{
-			error2("Cannot open fd %i: %s", filept, mpg123_strerror(mh));
-			return 0;
-		}
+		return open_track_fd();
 	}
 	else if(mpg123_open(mh, fname) != MPG123_OK)
 	{
@@ -552,6 +604,7 @@ int open_track(char *fname)
 		return 0;
 	}
 	debug("Track successfully opened.");
+
 	fresh = TRUE;
 	return 1;
 }
@@ -560,6 +613,13 @@ int open_track(char *fname)
 void close_track(void)
 {
 	mpg123_close(mh);
+#if defined (WANT_WIN32_SOCKETS)
+	if (network_sockets_used)
+	win32_net_close(filept);
+	filept = -1;
+	return;
+#endif
+	network_sockets_used = 0;
 	if(filept > -1) close(filept);
 	filept = -1;
 }
@@ -690,24 +750,6 @@ int skip_or_die(struct timeval *start_time)
 #define skip_or_die(a) TRUE
 #endif
 
-#if defined (WANT_WIN32_UNICODE)
-static int
-argv_cleanup(void *in)
-{
-	debug ("argv_cleanup running!\n");
-	char ** ptr;
-	ptr = (char **)in;
-	while (ptr && *ptr) 
-	{
-		free ((void *)*ptr);
-		++ptr;
-	}
-	free(in);
-	debug ("argv_cleanup ran!\n");
-	return 0;
-}
-#endif
-
 int main(int sys_argc, char ** sys_argv)
 {
 	int result;
@@ -728,6 +770,9 @@ int main(int sys_argc, char ** sys_argv)
 #else
 	argv = sys_argv;
 	argc = sys_argc;
+#endif
+#if defined (WANT_WIN32_SOCKETS)
+	win32_net_init();
 #endif
 
 	/* Extract binary and path, take stuff before/after last / or \ . */
@@ -868,10 +913,8 @@ int main(int sys_argc, char ** sys_argv)
 	    && MPG123_OK == (result = mpg123_par(mp, MPG123_ICY_INTERVAL, 0, 0))
 	    && ++libpar
 	    && MPG123_OK == (result = mpg123_par(mp, MPG123_RESYNC_LIMIT, param.resync_limit, 0))
-#ifndef WIN32
 	    && ++libpar
 	    && MPG123_OK == (result = mpg123_par(mp, MPG123_TIMEOUT, param.timeout, 0))
-#endif
 	    && ++libpar
 	    && MPG123_OK == (result = mpg123_par(mp, MPG123_OUTSCALE, param.outscale, 0))
 	    && ++libpar
@@ -905,6 +948,9 @@ int main(int sys_argc, char ** sys_argv)
 	}
 	mpg123_delete_pars(mp); /* Don't need the parameters anymore ,they're in the handle now. */
 
+	/* Prepare stream dumping, possibly replacing mpg123 reader. */
+	if(dump_open(mh) != 0) safe_exit(78);
+
 	/* Now either check caps myself or query buffer for that. */
 	audio_capabilities(ao, mh);
 
@@ -917,7 +963,8 @@ int main(int sys_argc, char ** sys_argv)
 	}
 #endif
 
-#ifdef HAVE_SCHED_SETSCHEDULER
+#if defined (HAVE_SCHED_SETSCHEDULER) && !defined (__CYGWIN__)
+/* Cygwin --realtime seems to fail when accessing network, using win32 set priority instead */
 	if (param.realtime) {  /* Get real-time priority */
 	  struct sched_param sp;
 	  fprintf(stderr,"Getting real-time priority\n");
@@ -926,6 +973,11 @@ int main(int sys_argc, char ** sys_argv)
 	  if (sched_setscheduler(0, SCHED_RR, &sp) == -1)
 	    fprintf(stderr,"Can't get real-time priority\n");
 	}
+#endif
+
+#ifdef HAVE_WINDOWS_H
+	/* argument "3" is equivalent to realtime priority class */
+	win32_set_priority( param.realtime ? 3 : param.w32_priority);
 #endif
 
 	if(!param.remote) prepare_playlist(argc, argv);
@@ -1188,6 +1240,7 @@ static void long_usage(int err)
 
 	fprintf(o,"\ninput options\n\n");
 	fprintf(o," -k <n> --skip <n>         skip n frames at beginning\n");
+	fprintf(o,"        --skip-id3v2       skip ID3v2 tags without parsing\n");
 	fprintf(o," -n     --frames <n>       play only <n> frames of every stream\n");
 	fprintf(o,"        --fuzzy            Enable fuzzy seeks (guessing byte offsets or using approximate seek points from Xing TOC)\n");
 	fprintf(o," -y     --no-resync        DISABLES resync on error (--resync is deprecated)\n");
@@ -1198,9 +1251,7 @@ static void long_usage(int err)
 	fprintf(o," -l <n> --listentry <n>    play nth title in playlist; show whole playlist for n < 0\n");
 	fprintf(o,"        --loop <n>         loop track(s) <n> times, < 0 means infinite loop (not with --random!)\n");
 	fprintf(o,"        --keep-open        (--remote mode only) keep loaded file open after reaching end\n");
-#ifndef WIN32
 	fprintf(o,"        --timeout <n>      Timeout in seconds before declaring a stream dead (if <= 0, wait forever)\n");
-#endif
 	fprintf(o," -z     --shuffle          shuffle song-list before playing\n");
 	fprintf(o," -Z     --random           full random play\n");
 	fprintf(o,"        --no-icy-meta      Do not accept ICY meta data\n");
@@ -1208,6 +1259,9 @@ static void long_usage(int err)
 	fprintf(o,"        --index-size <n>   change size of frame index\n");
 	fprintf(o,"        --preframes  <n>   number of frames to decode in advance after seeking (to keep layer 3 bit reservoir happy)\n");
 	fprintf(o,"        --resync-limit <n> Set number of bytes to search for valid MPEG data; <0 means search whole stream.\n");
+	fprintf(o,"        --streamdump <f>   Dump a copy of input data (as read by libmpg123) to given file.\n");
+	fprintf(o,"        --icy-interval <n> Enforce ICY interval in bytes (for playing a stream dump.\n");
+	fprintf(o,"        --ignore-streamlength Ignore header info about length of MPEG streams.");
 	fprintf(o,"\noutput/processing options\n\n");
 	fprintf(o," -o <o> --output <o>       select audio output module\n");
 	fprintf(o,"        --list-modules     list the available modules\n");
@@ -1245,7 +1299,7 @@ static void long_usage(int err)
 	fprintf(o,"        --8bit             force 8 bit output\n");
 	fprintf(o,"        --float            force floating point output (internal precision)\n");
 	audio_enclist(&enclist);
-	fprintf(o," -e <c> --encoding <c>     force a specific encoding c (%s)\n", enclist != NULL ? enclist : "OOM!");
+	fprintf(o," -e <c> --encoding <c>     force a specific encoding (%s)\n", enclist != NULL ? enclist : "OOM!");
 	fprintf(o," -d n   --doublespeed n    play only every nth frame\n");
 	fprintf(o," -h n   --halfspeed   n    play every frame n times\n");
 	fprintf(o,"        --equalizer        exp.: scales freq. bands acrd. to 'equalizer.dat'\n");
@@ -1270,7 +1324,7 @@ static void long_usage(int err)
 	#ifdef HAVE_TERMIOS
 	fprintf(o," -C     --control          enable terminal control keys\n");
 	#endif
-	#ifndef GENERIG
+	#ifndef GENERIC
 	fprintf(o,"        --title            set xterm/rxvt title to filename\n");
 	#endif
 	fprintf(o,"        --long-tag         spacy id3 display with every item on a separate line\n");
@@ -1283,8 +1337,13 @@ static void long_usage(int err)
 	#ifdef HAVE_SETPRIORITY
 	fprintf(o,"        --aggressive       tries to get higher priority (nice)\n");
 	#endif
-	#ifdef HAVE_SCHED_SETSCHEDULER
+	#if defined (HAVE_SCHED_SETSCHEDULER) || defined (HAVE_WINDOWS_H)
 	fprintf(o," -T     --realtime         tries to get realtime priority\n");
+	#endif
+	#ifdef HAVE_WINDOWS_H
+	fprintf(o,"        --priority <n>     use specified process priority\n");
+	fprintf(o,"                           accepts -2 to 3 as integer arguments\n");
+	fprintf(o,"                           -2 as idle, 0 as normal and 3 as realtime.\n");
 	#endif
 	fprintf(o," -?     --help             give compact help\n");
 	fprintf(o,"        --longhelp         give this long help listing\n");

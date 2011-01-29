@@ -6,7 +6,7 @@
 
 AM_CPPFLAGS = -DPKGLIBDIR="\"$(pkglibdir)\""
 mpg123_LDADD = $(LIBLTDL) libmpg123/libmpg123.la @MODULE_OBJ@ @OUTPUT_OBJ@ @OUTPUT_LIBS@
-mpg123_LDFLAGS = @LT_LDFLAGS@ @OUTPUT_LDFLAGS@
+mpg123_LDFLAGS = @EXEC_LT_LDFLAGS@ @OUTPUT_LDFLAGS@
 # Just mpg123_INCLUDES has no effect on build! Trying that before reverting to AM_CPPFLAGS.
 INCLUDES = $(LTDLINCL) -I$(top_builddir)/src/libmpg123 -I$(top_srcdir)/src/libmpg123
 # libltdl is not mentioned here... it's not that trivial
@@ -50,17 +50,20 @@ mpg123_SOURCES = \
 	local.c \
 	playlist.c \
 	playlist.h \
+	streamdump.h \
+	streamdump.c \
 	term.c \
 	term.h \
 	wav.c \
+	win32_support.h \
 	wavhead.h \
 	xfermem.c \
 	xfermem.h
 
-if WIN32_USE_UNICODE
-    mpg123_SOURCES += \
-    win32conv.c \
-	win32conv.h
+if WIN32_CODES
+mpg123_SOURCES += \
+	win32_support.c \
+	win32_net.c
 endif
 
 # That is not nice... but it is how I manage to get the dependency on output/alsa.o without error about .deps/output/alsa.Tpo .
