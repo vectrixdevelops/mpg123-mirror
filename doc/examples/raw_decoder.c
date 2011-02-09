@@ -37,21 +37,21 @@ int main(int argc, char **argv)
 
 	if(argc < 4)
 	{
-		fprintf(stderr,"Please supply one of encodings s32, f32, s16, f16 an in and an output filename\n");
+		fprintf(stderr,"Please supply one of encodings s8, s16, s32, f32, input and output filenames\n");
 		return -1;
 	}
 
-	if(strcmp(argv[1], "s16") == 0)
+	if(strcmp(argv[1], "s8") == 0)
+		encoding = MPG123_ENC_SIGNED_8;
+	else if(strcmp(argv[1], "s16") == 0)
 		encoding = MPG123_ENC_SIGNED_16;
 	else if(strcmp(argv[1], "s32") == 0)
 		encoding = MPG123_ENC_SIGNED_32;
 	else if(strcmp(argv[1], "f32") == 0)
 		encoding = MPG123_ENC_FLOAT_32;
-	else if(strcmp(argv[1], "f64") == 0)
-		encoding = MPG123_ENC_FLOAT_64;
 	else
 	{
-		fprintf(stderr,"Please supply one of encodings s32, f32, s16, f16\n");
+		fprintf(stderr,"Please supply one of encodings s8, s16, s32, f32\n");
 		return -1;
 	}
 
