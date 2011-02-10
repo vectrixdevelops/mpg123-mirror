@@ -426,6 +426,7 @@ off_t bytes_to_samples(mpg123_handle *fr , off_t b)
 }
 
 
+#ifndef NO_32BIT
 /* Remove every fourth byte, facilitating conversion from 32 bit to 24 bit integers.
    This has to be aware of endianess, of course. */
 static void chop_fourth_byte(struct outbuffer *buf)
@@ -433,7 +434,7 @@ static void chop_fourth_byte(struct outbuffer *buf)
 	unsigned char *wpos = buf->data;
 	unsigned char *rpos = buf->data;
 #ifdef WORDS_BIGENDIAN
-	while(rpos-buf->data+4 <= buf->fill)
+	while((size_t) (rpos - buf->data + 4) <= buf->fill)
 	{
 		/* Really stupid: Copy, increment. Byte per byte. */
 		*wpos = *rpos;
@@ -445,7 +446,7 @@ static void chop_fourth_byte(struct outbuffer *buf)
 		rpos++; /* Skip the lowest byte (last). */
 	}
 #else
-	while(rpos-buf->data+4 <= buf->fill)
+	while((size_t) (rpos - buf->data + 4) <= buf->fill)
 	{
 		/* Really stupid: Copy, increment. Byte per byte. */
 		rpos++; /* Skip the lowest byte (first). */
@@ -459,6 +460,7 @@ static void chop_fourth_byte(struct outbuffer *buf)
 #endif
 	buf->fill = wpos-buf->data;
 }
+#endif
 
 void postprocess_buffer(mpg123_handle *fr)
 {
