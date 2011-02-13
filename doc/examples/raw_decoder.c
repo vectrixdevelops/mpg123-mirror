@@ -27,13 +27,13 @@ int main(int argc, char **argv)
 	FILE *in;
 	FILE *out;
 	mpgraw_state s;
-	int ret, rate, channels, enc, inc, outc;
+	int ret, rate, channels, enc, inc, outc, framec;
 	off_t len;
 	size_t left;
 	int firstframefound, encoding;
 	left = firstframefound = encoding = 0;
 
-	inc=outc=0;
+	inc=outc=framec=0;
 
 	if(argc < 4)
 	{
@@ -81,7 +81,7 @@ int main(int argc, char **argv)
 	while(1)
 	{
 		int ret = mpgraw_next(&s, rawFlagAudioFrame);
-		if(ret == MPG123_OK)
+		if(ret == MPG123_OK||ret == MPG123_NEW_FORMAT)
 		{
 			if(!firstframefound)
 			{
@@ -89,12 +89,13 @@ int main(int argc, char **argv)
 				rate = s.rate;
 				channels = s.channels;
 				enc = s.encoding;
-				fprintf(stderr, "Format: %li Hz, %i channels, encoding value %i\n", rate, channels, enc);
+				fprintf(stderr, "New format: %li Hz, %i channels, encoding value %i\n", rate, channels, enc);
 			}
 
 			ret = mpgraw_decode(&s, NULL, 0); // for now the temporary fields in s are used
 			fwrite(s.audio, sizeof(unsigned char), s.bytes, out);
 			outc += s.bytes;
+			framec++;
 		}
 		
 		if(ret == MPG123_NEED_MORE)
@@ -114,7 +115,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	fprintf(stderr, "%lu bytes in, %lu bytes out\n", (unsigned long)inc, (unsigned long)outc);
+	fprintf(stderr, "%lu bytes in, %lu bytes out, %lu frames\n", (unsigned long)inc, (unsigned long)outc, (unsigned long) framec);
 
 	fclose(out);
 	fclose(in);

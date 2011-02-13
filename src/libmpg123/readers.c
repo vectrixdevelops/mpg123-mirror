@@ -774,6 +774,13 @@ int mpgraw_open(
 				rs->error = error_code (rs);
 		}
 
+		if( !rs->error )
+		{
+			/* GAPLESS must be off when using raw api */
+			if( failed( mpg123_param (rs->mh, MPG123_REMOVE_FLAGS, MPG123_GAPLESS, 0)))
+				rs->error = error_code (rs);
+		}
+
 		if( ! rs->error )
 		{
             if(samplerate == 0)
@@ -878,7 +885,6 @@ void mpgraw_seek(
 	rs->this_frame = 0;
 	rs->next_frame = 0;
 	rs->pos = 0;
-	rs->new_format = FALSE;
 	rs->mh->rdat.skip = 0;
 	rs->mh->rdat.advance_this_frame = FALSE;
 
@@ -927,46 +933,29 @@ int mpgraw_next(
 		if( ! rs->error )
 		{
 			rs->error = mpg123_framebyframe_next(mh);
-			if( rs->error == MPG123_OK || rs->error == MPG123_DONE )
+			if( rs->error == MPG123_NEW_FORMAT )
+			{
+				/* pick up new format information */
+				mpg123_getformat( mh, &rs->rate, &rs->channels, &rs->encoding );
+				rs->frame_count = spf(mh);
+			}
+			if( rs->error == MPG123_OK ||
+				rs->error == MPG123_DONE ||
+				rs->error == MPG123_NEW_FORMAT)
 			{
 				/* Get the whole frame info */
 				mpg123_info( mh, &rs->frameinfo );
 
 				/* Raw users never want to see MPG123_DONE */
-				rs->error = MPG123_OK;
+				if( rs->error == MPG123_DONE)
+					rs->error = MPG123_OK;
 
 				/* Exit loop */
 				break;
 			}
-			else if( rs->error == MPG123_NEW_FORMAT )
-			{
-				/* VFALCO: Eat the new format. Not sure if this is right
-				 * Is this the format of the actual input?
-				 * Is this before or after NTOM?
-				 * Do we have both sets of values? we should make them available if thats the case 
-				 * Ask Thomas about this */
-				mpg123_getformat( mh, &rs->rate, &rs->channels, &rs->encoding );
-
-				/* Store the number of frames for caller convenience */
-				rs->frame_count = spf(mh);
-
-				rs->error = MPG123_OK;
-				rs->new_format = TRUE;
-			}
 		}
 	}
 	while( ! rs->error );
-
-	if( rs->error == MPG123_OK )
-	{
-		/* notify new format if we got it earlier */
-		if( rs->new_format )
-		{
-			rs->new_format = FALSE;
-			rs->error = MPG123_NEW_FORMAT;
-		}
-	}
-
 
 	return rs->error;
 }
