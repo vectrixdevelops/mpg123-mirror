@@ -32,7 +32,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		
 		mpg123_topen(m, argv[i]);
 
-		a = mpg123_length(m);		
+		a = mpg123_length(m);
 		mpg123_scan(m);
 		b = mpg123_length(m);
 
