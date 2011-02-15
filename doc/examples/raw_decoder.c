@@ -37,7 +37,7 @@ int main(int argc, char **argv)
 
 	if(argc < 2)
 	{
-		fprintf(stderr,"Please supply one of encodings s8, s16, s32, f32, input and output filenames (file names optional, using stdin/stdout as default)\n");
+		fprintf(stderr,"Please supply one of encodings s8, s16, s32, s24, f32, input and output filenames (file names optional, using stdin/stdout as default)\n");
 		return -1;
 	}
 
@@ -47,6 +47,8 @@ int main(int argc, char **argv)
 		encoding = MPG123_ENC_SIGNED_16;
 	else if(strcmp(argv[1], "s32") == 0)
 		encoding = MPG123_ENC_SIGNED_32;
+	else if(strcmp(argv[1], "s24") == 0)
+		encoding = MPG123_ENC_SIGNED_24;
 	else if(strcmp(argv[1], "f32") == 0)
 		encoding = MPG123_ENC_FLOAT_32;
 	else
