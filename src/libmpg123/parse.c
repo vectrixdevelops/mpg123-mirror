@@ -1157,3 +1157,4 @@ int get_songlen(mpg123_handle *fr,int no)
 	tpf = mpg123_tpf(fr);
 	return (int) (no*tpf);
 }
+

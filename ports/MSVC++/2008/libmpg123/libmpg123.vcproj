@@ -1141,6 +1141,14 @@
 			>
 		</File>
 		<File
+			RelativePath="..\..\..\..\src\libmpg123\raw_api.c"
+			>
+		</File>
+		<File
+			RelativePath="..\..\..\..\src\libmpg123\raw_api.h"
+			>
+		</File>
+		<File
 			RelativePath="..\..\..\..\src\libmpg123\reader.h"
 			>
 		</File>
