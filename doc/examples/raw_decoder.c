@@ -35,9 +35,9 @@ int main(int argc, char **argv)
 
 	inc=outc=framec=0;
 
-	if(argc < 4)
+	if(argc < 2)
 	{
-		fprintf(stderr,"Please supply one of encodings s8, s16, s32, f32, input and output filenames\n");
+		fprintf(stderr,"Please supply one of encodings s8, s16, s32, f32, input and output filenames (file names optional, using stdin/stdout as default)\n");
 		return -1;
 	}
 
@@ -55,14 +55,14 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	in = fopen(argv[2], "rb");
+	in = argc >= 3 ? fopen(argv[2], "rb") : stdin;
 	if(in == NULL)
 	{
 		fprintf(stderr, "Unable to open input file %s\n", argv[1]);
 		return -1;
 	}
 
-	out = fopen(argv[3], "wb");
+	out = argc >= 4 ? fopen(argv[3], "wb") : stdout;
 	if(out == NULL)
 	{
 		fprintf(stderr, "Unable to open output file %s\n", argv[2]);
