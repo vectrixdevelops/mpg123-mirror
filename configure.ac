@@ -1872,7 +1872,7 @@ if test "x$win32_specific_codes" = xenabled && test "x$host_os" != "xcygwin"; th
   if test "x$win32_unicode" = xenabled; then
     AC_MSG_RESULT([yes])
     AC_MSG_CHECKING([if Unicode functions working])
-    AC_LINK_IFELSE([[
+    AC_LINK_IFELSE([AC_LANG_SOURCE([
       #include <windows.h>
       #include <stdlib.h>
       int main()
@@ -1881,9 +1881,9 @@ if test "x$win32_specific_codes" = xenabled && test "x$host_os" != "xcygwin"; th
         WideCharToMultiByte (0, 0, NULL, 0, NULL, 0, NULL, NULL);
         return 0;
       }
-    ]], [win32_wide_working=yes], [win32_winver_bump=yes])
+    ])], [win32_wide_working=yes], [win32_winver_bump=yes])
     if test "x$win32_wide_working" = xno; then
-      AC_LINK_IFELSE([[
+      AC_LINK_IFELSE([AC_LANG_SOURCE([
         #define WINVER 0x501
         #define _WIN32_WINNT 0x501
         #include <windows.h>
@@ -1894,7 +1894,7 @@ if test "x$win32_specific_codes" = xenabled && test "x$host_os" != "xcygwin"; th
           WideCharToMultiByte (0, 0, NULL, 0, NULL, 0, NULL, NULL);
           return 0;
         }
-      ]], [win32_wide_working=yes], [AC_MSG_RESULT([no])])
+      ])], [win32_wide_working=yes], [AC_MSG_RESULT([no])])
     fi
     if test "x$win32_wide_working" = xyes; then
       AC_MSG_RESULT([yes])
@@ -1912,7 +1912,7 @@ if test "x$win32_specific_codes" = xenabled && test "x$host_os" != "xcygwin"; th
   AC_MSG_CHECKING([if winsock2 API is available])
     wsoldlibs="$LIBS"
     LIBS="$LIBS -lws2_32"
-    AC_LINK_IFELSE([[
+    AC_LINK_IFELSE([AC_LANG_SOURCE([
       #include <winsock2.h>
       #include <ws2tcpip.h>
       #include <stdlib.h>
@@ -1922,10 +1922,10 @@ if test "x$win32_specific_codes" = xenabled && test "x$host_os" != "xcygwin"; th
         freeaddrinfo(NULL);
         return 0;
       }
-    ]], [win32_sockets_working=yes], [win32_winver_bump=yes])
+    ])], [win32_sockets_working=yes], [win32_winver_bump=yes])
     if test "x$win32_sockets_working" = "xno"; then
       AC_MSG_CHECKING([deeper if winsock2 API is available])
-      AC_LINK_IFELSE([
+      AC_LINK_IFELSE([AC_LANG_SOURCE([
         #define WINVER 0x501
         #define _WIN32_WINNT 0x501
         #include <winsock2.h>
@@ -1937,7 +1937,7 @@ if test "x$win32_specific_codes" = xenabled && test "x$host_os" != "xcygwin"; th
           freeaddrinfo(NULL);
           return 0;
         }
-      ], [win32_sockets_working=yes], [AC_MSG_RESULT([no])])
+      ])], [win32_sockets_working=yes], [AC_MSG_RESULT([no])])
     fi
     if test "x$win32_sockets_working" = "xyes"; then
       AC_MSG_RESULT([yes])
