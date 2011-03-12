@@ -141,7 +141,7 @@ int mpgraw_feed(
 			rs->this_frame = 0;
 
 			rs->buffer = buffer;
-			rs->bufend = ((char*)buffer) + bytes;
+			rs->bufend = ((unsigned char*)buffer) + bytes;
 			rs->this_frame = buffer;
 			rs->next_frame = buffer;
 			rs->pos=0;
