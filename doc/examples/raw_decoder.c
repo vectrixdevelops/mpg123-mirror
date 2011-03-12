@@ -85,9 +85,8 @@ int main(int argc, char **argv)
 		int ret = mpgraw_next(&s, rawFlagAudioFrame);
 		if(ret == MPG123_OK||ret == MPG123_NEW_FORMAT)
 		{
-			if(!firstframefound)
+			if(ret == MPG123_NEW_FORMAT)
 			{
-				firstframefound = 1;
 				rate = s.rate;
 				channels = s.channels;
 				enc = s.encoding;
@@ -103,7 +102,7 @@ int main(int argc, char **argv)
 		if(ret == MPG123_NEED_MORE)
 		{
 			left = s.bufend - s.next_frame;
-			memcpy(buf, buf+(INBUFF-left), left);
+			memmove(buf, buf+(INBUFF-left), left);
 			len = fread(buf+left, sizeof(unsigned char), INBUFF-left, in);
 			if(len <= 0)
 				break;

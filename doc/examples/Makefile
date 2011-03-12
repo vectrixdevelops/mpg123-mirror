@@ -1,4 +1,4 @@
-targets = feedseek mpg123_to_wav mpg123_to_wav_replaced_io scan id3dump mpglib dump_seekindex
+targets = feedseek mpg123_to_wav mpg123_to_wav_replaced_io scan id3dump mpglib dump_seekindex raw_decoder
 
 all: $(targets)
 
@@ -6,10 +6,16 @@ all: $(targets)
 #MPG123_CFLAGS  := $(shell pkg-config --cflags libmpg123_64)
 #MPG123_LDFLAGS := $(shell pkg-config --libs   libmpg123_64)
 # This works on sane setups where off_t is off_t, and just that.
-MPG123_CFLAGS  := $(shell pkg-config --cflags libmpg123)
-MPG123_LDFLAGS := $(shell pkg-config --libs   libmpg123)
+ifeq ($(MPG123_PREFIX),)
+  MPG123_CFLAGS  := $(shell pkg-config --cflags libmpg123)
+  MPG123_LDFLAGS := $(shell pkg-config --libs   libmpg123)
+else # Yeah, that's with GNU/Linux in mind, at least GNU ld ...
+  MPG123_CFLAGS  := -I$(MPG123_PREFIX)/include
+  MPG123_LDFLAGS := -L$(MPG123_PREFIX)/lib -Wl,-rpath $(MPG123_PREFIX)/lib -lmpg123
+endif
 SND_CFLAGS     := $(shell pkg-config --cflags sndfile)
 SND_LDFLAGS    := $(shell pkg-config --libs   sndfile)
+
 
 # Oder of libs not that important here...
 compile = $(CC) $(CPPFLAGS) $(CFLAGS) $(MPG123_CFLAGS)
@@ -35,6 +41,9 @@ dump_seekindex: dump_seekindex.c
 
 mpglib: mpglib.c
 	$(compile) -o mpglib mpglib.c $(linkflags)
+
+raw_decoder: raw_decoder.c
+	$(compile) -o $@ $< $(linkflags)
 
 clean:
 	rm -vf $(targets)
