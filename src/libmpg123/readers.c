@@ -9,7 +9,6 @@
 */
 
 #include "mpg123lib_intern.h"
-#include "raw_api.h"
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -879,12 +878,6 @@ static off_t bad_tell(mpg123_handle *mh) bugger_off
 static void bad_rewind(mpg123_handle *mh){}
 #undef bugger_off
 
-#define READER_STREAM			0
-#define READER_ICY_STREAM		1
-#define READER_FEED				2
-#define READER_RAW				3
-#define READER_BUF_STREAM		4
-#define READER_BUF_ICY_STREAM	5
 static struct reader readers[] =
 {
 	{ /* READER_STREAM */
@@ -937,20 +930,6 @@ static struct reader readers[] =
 		generic_tell,
 		stream_rewind,
 		buffered_forget
-	},
-	{ /* READER_RAW */
-		raw_init,
-		raw_close,
-		raw_read,
-		generic_head_read,
-		generic_head_shift,
-		raw_skip_bytes,
-		generic_read_frame_body,
-		raw_back_bytes,
-		raw_seek_frame,
-		raw_tell,
-		raw_rewind,
-		raw_forget
 	},
 	{ /* READER_BUF_STREAM */
 		default_init,
@@ -1218,31 +1197,4 @@ static ssize_t io_read(struct reader_data *rdat, void *buf, size_t count)
 	}
 	else
 	return rdat->read(rdat->filept, buf, count);
-}
-
-int open_raw(mpg123_handle *fr)
-{
-	debug("raw reader");
-#ifdef NO_RAW
-	error("Raw readers not supported in this build.");
-	fr->err = MPG123_MISSING_FEATURE;
-	return -1;
-#else
-	/* VFALCO: I have no idea why this is needed but we crash otherwise.
-	 * And it has to happen here, place it any farther down and we crash. */
-	frame_reset( fr );
-#ifndef NO_ICY
-	if(fr->p.icy_interval > 0)
-	{
-		if(NOQUIET) error("Raw reader cannot do ICY parsing!");
-
-		return -1;
-	}
-	clear_icy(&fr->icy);
-#endif
-	fr->rd = &readers[READER_RAW];
-	fr->rdat.flags = 0;
-	if(fr->rd->init(fr) < 0) return -1;
-	return 0;
-#endif /* NO_FEEDER */
 }

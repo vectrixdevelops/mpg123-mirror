@@ -3,7 +3,7 @@
 
 	copyright 2011 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
-	initially written by Vincent Falco
+	initially written by Vincent Falco, then meanly beaten up by Thomas Orgis...
 */
 
 #include "mpg123lib_intern.h"
@@ -23,9 +23,6 @@
 
 #include "compat.h"
 #include "debug.h"
-
-/* in theory this should be 2896 */
-#define MIN_FEED_BYTES 0
 
 /* VFALCO: Convert an ambiguous return value into a clear description */
 static int failed( int returnValue )
@@ -101,10 +98,10 @@ int mpgraw_open(
 
 		if( ! rs->error )
 		{
-			/* Need to set this before open_raw() */
-			rs->mh->rdat.rs = rs;
-
-			if( failed( open_raw( rs->mh ) ) )
+			mpg123_param(rs->mh, MPG123_FEEDPOOL, 2, 0.);
+			mpg123_param(rs->mh, MPG123_FEEDBUFFER, 16384, 0.);
+			/* One might want to tune the number and size of internal buffers. */
+			if( failed( mpg123_open_feed( rs->mh ) ) )
 				rs->error = error_code( rs );
 		}
 		
@@ -134,59 +131,24 @@ int mpgraw_feed(
 	void *buffer,
 	size_t bytes )
 {
-	if( buffer )
-	{
-		if( bytes >= MIN_FEED_BYTES )
-		{
-			rs->this_frame = 0;
-
-			rs->buffer = buffer;
-			rs->bufend = ((unsigned char*)buffer) + bytes;
-			rs->this_frame = buffer;
-			rs->next_frame = buffer;
-			rs->pos=0;
-
-			rs->error = MPG123_OK;
-		}
-		else
-		{
-			rs->error = MPG123_BAD_BUFFER;
-		}
-	}
-	else
-	{
-		rs->error = MPG123_NULL_BUFFER;
-	}
-
-	return rs->error;
+	return mpg123_feed(rs->mh, buffer, bytes);
 }
 
 /*----------------------------------------------------------------------------*/
 
 void mpgraw_seek(
 	mpgraw_state* rs,
-	size_t current_offset )
+	off_t current_offset )
 {
-	/* clear bit reservoir */
+	/* Let's be brutal: Clean up the internal buffering by simply closing/reopening.
+	   Then set the file position... for whateever use it has. */
+	mpg123_close(rs->mh);
+	if( failed( mpg123_open_feed( rs->mh ) ) )
+		rs->error = error_code( rs );
+	else
+		rs->error = MPG123_OK;
 
-	/* need to do this because frame_outs() gets called with the */
-	/* frame number and its successor in mpg123_decode_frame() */
-	rs->mh->num = 0;
-
-	/* VFALCO: Not sure what this is all about */
-	/* mh->buffer.fill=0; */
-	/* mh->to_decode=FALSE; */
-	/* frame_reset(mh); */
-
-	rs->buffer = 0;
-	rs->bufend = 0;
-	rs->this_frame = 0;
-	rs->next_frame = 0;
-	rs->pos = 0;
-	rs->mh->rdat.skip = 0;
-	rs->mh->rdat.advance_this_frame = FALSE;
-
-	rs->error = MPG123_OK;
+	feed_set_pos(rs->mh, current_offset);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -199,35 +161,9 @@ int mpgraw_next(
 
 	rs->error = MPG123_OK;
 
+	/* That ripped loop is funky now. */
 	do
 	{
-		/* Handle skip */
-		if( mh->rdat.skip > 0 )
-		{
-			ssize_t needed = mh->rdat.skip;
-			ssize_t available = mh->rdat.rs->bufend - mh->rdat.rs->next_frame;
-
-			if( available == needed )
-			{
-				available = needed;
-			}
-
-			if( available > needed )
-			{
-				mh->rdat.rs->next_frame += needed;
-				mh->rdat.rs->pos += needed;
-				mh->rdat.skip = 0;
-				mh->rdat.rs->this_frame = mh->rdat.rs->next_frame;
-			}
-			else
-			{
-				mh->rdat.rs->next_frame += available;
-				mh->rdat.rs->pos += available;
-				mh->rdat.skip = needed - available;
-				rs->error = MPG123_NEED_MORE;
-			}
-		}
-
 		if( ! rs->error )
 		{
 			rs->error = mpg123_framebyframe_next(mh);
@@ -243,6 +179,8 @@ int mpgraw_next(
 			{
 				/* Get the whole frame info */
 				mpg123_info( mh, &rs->frameinfo );
+				if(failed(mpg123_framedata( mh, &rs->header, &rs->body, &rs->body_bytes)))
+				rs->error = MPG123_ERR;
 
 				/* Raw users never want to see MPG123_DONE */
 				if( rs->error == MPG123_DONE)
@@ -318,148 +256,3 @@ void mpgraw_close(
 	memset( rs, 0, sizeof( *rs ) );
 }
 
-/*******************************************************************************
- *
- * RAW API (reader)
- *
- ******************************************************************************/
-
-int raw_init(mpg123_handle *fr)
-{
-	fr->rdat.rs->buffer = 0;
-	fr->rdat.rs->bufend = 0;
-	fr->rdat.rs->next_frame = 0;
-	fr->rdat.rs->pos = 0;
-	fr->rdat.skip = 0;
-	/* VFALCO: hack to make sure we never see MPG123_DONE */
-	fr->rdat.filepos = 0;
-	fr->rdat.filelen = 1;
-/*	fr->rdat.flags |= READER_BUFFERED; */
-	return 0;
-}
-
-/*----------------------------------------------------------------------------*/
-
-ssize_t raw_read(mpg123_handle *fr, unsigned char *out, ssize_t count)
-{
-	ssize_t gotcount = fr->rdat.rs->bufend - fr->rdat.rs->next_frame;
-
-	if( fr->rdat.advance_this_frame )
-	{
-		fr->rdat.rs->this_frame = fr->rdat.rs->next_frame;
-		fr->rdat.advance_this_frame = FALSE;
-	}
-
-	if( gotcount >= count )
-	{
-		gotcount = count;
-		memcpy( out, fr->rdat.rs->next_frame, count );
-		fr->rdat.rs->next_frame += count;
-		fr->rdat.rs->pos += count;
-	}
-	else
-	{
-		/* rewind */
-		fr->rdat.rs->pos -= fr->rdat.rs->next_frame - fr->rdat.rs->this_frame;
-		fr->rdat.rs->next_frame = fr->rdat.rs->this_frame;
-		gotcount = MPG123_NEED_MORE;
-	}
-	return gotcount;
-}
-
-/*----------------------------------------------------------------------------*/
-
-void raw_close(mpg123_handle *fr)
-{
-}
-
-/*----------------------------------------------------------------------------*/
-
-off_t raw_tell(mpg123_handle *fr)
-{
-	/* this returns the offset from the beginning of the
-	 * buffer rather than the global position within the input */
-	return fr->rdat.rs->pos;
-}
-
-/*----------------------------------------------------------------------------*/
-
-/* This does not (fully) work for non-seekable streams... You have to check for that flag, pal! */
-void raw_rewind(mpg123_handle *fr)
-{
-	/* can't work for raw */
-}
-
-/*----------------------------------------------------------------------------*/
-
-/* returns reached position... negative ones are bad... */
-off_t raw_skip_bytes(mpg123_handle *fr,off_t len)
-{
-	ssize_t avail = fr->rdat.rs->bufend - fr->rdat.rs->next_frame;
-
-	if( fr->rdat.advance_this_frame )
-	{
-		fr->rdat.rs->this_frame = fr->rdat.rs->next_frame;
-		fr->rdat.advance_this_frame = FALSE;
-	}
-
-	if( len < avail )
-	{
-		fr->rdat.rs->next_frame += len;
-		fr->rdat.rs->pos += len;
-		return fr->rdat.rs->pos;
-	}
-	else
-	{
-		fr->rdat.rs->next_frame += avail;
-		fr->rdat.rs->pos += avail;
-		fr->rdat.skip = len - avail;
-		return READER_MORE;
-	}
-}
-
-/*----------------------------------------------------------------------------*/
-
-int raw_back_bytes(mpg123_handle *fr, off_t bytes)
-{
-	if( fr->rdat.advance_this_frame )
-	{
-		fr->rdat.rs->this_frame = fr->rdat.rs->next_frame;
-		fr->rdat.advance_this_frame = FALSE;
-	}
-
-	if( bytes>=0 )
-	{
-		/* Which one is right? */
-		ssize_t avail=fr->rdat.rs->next_frame-fr->rdat.rs->buffer;
-		/*ssize_t avail=fr->rdat.rs->next_frame-fr->rdat.rs->this_frame; */
-		if( bytes<=avail )
-		{
-			fr->rdat.rs->next_frame-=bytes;
-			fr->rdat.rs->pos-=bytes;
-			return fr->rdat.rs->pos;
-		}
-		else
-		{
-			return READER_ERROR;
-		}
-	}
-	else
-	{
-		return raw_skip_bytes(fr, -bytes) >= 0 ? 0 : READER_ERROR;
-	}
-}
-
-/*----------------------------------------------------------------------------*/
-
-int raw_seek_frame(mpg123_handle *fr, off_t num)
-{
-	return READER_ERROR;
-}
-
-/*----------------------------------------------------------------------------*/
-
-void raw_forget(mpg123_handle *fr)
-{
-	fr->rdat.advance_this_frame = TRUE;
-}

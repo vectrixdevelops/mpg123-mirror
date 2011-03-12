@@ -1081,15 +1081,12 @@ typedef struct mpgraw_state
 	int error;
 	mpg123_handle *mh; /* handle to mpg123 state */
 
-	/* Input buffer state */
-	off_t pos;
-	unsigned char const *buffer; /* start of provided input buffer */
-	unsigned char const *bufend; /* one past the last byte of buffer */
-	unsigned char const *this_frame; /* pointer within buffer, to current frame */
-	unsigned char const *next_frame; /* area of input we will read from next */
-
 	/* Current input frame, after a valid call to mpgraw_next() */
 	struct mpg123_frameinfo frameinfo;
+	unsigned long header; /* The 4 least significant bytes make up the MPEG header. */
+	unsigned char *body;  /* Pointer to the frame body as read into the mpg123 handle. */
+	/* frameinfo.framesize-4 is the number of bytes in the body. This copy here is redundant. */
+	size_t body_bytes;
 
 	/* Decoded output data, after a valid call to mpgraw_decode() */
 	int frame_count; /* number of mono or stereo samples in the current mp3 frame */
@@ -1121,10 +1118,8 @@ EXPORT int mpgraw_open(
 /*----------------------------------------------------------------------------*/
 
 /*
- * Provide a fresh input buffer to the raw stream. In order to function
- * correctly there is a minimum input size requirement. If the buffer is less
- * than the minimum requirement, returns MPG123_BAD_BUFFER, else returns
- * MPG123_OK. The decoder assumes that consecutive calls to mpgraw_feed()
+ * Provide a fresh input buffer to the raw stream, just like mpg123_feed().
+ * The decoder assumes that consecutive calls to mpgraw_feed()
  * represent logically consecutive input from the same source. If the
  * caller wants to switch to a different sources, or to a non consecutive
  * location within the same input, it is necessary to call mpgraw_seek()
@@ -1146,11 +1141,13 @@ EXPORT int mpgraw_feed(
  * corresponding to the beginning of the next input buffer. This value is
  * used to keep track of the location in the input, and for reporting the
  * frame_offset value.
+ * TODO: What use does current_offset really have? Do we deal with frame index?
+ * The current implementaion just clears everything and begins as if for a new stream.
  *
  */
 EXPORT void mpgraw_seek(
 	mpgraw_state* rs,
-	size_t current_offset );
+	off_t current_offset );
 
 /*----------------------------------------------------------------------------*/
 
@@ -1181,9 +1178,11 @@ EXPORT int mpgraw_next(
  * if the output buffer provided is too small. Does not change the current
  * position in the input.
  *
+ * Not yet:
  * Id3 tag and Id3 frames are written in their entirety to the destination,
  * which must be large enough to accomodate the tag.
  *
+ * Also... why not just use rs->audio? Why another memcpy?
  */
 EXPORT int mpgraw_decode(
 	mpgraw_state* rs,

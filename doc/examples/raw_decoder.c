@@ -29,9 +29,7 @@ int main(int argc, char **argv)
 	mpgraw_state s;
 	int ret, rate, channels, enc, inc, outc, framec;
 	off_t len;
-	size_t left;
-	int firstframefound, encoding;
-	left = firstframefound = encoding = 0;
+	int encoding = 0;
 
 	inc=outc=framec=0;
 
@@ -101,13 +99,11 @@ int main(int argc, char **argv)
 		
 		if(ret == MPG123_NEED_MORE)
 		{
-			left = s.bufend - s.next_frame;
-			memmove(buf, buf+(INBUFF-left), left);
-			len = fread(buf+left, sizeof(unsigned char), INBUFF-left, in);
+			len = fread(buf, sizeof(unsigned char), INBUFF, in);
 			if(len <= 0)
 				break;
 			inc += len;
-			ret = mpgraw_feed(&s, buf, len+left);
+			ret = mpgraw_feed(&s, buf, len);
 		}
 		else if(ret == MPG123_ERR)
 		{

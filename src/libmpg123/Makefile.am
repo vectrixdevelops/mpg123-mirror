@@ -59,7 +59,6 @@ libmpg123_la_SOURCES = \
 	optimize.h \
 	optimize.c \
 	readers.c \
-	raw_api.h \
 	raw_api.c \
 	tabinit.c \
 	libmpg123.c \

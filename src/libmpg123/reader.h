@@ -120,10 +120,9 @@ void open_bad(mpg123_handle *);
 #define READER_STREAM 0
 #define READER_ICY_STREAM 1
 #define READER_FEED       2
-#define READER_RAW		  3
 /* These two add a little buffering to enable small seeks for peek ahead. */
-#define READER_BUF_STREAM 4
-#define READER_BUF_ICY_STREAM 5
+#define READER_BUF_STREAM 3
+#define READER_BUF_ICY_STREAM 4
 
 #ifdef READ_SYSTEM
 #define READER_SYSTEM 6
