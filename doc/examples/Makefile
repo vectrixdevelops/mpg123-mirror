@@ -1,4 +1,4 @@
-targets = feedseek mpg123_to_wav mpg123_to_wav_replaced_io scan id3dump mpglib dump_seekindex raw_decoder
+targets = feedseek mpg123_to_wav mpg123_to_wav_replaced_io scan id3dump mpglib  dump_seekindex extract_frames raw_decoder
 
 all: $(targets)
 
@@ -41,6 +41,9 @@ dump_seekindex: dump_seekindex.c
 
 mpglib: mpglib.c
 	$(compile) -o mpglib mpglib.c $(linkflags)
+
+extract_frames: extract_frames.c
+	$(compile) -o $@ $< $(linkflags)
 
 raw_decoder: raw_decoder.c
 	$(compile) -o $@ $< $(linkflags)
