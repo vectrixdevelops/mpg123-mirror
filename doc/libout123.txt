@@ -1,0 +1,20 @@
+Creating libout123 out of mpg123's conglomeration of audio output methods
+=========================================================================
+
+The goal is a simplistic audio output API that can be re-used in other applications (like Thomas' DerMixD). Some reasons for not just ditching it all for PortAudio or SDL or whatnot:
+
+1. The code is there and works.
+2. You want to choose what is "the" cross-platform audio API to choose?
+3. mpg123 wants to stay self-contained.
+
+I justify such a lib also with the restricted scope: It is just for plain, dumb output. Open device with some format and write. I don't intend to add recording or too fancy tuning of things. It should "just work". This means that JACK output, for example, will stay rather rudimentary and you are going to write directly to the JACK API if you are serious about playing with pro audio under Linux.
+
+Perhaps, and that is a very big perhaps, there might be support for stuff like JACK transport positioning in future ... but ... well, nah, That's really too special.
+
+So, I am going to rip out the output code and modules, cram them together in a src/libout123 subdirectory, and hack some glue around it to make it a library. The build system is giving the first headaches ... dammit, we got stuff. Have to keep the legacy_module stuff working ... and disentangle the headers.
+
+
+TODO
+	- Remove mpg123app.h from modules.
+	- Dissect audio.c|h and libmpg123.c|h to do their respective work, only.
+	- Finish the build system crap.
