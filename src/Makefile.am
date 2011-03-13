@@ -5,15 +5,15 @@
 ## initially written by Nicholas J. Humfrey
 
 AM_CPPFLAGS = -DPKGLIBDIR="\"$(pkglibdir)\""
-mpg123_LDADD = $(LIBLTDL) libmpg123/libmpg123.la @MODULE_OBJ@ @OUTPUT_OBJ@ @OUTPUT_LIBS@
+mpg123_LDADD = $(LIBLTDL) libmpg123/libmpg123.la libout123/libout123.la
 mpg123_LDFLAGS = @EXEC_LT_LDFLAGS@ @OUTPUT_LDFLAGS@
 # Just mpg123_INCLUDES has no effect on build! Trying that before reverting to AM_CPPFLAGS.
 INCLUDES = $(LTDLINCL) -I$(top_builddir)/src/libmpg123 -I$(top_srcdir)/src/libmpg123
 # libltdl is not mentioned here... it's not that trivial
-mpg123_DEPENDENCIES = @OUTPUT_OBJ@ @MODULE_OBJ@ libmpg123/libmpg123.la
+mpg123_DEPENDENCIES = libmpg123/libmpg123.la libout123/libout123.la
 
-SUBDIRS = output libmpg123
-EXTRA_DIST = legacy_module.c module.c sfifo.c sfifo.h
+SUBDIRS = libmpg123 libout123
+EXTRA_DIST = sfifo.c sfifo.h
 
 
 CLEANFILES = *.a
@@ -41,7 +41,6 @@ mpg123_SOURCES = \
 	resolver.h \
 	genre.h \
 	genre.c \
-	module.h \
 	mpg123.c \
 	mpg123app.h \
 	metaprint.c \

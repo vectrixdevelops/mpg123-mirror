@@ -168,13 +168,16 @@ if test x"$modules" = xdisabled
 then
 	echo "Modules still disabled..."
 	MODULE_OBJ="legacy_module.\$(OBJEXT)"
+	MODULE_LOBJ="legacy_module.lo"
 else
 	MODULE_OBJ="module.\$(OBJEXT)"
+	MODULE_LOBJ="module.lo"
 fi
 
 AM_CONDITIONAL( [HAVE_MODULES], [test "x$modules" = xenabled] )
 
 AC_SUBST(MODULE_OBJ)
+AC_SUBST(MODULE_LOBJ)
 AC_SUBST(LT_LDFLAGS)
 AC_SUBST(EXEC_LT_LDFLAGS)
 
@@ -1626,6 +1629,7 @@ fi
 default_output_modules=$default_output_module
 
 OUTPUT_OBJ=
+OUTPUT_LOBJ=
 OUTPUT_MOD=
 OUTPUT_CFLAGS=
 OUTPUT_LIBS=
@@ -1636,7 +1640,8 @@ if test "x$modules" = xdisabled
 then
 	echo "Preparing static output $default_output_module"
 	OUTPUT_MOD="$default_output_module"
-	OUTPUT_OBJ="output/$default_output_module.\$(OBJEXT)"
+	OUTPUT_OBJ="modules/$default_output_module.\$(OBJEXT)"
+	OUTPUT_LOBJ="modules/$default_output_module.lo"
 	OUTPUT_CFLAGS=
 	OUTPUT_LIBS=
 	# That feels stupid... what about hashed arrays?
@@ -1766,6 +1771,7 @@ AC_DEFINE_UNQUOTED( DEFAULT_OUTPUT_MODULE, "$default_output_modules", [The defau
 
 
 AC_SUBST(OUTPUT_OBJ)
+AC_SUBST(OUTPUT_LOBJ)
 AC_SUBST(OUTPUT_MOD)
 AC_SUBST(OUTPUT_CFLAGS)
 AC_SUBST(OUTPUT_LIBS)
