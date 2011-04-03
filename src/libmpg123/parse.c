@@ -720,7 +720,7 @@ init_resync:
 		{
 			if(NOQUIET) error("decode header failed - goto resync");
 			/* return 0; */
-			goto init_resync;
+			goto read_again;
 		}
 		else if(ret < 0){ debug("need more?"); goto read_frame_bad; }
 	}

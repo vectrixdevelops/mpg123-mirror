@@ -1,3 +1,7 @@
+1.13.3
+---
+- Fix an endless loop on bad headers, bug 3267863.
+
 1.13.2
 ---
 - Updated .NET wrapper (MPG123_SKIP_ID3V2, encsize and mpg123_strlen functions) by Malcolm Boczek.
