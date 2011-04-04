@@ -1,7 +1,7 @@
 1.13.3
 ---
 - Fix an endless loop on bad headers, bug 3267863.
-- Prevent a compiler warning about gain_offset with gcc 4.6 .
+- Prevent compiler warnings about unused variables with gcc 4.6 .
 
 1.13.2
 ---
