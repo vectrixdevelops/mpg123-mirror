@@ -600,8 +600,13 @@ init_resync:
 		This whole logic is going to be reworked, code untangled, but 1.13.3 needs some minimal patching.
 		So we try to fully decode the header (which includes free format size checking), not just check.
 	*/
-	ret = decode_header(fr, newhead);
-	if(ret < 0) goto read_frame_bad;
+	/* Check in advance to avoid premature error message in decode_header() */
+	ret = head_check(newhead);
+	if(ret)
+	{
+		ret = decode_header(fr, newhead);
+		if(ret < 0) goto read_frame_bad;
+	}
 
 	if(!ret)
 	{
