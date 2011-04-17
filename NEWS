@@ -2,6 +2,7 @@
 ---
 - Fix an endless loop on bad headers, bug 3267863.
 - Prevent compiler warnings about unused variables with gcc 4.6 .
+- Fix return value handling of getaddrinfo(), bug 3288333.
 
 1.13.2
 ---
