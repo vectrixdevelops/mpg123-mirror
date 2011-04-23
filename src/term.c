@@ -27,6 +27,10 @@ static int term_enable = 0;
 static struct termios old_tio;
 int seeking = FALSE;
 
+/* Buffered key from a signal or whatnot.
+   We ignore the null character... */
+static char prekey = 0;
+
 /* Hm, next step would be some system in this, plus configurability...
    Two keys for everything? It's just stop/pause for now... */
 struct keydef { const char key; const char key2; const char* desc; };
@@ -58,49 +62,65 @@ struct keydef term_help[] =
 };
 
 void term_sigcont(int sig);
+static void term_sigusr(int sig);
 
 /* This must call only functions safe inside a signal handler. */
 int term_setup(struct termios *pattern)
 {
-  struct termios tio = *pattern;
+	struct termios tio = *pattern;
 
-  signal(SIGCONT, term_sigcont);
+	/* One might want to use sigaction instead. */
+	signal(SIGCONT, term_sigcont);
+	signal(SIGUSR1, term_sigusr);
+	signal(SIGUSR2, term_sigusr);
 
-  tio.c_lflag &= ~(ICANON|ECHO); 
-  tio.c_cc[VMIN] = 1;
-  tio.c_cc[VTIME] = 0;
-  return tcsetattr(0,TCSANOW,&tio);
+	tio.c_lflag &= ~(ICANON|ECHO); 
+	tio.c_cc[VMIN] = 1;
+	tio.c_cc[VTIME] = 0;
+	return tcsetattr(0,TCSANOW,&tio);
 }
 
 void term_sigcont(int sig)
 {
-  term_enable = 0;
+	term_enable = 0;
 
-  if (term_setup(&old_tio) < 0) {
-    fprintf(stderr,"Can't set terminal attributes\n");
-    return;
-  }
+	if (term_setup(&old_tio) < 0)
+	{
+		fprintf(stderr,"Can't set terminal attributes\n");
+		return;
+	}
 
-  term_enable = 1;
+	term_enable = 1;
+}
+
+static void term_sigusr(int sig)
+{
+	switch(sig)
+	{
+		case SIGUSR1: prekey=*param.term_usr1; break;
+		case SIGUSR2: prekey=*param.term_usr2; break;
+	}
 }
 
 /* initialze terminal */
 void term_init(void)
 {
-  debug("term_init");
+	debug("term_init");
 
-  term_enable = 0;
+	term_enable = 0;
 
-  if(tcgetattr(0,&old_tio) < 0) {
-    fprintf(stderr,"Can't get terminal attributes\n");
-    return;
-  }
-  if(term_setup(&old_tio) < 0) {
-    fprintf(stderr,"Can't set terminal attributes\n");
-    return;
-  }
+	if(tcgetattr(0,&old_tio) < 0)
+	{
+		fprintf(stderr,"Can't get terminal attributes\n");
+		return;
+	}
+	if(term_setup(&old_tio) < 0)
+	{
+		fprintf(stderr,"Can't set terminal attributes\n");
+		return;
+	}
 
-  term_enable = 1;
+	term_enable = 1;
 }
 
 void term_hint(void)
@@ -209,29 +229,43 @@ static void seekmode(void)
 	}
 }
 
-static void term_handle_input(mpg123_handle *fr, audio_output_t *ao, int do_delay)
+/* Get the next pressed key, if any.
+   Returns 1 when there is a key, 0 if not. */
+static int get_key(int do_delay, char *val)
 {
-  int n = 1;
-  /* long offset = 0; */
-  
-  while(n > 0) {
-    fd_set r;
-    struct timeval t;
-    char val;
+	fd_set r;
+	struct timeval t;
 
-    t.tv_sec=0;
-    t.tv_usec=(do_delay) ? 10*1000 : 0;
-    
-    FD_ZERO(&r);
-    FD_SET(0,&r);
-    n = select(1,&r,NULL,NULL,&t);
-    if(n > 0 && FD_ISSET(0,&r)) {
-      if(read(0,&val,1) <= 0)
-        break;
+	/* Shortcut: If some other means sent a key, use it. */
+	if(prekey)
+	{
+		debug1("Got prekey: %c\n", prekey);
+		*val = prekey;
+		prekey = 0;
+		return 1;
+	}
 
-      switch(tolower(val)) {
+	t.tv_sec=0;
+	t.tv_usec=(do_delay) ? 10*1000 : 0;
+
+	FD_ZERO(&r);
+	FD_SET(0,&r);
+	if(select(1,&r,NULL,NULL,&t) > 0 && FD_ISSET(0,&r))
+	{
+		if(read(0,val,1) <= 0)
+		return 0; /* Well, we couldn't read the key, so there is none. */
+		else
+		return 1;
+	}
+	else return 0;
+}
+
+static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
+{
+	switch(val)
+	{
 	case MPG123_BACK_KEY:
-        if(!param.usebuffer) ao->flush(ao);
+		if(!param.usebuffer) ao->flush(ao);
 				else buffer_resync();
 		if(paused) pause_cycle=(int)(LOOP_CYCLES/mpg123_tpf(fr));
 
@@ -239,12 +273,12 @@ static void term_handle_input(mpg123_handle *fr, audio_output_t *ao, int do_dela
 		error1("Seek to begin failed: %s", mpg123_strerror(fr));
 
 		framenum=0;
-		break;
+	break;
 	case MPG123_NEXT_KEY:
 		if(!param.usebuffer) ao->flush(ao);
 		else buffer_resync(); /* was: plain_buffer_resync */
-	  next_track();
-	  break;
+		next_track();
+	break;
 	case MPG123_QUIT_KEY:
 		debug("QUIT");
 		if(stopped)
@@ -258,32 +292,32 @@ static void term_handle_input(mpg123_handle *fr, audio_output_t *ao, int do_dela
 		}
 		set_intflag();
 		offset = 0;
-	  break;
+	break;
 	case MPG123_PAUSE_KEY:
-  	  paused=1-paused;
-	  if(paused) {
+		paused=1-paused;
+		if(paused) {
 			/* Not really sure if that is what is wanted
-			   This jumps in audio output, but has direct reaction to pausing loop. */
+				 This jumps in audio output, but has direct reaction to pausing loop. */
 			if(param.usebuffer) buffer_resync();
 
 			pause_recycle(fr);
-	  }
+		}
 		if(stopped)
 		{
 			stopped=0;
 			if(param.usebuffer) buffer_start();
 		}
-	  fprintf(stderr, "%s", (paused) ? MPG123_PAUSED_STRING : MPG123_EMPTY_STRING);
-	  break;
+		fprintf(stderr, "%s", (paused) ? MPG123_PAUSED_STRING : MPG123_EMPTY_STRING);
+	break;
 	case MPG123_STOP_KEY:
 	case ' ':
 		/* when seeking while stopped and then resuming, I want to prevent the chirp from the past */
 		if(!param.usebuffer) ao->flush(ao);
-	  stopped=1-stopped;
-	  if(paused) {
-		  paused=0;
-		  offset -= pause_cycle;
-	  }
+		stopped=1-stopped;
+		if(paused) {
+			paused=0;
+			offset -= pause_cycle;
+		}
 		if(param.usebuffer)
 		{
 			if(stopped) buffer_stop();
@@ -295,32 +329,32 @@ static void term_handle_input(mpg123_handle *fr, audio_output_t *ao, int do_dela
 				buffer_start();
 			}
 		}
-	  fprintf(stderr, "%s", (stopped) ? MPG123_STOPPED_STRING : MPG123_EMPTY_STRING);
-	  break;
+		fprintf(stderr, "%s", (stopped) ? MPG123_STOPPED_STRING : MPG123_EMPTY_STRING);
+	break;
 	case MPG123_FINE_REWIND_KEY:
-	  if(param.usebuffer) seekmode();
-	  offset--;
-	  break;
+		if(param.usebuffer) seekmode();
+		offset--;
+	break;
 	case MPG123_FINE_FORWARD_KEY:
-	  seekmode();
-	  offset++;
-	  break;
+		seekmode();
+		offset++;
+	break;
 	case MPG123_REWIND_KEY:
-	  seekmode();
-  	  offset-=10;
-	  break;
+		seekmode();
+		  offset-=10;
+	break;
 	case MPG123_FORWARD_KEY:
-	  seekmode();
-	  offset+=10;
-	  break;
+		seekmode();
+		offset+=10;
+	break;
 	case MPG123_FAST_REWIND_KEY:
-	  seekmode();
-	  offset-=50;
-	  break;
+		seekmode();
+		offset-=50;
+	break;
 	case MPG123_FAST_FORWARD_KEY:
-	  seekmode();
-	  offset+=50;
-	  break;
+		seekmode();
+		offset+=50;
+	break;
 	case MPG123_VOL_UP_KEY:
 		mpg123_volume_change(fr, 0.02);
 	break;
@@ -420,19 +454,25 @@ static void term_handle_input(mpg123_handle *fr, audio_output_t *ao, int do_dela
 		}
 	break;
 	default:
-	  ;
-      }
-    }
-  }
+		;
+	}
+}
+
+static void term_handle_input(mpg123_handle *fr, audio_output_t *ao, int do_delay)
+{
+	char val;
+	/* Do we really want that while loop? This means possibly handling multiple inputs that come very rapidly in one go. */
+	while(get_key(do_delay, &val))
+	{
+		term_handle_key(fr, ao, tolower(val));
+	}
 }
 
 void term_restore(void)
 {
-  
-  if(!term_enable)
-    return;
+	if(!term_enable) return;
 
-  tcsetattr(0,TCSAFLUSH,&old_tio);
+	tcsetattr(0,TCSAFLUSH,&old_tio);
 }
 
 #endif
