@@ -6,7 +6,7 @@
 	initially written by Vincent Falco, then meanly beaten up by Thomas Orgis...
 */
 
-#include "mpg123lib_intern.h"
+#include "mpg123.h"
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -33,7 +33,7 @@ static int failed( int returnValue )
 /* VFALCO: This is used to make sure we return a sensible error code */
 static int error_code( mpgraw_state* rs )
 {
-	int result = rs->mh->err;
+	int result = mpg123_errcode(rs->mh);
 	if( ! result ) /* VFALCO: Assuming MPG123_OK == 0 everywhere for brevity */
 		result = MPG123_ERR; /* VFALCO: Lets hope we never get here */
 	return result;
@@ -171,7 +171,7 @@ int mpgraw_next(
 			{
 				/* pick up new format information */
 				mpg123_getformat( mh, &rs->rate, &rs->channels, &rs->encoding );
-				rs->frame_count = spf(mh);
+				rs->frame_count = mpg123_spf(mh);
 			}
 			if( rs->error == MPG123_OK ||
 				rs->error == MPG123_DONE ||
@@ -221,34 +221,6 @@ int mpgraw_decode(
 
 	return rs->error;
 }
-
-/*----------------------------------------------------------------------------*/
-
-int attribute_align_arg mpg123_decode_raw(mpg123_handle *fr, off_t *num, unsigned char **audio, size_t *bytes)
-{
-	mpgraw_state* rs = fr->rdat.rs;
-
-	int error;
-
-	error = mpgraw_next( rs, 0 );
-
-	if( ! error )
-	{
-		error = mpgraw_decode( rs, 0, 0 );
-	}
-
-	if( ! error )
-	{
-		if( audio )
-			*audio = rs->audio;
-		if( bytes )
-			*bytes = rs->bytes;
-	}
-
-	return error;
-}
-
-/*----------------------------------------------------------------------------*/
 
 void mpgraw_close(
 	mpgraw_state *rs )
