@@ -182,6 +182,8 @@ int mpgraw_next(
 				if(failed(mpg123_framedata( mh, &rs->header, &rs->body, &rs->body_bytes)))
 				rs->error = MPG123_ERR;
 
+				rs->offset = mpg123_framepos(mh);
+
 				/* Raw users never want to see MPG123_DONE */
 				if( rs->error == MPG123_DONE)
 					rs->error = MPG123_OK;

@@ -91,6 +91,7 @@ int main(int argc, char **argv)
 				fprintf(stderr, "New format: %li Hz, %i channels, encoding value %i\n", rate, channels, enc);
 			}
 
+			fprintf(stderr, "decoding frame at %li (+%li)\n", (long)s.offset, (long)(4+s.body_bytes));
 			ret = mpgraw_decode(&s, NULL, 0); // for now the temporary fields in s are used
 			fwrite(s.audio, sizeof(unsigned char), s.bytes, out);
 			outc += s.bytes;
