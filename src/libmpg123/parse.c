@@ -425,6 +425,7 @@ int read_frame(mpg123_handle *fr)
 	unsigned long newhead;
 	off_t framepos;
 	int ret;
+	off_t oret;
 	/* stuff that needs resetting if complete frame reading fails */
 	int oldsize  = fr->framesize;
 	int oldphase = fr->halfphase;
@@ -556,9 +557,11 @@ init_resync:
 
 		debug2("doing ahead check with BPF %d at %"OFF_P, fr->framesize+4, (off_p)start);
 		/* step framesize bytes forward and read next possible header*/
-		if((ret=fr->rd->skip_bytes(fr, fr->framesize))<0)
+		if((oret=fr->rd->skip_bytes(fr, fr->framesize))<0)
 		{
-			if(ret==READER_ERROR && NOQUIET) error("cannot seek!");
+			if(oret==READER_ERROR && NOQUIET) error("cannot seek!");
+
+			ret = oret; /* Purposeful negative values aren't big. */
 			goto read_frame_bad;
 		}
 		hd = fr->rd->head_read(fr,&nexthead);

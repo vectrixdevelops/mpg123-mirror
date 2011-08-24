@@ -1,3 +1,6 @@
+1.13.4
+- Fix bogus error on resync with big offsets (hits systems that have bigger off_t than int), bug 3393801.
+
 1.13.3
 ---
 - Fix an endless loop on bad headers, bug 3267863.
