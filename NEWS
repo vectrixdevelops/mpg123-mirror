@@ -1,5 +1,7 @@
 1.13.4
+---
 - Fix bogus error on resync with big offsets (hits systems that have bigger off_t than int), bug 3393801.
+- Fix windows binary package build script again with plugdir.
 
 1.13.3
 ---
