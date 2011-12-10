@@ -27,10 +27,16 @@
 #else
  /* new WRITE_SAMPLE */
  /* keep in mind that we are on known little-endian i386 here and special tricks are allowed... */
+ /* grabbed a fix from  MPlayer rev. 7300 by jkeil, that's why big endian here */
+#if WORDS_BIGENDIAN 
+#define MANTISSA_OFFSET 1
+#else
+#define MANTISSA_OFFSET 0
+#endif
 #define WRITE_SAMPLE(samples,sum,clip) { \
-  double dtemp; int v; /* sizeof(int) == 4 */ \
-  dtemp = ((((65536.0 * 65536.0 * 16)+(65536.0 * 0.5))* 65536.0)) + (sum);  \
-  v = ((*(int *)&dtemp) - 0x80000000); \
+  union { double dtemp; int itemp[2]; } u; int v; \
+  u.dtemp = ((((65536.0 * 65536.0 * 16)+(65536.0 * 0.5))* 65536.0)) + (sum);\
+  v = u.itemp[MANTISSA_OFFSET] - 0x80000000; \
   if( v > 32767) { *(samples) = 0x7fff; (clip)++; } \
   else if( v < -32768) { *(samples) = -0x8000; (clip)++; } \
   else { *(samples) = v; }  \
@@ -143,6 +149,8 @@ int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pnt)
   real *b0,(*buf)[0x110];
   int clip = 0; 
   int bo1;
+
+  *pnt += 128; /* moved that here as MPlayer has it */
 #endif
 
   if(have_eq_settings)
@@ -194,7 +202,14 @@ int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pnt)
       sum += window[0xE] * b0[0xE];
       sum -= window[0xF] * b0[0xF];
 
-      WRITE_SAMPLE(samples,sum,clip);
+{
+  union { double dtemp; int itemp[2]; } u; int v;
+  u.dtemp = ((((65536.0 * 65536.0 * 16)+(65536.0 * 0.5))* 65536.0)) + (sum);
+  v = u.itemp[MANTISSA_OFFSET] - 0x80000000; 
+  if( v > 32767) { *(samples) = 0x7fff; (clip)++; } 
+  else if( v < -32768) { *(samples) = -0x8000; (clip)++; } 
+  else { *(samples) = v; } 
+}
     }
 
     {
@@ -207,7 +222,15 @@ int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pnt)
       sum += window[0xA] * b0[0xA];
       sum += window[0xC] * b0[0xC];
       sum += window[0xE] * b0[0xE];
-      WRITE_SAMPLE(samples,sum,clip);
+{
+  union { double dtemp; int itemp[2]; } u; int v;
+  u.dtemp = ((((65536.0 * 65536.0 * 16)+(65536.0 * 0.5))* 65536.0)) + (sum);
+  v = u.itemp[MANTISSA_OFFSET] - 0x80000000;
+  if( v > 32767) { *(samples) = 0x7fff; (clip)++; } 
+  else if( v < -32768) { *(samples) = -0x8000; (clip)++; } 
+  else { *(samples) = v; } 
+}
+
       b0-=0x10,window-=0x20,samples+=step;
     }
     window += bo1<<1;
@@ -232,10 +255,17 @@ int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pnt)
       sum -= window[-0xF] * b0[0xE];
       sum -= window[-0x0] * b0[0xF];
 
-      WRITE_SAMPLE(samples,sum,clip);
+{
+  union { double dtemp; int itemp[2]; } u; int v; 
+  u.dtemp = ((((65536.0 * 65536.0 * 16)+(65536.0 * 0.5))* 65536.0)) + (sum);
+  v = u.itemp[MANTISSA_OFFSET] - 0x80000000; 
+  if( v > 32767) { *(samples) = 0x7fff; (clip)++; } 
+  else if( v < -32768) { *(samples) = -0x8000; (clip)++; } 
+  else { *(samples) = v; }
+}
+
     }
   }
-  *pnt += 128;
 
   return clip;
 #elif defined(USE_MMX)
