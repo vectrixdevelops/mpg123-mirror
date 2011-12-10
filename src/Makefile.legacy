@@ -22,6 +22,9 @@ PENTIUM_DECODE=decode_i586
 ######                                       ######
 ###################################################
 
+# This is all about the new hacked variant, based on i386 C code.
+all: linux-386
+
 nothing-specified:
 	@echo ""
 	@echo "You must specify the system which you want to compile for:"
@@ -128,11 +131,22 @@ linux-x86:
 	$(MAKE) CC=gcc \
 		OBJECTS="decode_i386.o dct64_i386.o $(PENTIUM_DECODE).o \
 			audio_oss.o term.o" \
-		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DI386_ASSEM -DPENTIUM_OPT -DREAL_IS_FLOAT -DLINUX \
+		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DPENTIUM_OPT -DREAL_IS_FLOAT -DLINUX \
 			-DOSS -DHAVE_TERMIOS\
 			-Wall -O2 \
 			-fomit-frame-pointer -funroll-all-loops \
 			-finline-functions -ffast-math" \
+		mpg123-make
+
+linux-386:
+	$(MAKE) CC=gcc \
+		OBJECTS="decode_i386.o dct64_i386.o \
+			audio_oss.o term.o" \
+		CFLAGS="$(CPPFLAGS) -DREAL_IS_FLOAT -DLINUX \
+			-DOSS -DHAVE_TERMIOS\
+			-Wall -O2 \
+			-fomit-frame-pointer -funroll-all-loops \
+			-finline-functions -ffast-math $(CFLAGS)" \
 		mpg123-make
 
 #just for development... gapless will be on for normal builds when stable
@@ -140,7 +154,7 @@ linux-x86-gapless:
 	$(MAKE) CC=gcc \
 		OBJECTS="decode_i386.o dct64_i386.o $(PENTIUM_DECODE).o \
 			audio_oss.o term.o" \
-		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DGAPLESS -DI386_ASSEM -DPENTIUM_OPT -DREAL_IS_FLOAT -DLINUX \
+		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DGAPLESS -DPENTIUM_OPT -DREAL_IS_FLOAT -DLINUX \
 			-DOSS -DHAVE_TERMIOS\
 			-Wall -O2 \
 			-fomit-frame-pointer -funroll-all-loops \
@@ -151,7 +165,7 @@ linux-mmx:
 	$(MAKE) CC=gcc \
 		OBJECTS="decode_i386.o dct64_mmx.o tabinit_mmx.o decode_mmx.o \
 			audio_oss.o term.o" \
-		CFLAGS=" $(CFLAGS) -DUSE_MMX -DI386_ASSEM -DPENTIUM_OPT -DREAL_IS_FLOAT \
+		CFLAGS=" $(CFLAGS) -DUSE_MMX -DPENTIUM_OPT -DREAL_IS_FLOAT \
 			-DLINUX -DOSS -DHAVE_TERMIOS\
 			-Wall -O2 \
 			-fomit-frame-pointer -funroll-all-loops \
@@ -162,7 +176,7 @@ linux-mmap:
 	$(MAKE) CC=gcc \
 		OBJECTS="decode_i386.o dct64_i386.o $(PENTIUM_DECODE).o \
 			audio_oss.o term.o" \
-		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DI386_ASSEM -DPENTIUM_OPT -DREAL_IS_FLOAT -DLINUX \
+		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DPENTIUM_OPT -DREAL_IS_FLOAT -DLINUX \
 			-DREAD_MMAP -DOSS -DHAVE_TERMIOS\
 			-Wall -O2 \
 			-fomit-frame-pointer -funroll-all-loops \
@@ -174,7 +188,7 @@ linux-3dnow:
 		OBJECTS="decode_i386.o decode_3dnow.o dct64_3dnow.o \
 			dct64_i386.o dct36_3dnow.o getcpuflags.o \
 			equalizer_3dnow.o $(PENTIUM_DECODE).o audio_oss.o term.o" \
-		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DI386_ASSEM -DREAL_IS_FLOAT -DPENTIUM_OPT -DLINUX \
+		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DREAL_IS_FLOAT -DPENTIUM_OPT -DLINUX \
 			-DUSE_3DNOW -DOSS -DHAVE_TERMIOS\
 			-Wall -O2 \
 			-fomit-frame-pointer -funroll-all-loops \
@@ -185,7 +199,7 @@ linux-i486:
 	$(MAKE) CC=gcc \
 		OBJECTS="decode_i386.o dct64_i386.o \
 			decode_i486.o dct64_i486.o audio_oss.o term.o" \
-		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DI386_ASSEM -DREAL_IS_FLOAT -DI486_OPT -DLINUX \
+		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DREAL_IS_FLOAT -DI486_OPT -DLINUX \
 			-DOSS -DHAVE_TERMIOS\
 			-Wall -O2 -march=i486 \
 			-fomit-frame-pointer -funroll-all-loops \
@@ -197,7 +211,7 @@ linux-esd:
 		AUDIO_LIB="-lesd -laudiofile" \
 		OBJECTS="decode_i386.o dct64_i386.o $(PENTIUM_DECODE).o \
 			audio_esd.o term.o" \
-		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DI386_ASSEM -DREAL_IS_FLOAT -DPENTIUM_OPT -DLINUX \
+		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DREAL_IS_FLOAT -DPENTIUM_OPT -DLINUX \
 			-DOSS -DUSE_ESD -DHAVE_TERMIOS\
 			-Wall  -O2 -mcpu=i486 \
 			-fomit-frame-pointer -funroll-all-loops \
@@ -209,7 +223,7 @@ linux-alsa:
 		AUDIO_LIB="-lasound" \
 		OBJECTS="decode_i386.o dct64_i386.o $(PENTIUM_DECODE).o \
 			audio_alsa.o term.o" \
-		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DI386_ASSEM -DREAL_IS_FLOAT -DPENTIUM_OPT -DLINUX \
+		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DREAL_IS_FLOAT -DPENTIUM_OPT -DLINUX \
 			-DALSA -DHAVE_TERMIOS\
 			-Wall  -O2 -mcpu=i486 \
 			-fomit-frame-pointer -funroll-all-loops \
@@ -340,7 +354,7 @@ linux-nas:
 
 #### the following defines are for experimental use ... 
 #
-#CFLAGS='-pg -DI386_ASSEM -DREAL_IS_FLOAT -DLINUX -Wall -O2 -mcpu=i486 -funroll-all-loops -finline-functions -ffast-math' mpg123
+#CFLAGS='-pg -DREAL_IS_FLOAT -DLINUX -Wall -O2 -mcpu=i486 -funroll-all-loops -finline-functions -ffast-math' mpg123
 #CFLAGS='-DI386_ASSEM -O2 -DREAL_IS_FLOAT -DLINUX -Wall -g'
 #CFLAGS='-DI386_ASSEM -DREAL_IS_FLOAT -DLINUX -Wall -O2 -mcpu=i486 -fomit-frame-pointer -funroll-all-loops -finline-functions -ffast-math -malign-loops=2 -malign-jumps=2 -malign-functions=2'
 
@@ -422,7 +436,7 @@ solaris-x86-gcc-oss:
 	$(MAKE) CC=gcc LDFLAGS="$(LDFLAGS) -lsocket -lnsl" \
 		OBJECTS="decode_i386.o dct64_i386.o $(PENTIUM_DECODE).o \
 			audio_oss.o" \
-		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DI386_ASSEM -DREAL_IS_FLOAT -DPENTIUM_OPT -DHAVE_MMAP \
+		CFLAGS="$(CFLAGS) $(CPPFLAGS) -DREAL_IS_FLOAT -DPENTIUM_OPT -DHAVE_MMAP \
 			-DREAD_MMAP -DOSS \
 			-Wall -O2 -mcpu=i486 \
 			-funroll-all-loops -finline-functions" \
