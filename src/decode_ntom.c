@@ -14,6 +14,10 @@
 #include "mpg123.h"
 #include "debug.h"
 
+#ifdef WRITE_SAMPLE
+#undef WRITE_SAMPLE
+#endif
+
 #define WRITE_SAMPLE(samples,sum,clip) \
   if( (sum) > 32767.0) { *(samples) = 0x7fff; (clip)++; } \
   else if( (sum) < -32768.0) { *(samples) = -0x8000; (clip)++; } \
@@ -23,6 +27,7 @@
 static unsigned long ntom_val[2] = { NTOM_MUL>>1,NTOM_MUL>>1 };
 static unsigned long ntom_step = NTOM_MUL;
 
+DECODE_SCOPE int synth_ntom(real *bandPtr,int channel,unsigned char *out,int *pnt);
 
 int synth_ntom_set_step(long m,long n)
 {
@@ -46,7 +51,7 @@ int synth_ntom_set_step(long m,long n)
 	return 1;
 }
 
-int synth_ntom_8bit(real *bandPtr,int channel,unsigned char *samples,int *pnt)
+DECODE_SCOPE int synth_ntom_8bit(real *bandPtr,int channel,unsigned char *samples,int *pnt)
 {
   short samples_tmp[8*64];
   short *tmp1 = samples_tmp + channel;
@@ -66,7 +71,7 @@ int synth_ntom_8bit(real *bandPtr,int channel,unsigned char *samples,int *pnt)
   return ret;
 }
 
-int synth_ntom_8bit_mono(real *bandPtr,unsigned char *samples,int *pnt)
+DECODE_SCOPE int synth_ntom_8bit_mono(real *bandPtr,unsigned char *samples,int *pnt)
 {
   short samples_tmp[8*64];
   short *tmp1 = samples_tmp;
@@ -85,7 +90,7 @@ int synth_ntom_8bit_mono(real *bandPtr,unsigned char *samples,int *pnt)
   return ret;
 }
 
-int synth_ntom_8bit_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
+DECODE_SCOPE int synth_ntom_8bit_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
 {
   short samples_tmp[8*64];
   short *tmp1 = samples_tmp;
@@ -105,7 +110,7 @@ int synth_ntom_8bit_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
   return ret;
 }
 
-int synth_ntom_mono(real *bandPtr,unsigned char *samples,int *pnt)
+DECODE_SCOPE int synth_ntom_mono(real *bandPtr,unsigned char *samples,int *pnt)
 {
   short samples_tmp[8*64];
   short *tmp1 = samples_tmp;
@@ -126,7 +131,7 @@ int synth_ntom_mono(real *bandPtr,unsigned char *samples,int *pnt)
 }
 
 
-int synth_ntom_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
+DECODE_SCOPE int synth_ntom_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
 {
   int i,ret;
   int pnt1 = *pnt;
@@ -143,7 +148,7 @@ int synth_ntom_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
 }
 
 
-int synth_ntom(real *bandPtr,int channel,unsigned char *out,int *pnt)
+DECODE_SCOPE int synth_ntom(real *bandPtr,int channel,unsigned char *out,int *pnt)
 {
   static real buffs[2][2][0x110];
   static const int step = 2;

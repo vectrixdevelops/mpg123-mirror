@@ -1,3 +1,6 @@
+#ifndef MPG123_CONFIG_H
+#define MPG123_CONFIG_H
+
 /* basic config.h to reproduce pre-autoconf days */
 
 #define HAVE_SYS_TYPES_H 1
@@ -24,3 +27,5 @@
 #endif
 
 #define INDEX_SIZE 1000
+
+#endif

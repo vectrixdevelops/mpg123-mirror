@@ -43,7 +43,9 @@
 }
 #endif
 
-int synth_1to1_8bit(real *bandPtr,int channel,unsigned char *samples,int *pnt)
+DECODE_SCOPE int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pnt);
+
+DECODE_SCOPE int synth_1to1_8bit(real *bandPtr,int channel,unsigned char *samples,int *pnt)
 {
   short samples_tmp[64];
   short *tmp1 = samples_tmp + channel;
@@ -63,7 +65,7 @@ int synth_1to1_8bit(real *bandPtr,int channel,unsigned char *samples,int *pnt)
   return ret;
 }
 
-int synth_1to1_8bit_mono(real *bandPtr,unsigned char *samples,int *pnt) 
+DECODE_SCOPE int synth_1to1_8bit_mono(real *bandPtr,unsigned char *samples,int *pnt) 
 {
   short samples_tmp[64];
   short *tmp1 = samples_tmp;
@@ -82,7 +84,7 @@ int synth_1to1_8bit_mono(real *bandPtr,unsigned char *samples,int *pnt)
   return ret;
 }
 
-int synth_1to1_8bit_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
+DECODE_SCOPE int synth_1to1_8bit_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
 {
   short samples_tmp[64];
   short *tmp1 = samples_tmp;
@@ -102,7 +104,7 @@ int synth_1to1_8bit_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
   return ret;
 }
 
-int synth_1to1_mono(real *bandPtr,unsigned char *samples,int *pnt)
+DECODE_SCOPE int synth_1to1_mono(real *bandPtr,unsigned char *samples,int *pnt)
 {
   short samples_tmp[64];
   short *tmp1 = samples_tmp;
@@ -123,7 +125,7 @@ int synth_1to1_mono(real *bandPtr,unsigned char *samples,int *pnt)
 }
 
 
-int synth_1to1_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
+DECODE_SCOPE int synth_1to1_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
 {
   int i,ret;
 
@@ -138,7 +140,7 @@ int synth_1to1_mono2stereo(real *bandPtr,unsigned char *samples,int *pnt)
   return ret;
 }
 
-int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pnt)
+DECODE_SCOPE int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pnt)
 {
 #ifndef PENTIUM_OPT
   static real buffs[2][2][0x110];

@@ -23,7 +23,7 @@ PENTIUM_DECODE=decode_i586
 ###################################################
 
 # This is all about the new hacked variant, based on i386 C code.
-all: linux-386
+all: linux-386statdec
 
 nothing-specified:
 	@echo ""
@@ -148,6 +148,17 @@ linux-386:
 			-fomit-frame-pointer -funroll-all-loops \
 			-finline-functions -ffast-math $(CFLAGS)" \
 		mpg123-make
+
+linux-386statdec:
+	$(MAKE) CC=gcc \
+		OBJECTS=" \
+			audio_oss.o term.o" \
+		CFLAGS="$(CPPFLAGS) -DREAL_IS_FLOAT -DLINUX \
+			-DOSS -DHAVE_TERMIOS\
+			-Wall -O2 \
+			-fomit-frame-pointer -funroll-all-loops \
+			-finline-functions -ffast-math $(CFLAGS)" \
+		mpg123statdec
 
 #just for development... gapless will be on for normal builds when stable
 linux-x86-gapless:
@@ -621,13 +632,26 @@ generic:
 mpg123-make:
 	@ $(MAKE) BINNAME=mpg123 mpg123
 
+mpg123statdec: mpg123.o decoder_i386.o playlist.o stringbuf.o common.o id3.o icy.o $(OBJECTS) \
+		tabinit.o audio.o buffer.o \
+		getlopt.o httpget.o xfermem.o equalizer.o \
+		$(MAKEFILE) wav.o readers.o getbits.o \
+		control_generic.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -lm mpg123.o decoder_i386.o playlist.o stringbuf.o tabinit.o common.o id3.o icy.o \
+		audio.o buffer.o equalizer.o \
+		getlopt.o httpget.o xfermem.o \
+		wav.o readers.o getbits.o control_generic.o \
+		$(OBJECTS) -o $@ $(AUDIO_LIB)
+
+
+
 mpg123: mpg123.o playlist.o stringbuf.o common.o id3.o icy.o $(OBJECTS) decode_2to1.o decode_4to1.o \
-		tabinit.o audio.o layer1.o layer2.o layer3.o buffer.o \
+		tabinit.o audio.o layer1.o layer2.o layer3.o synthfunc.o buffer.o \
 		getlopt.o httpget.o xfermem.o equalizer.o \
 		decode_ntom.o $(MAKEFILE) wav.o readers.o getbits.o \
 		control_generic.o
 	$(CC) $(CFLAGS) $(LDFLAGS)  mpg123.o playlist.o stringbuf.o tabinit.o common.o id3.o icy.o layer1.o \
-		layer2.o layer3.o audio.o buffer.o decode_2to1.o equalizer.o \
+		layer2.o layer3.o synthfunc.o audio.o buffer.o decode_2to1.o equalizer.o \
 		decode_4to1.o getlopt.o httpget.o xfermem.o decode_ntom.o \
 		wav.o readers.o getbits.o control_generic.o \
 		$(OBJECTS) -o $(BINNAME) -lm $(AUDIO_LIB)
@@ -641,6 +665,8 @@ mpg123.exe: mpg123.o playlist.o stringbuf.o common.o id3.o $(OBJECTS) decode_2to
 ###########################################################################
 ###########################################################################
 
+synthfunc.o: mpg123.h config.h
+decoder_i386.o: layer1.c layer2.c layer3.c decode_i386.c decode_ntom.c decode_2to1.c decode_4to1.c dct64_i386.c synthfunc.c
 layer1.o:	mpg123.h debug.h config.h
 layer2.o:	mpg123.h l2tables.h debug.h config.h
 layer3.o:	mpg123.h huffman.h common.h getbits.h debug.h config.h

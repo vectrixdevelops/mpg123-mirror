@@ -1,3 +1,5 @@
+#ifndef MPG123_MPG123_H
+#define MPG123_MPG123_H
 /*
 	mpg123: main code of the program (not of the decoder...)
 
@@ -8,6 +10,13 @@
 	mpg123 defines 
 	used source: musicout.h from mpegaudio package
 */
+
+/* decoding routines could the forced to static scope */
+#ifdef DECODE_STATIC
+#define DECODE_SCOPE static
+#else
+#define DECODE_SCOPE
+#endif
 
 #include        <stdio.h>
 #include        <string.h>
@@ -335,6 +344,9 @@ extern int do_layer2(struct frame *fr,int,struct audio_info_struct *);
 extern int do_layer1(struct frame *fr,int,struct audio_info_struct *);
 extern void do_equalizer(real *bandPtr,int channel);
 
+extern int real_set_synth_functions(struct frame *, struct audio_info_struct *);
+
+#ifndef DECODE_STATIC
 #ifdef PENTIUM_OPT
 extern int synth_1to1_pent (real *,int,unsigned char *);
 #endif
@@ -365,6 +377,13 @@ extern int synth_ntom_mono (real *,unsigned char *,int *);
 extern int synth_ntom_mono2stereo (real *,unsigned char *,int *);
 extern int synth_ntom_8bit_mono (real *,unsigned char *,int *);
 extern int synth_ntom_8bit_mono2stereo (real *,unsigned char *,int *);
+extern void dct64(real *,real *,real *);
+
+#ifdef USE_MMX
+extern void dct64_MMX(short *a,short *b,real *c);
+extern int synth_1to1_MMX(real *, int, short *, short *, int *);
+#endif
+#endif
 
 extern void rewindNbits(int bits);
 extern int  hsstell(void);
@@ -378,12 +397,7 @@ extern void init_layer3(int);
 extern void init_layer2(void);
 extern void make_decode_tables(long scale);
 extern int make_conv16to8_table(int);
-extern void dct64(real *,real *,real *);
 
-#ifdef USE_MMX
-extern void dct64_MMX(short *a,short *b,real *c);
-extern int synth_1to1_MMX(real *, int, short *, short *, int *);
-#endif
 
 extern int synth_ntom_set_step(long,long);
 
@@ -435,5 +449,7 @@ extern int synth_1to1_3dnow(real *,int,unsigned char *,int *);
 /* avoid the SIGINT in terminal control */
 void next_track(void);
 extern long outscale;
+
+#endif
 
 #endif
