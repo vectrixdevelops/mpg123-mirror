@@ -730,7 +730,7 @@ if(region1 > region2)
     mc = 0;
     for(i=0;i<2;i++) {
       int lp = l[i];
-      struct newhuff *h = ht+gr_info->table_select[i];
+      const struct newhuff *h = ht+gr_info->table_select[i];
       for(;lp;lp--,mc--) {
         register int x,y;
         if( (!mc) ) {
@@ -748,7 +748,7 @@ if(region1 > region2)
           }
         }
         {
-          register short *val = h->table;
+          const short *val = h->table;
           REFRESH_MASK;
           while((y=*val++)<0) {
             if (mask < 0)
@@ -812,8 +812,8 @@ if(region1 > region2)
 
     for(;l3 && (part2remain+num > 0);l3--) {
       /* not mixing code and declarations to keep C89 happy */
-      struct newhuff* h;
-      register short* val;
+      const struct newhuff* h;
+      const short* val;
 			register short a;
       /* This is only a humble hack to prevent a special segfault. */
       /* More insight into the real workings is still needed. */
@@ -924,7 +924,7 @@ if(region1 > region2)
      */
     for(i=0;i<3;i++) {
       int lp = l[i];
-      struct newhuff *h = ht+gr_info->table_select[i];
+      const struct newhuff *h = ht+gr_info->table_select[i];
 
       for(;lp;lp--,mc--) {
         int x,y;
@@ -938,7 +938,7 @@ if(region1 > region2)
 
         }
         {
-          register short *val = h->table;
+          const short *val = h->table;
           REFRESH_MASK;
           while((y=*val++)<0) {
             if (mask < 0)
@@ -1004,8 +1004,9 @@ if(region1 > region2)
      * short (count1table) values
      */
     for(;l3 && (part2remain+num > 0);l3--) {
-      struct newhuff *h = htc+gr_info->count1table_select;
-      register short *val = h->table,a;
+      const struct newhuff *h = htc+gr_info->count1table_select;
+      const short *val = h->table;
+      register short a;
 
       REFRESH_MASK;
       while((a=*val++)<0) {
