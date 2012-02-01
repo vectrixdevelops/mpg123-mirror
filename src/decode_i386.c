@@ -203,15 +203,7 @@ DECODE_SCOPE int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pn
       sum -= window[0xD] * b0[0xD];
       sum += window[0xE] * b0[0xE];
       sum -= window[0xF] * b0[0xF];
-
-{
-  union { double dtemp; int itemp[2]; } u; int v;
-  u.dtemp = ((((65536.0 * 65536.0 * 16)+(65536.0 * 0.5))* 65536.0)) + (sum);
-  v = u.itemp[MANTISSA_OFFSET] - 0x80000000; 
-  if( v > 32767) { *(samples) = 0x7fff; (clip)++; } 
-  else if( v < -32768) { *(samples) = -0x8000; (clip)++; } 
-  else { *(samples) = v; } 
-}
+      WRITE_SAMPLE(samples,sum,clip);
     }
 
     {
@@ -224,15 +216,7 @@ DECODE_SCOPE int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pn
       sum += window[0xA] * b0[0xA];
       sum += window[0xC] * b0[0xC];
       sum += window[0xE] * b0[0xE];
-{
-  union { double dtemp; int itemp[2]; } u; int v;
-  u.dtemp = ((((65536.0 * 65536.0 * 16)+(65536.0 * 0.5))* 65536.0)) + (sum);
-  v = u.itemp[MANTISSA_OFFSET] - 0x80000000;
-  if( v > 32767) { *(samples) = 0x7fff; (clip)++; } 
-  else if( v < -32768) { *(samples) = -0x8000; (clip)++; } 
-  else { *(samples) = v; } 
-}
-
+      WRITE_SAMPLE(samples,sum,clip);
       b0-=0x10,window-=0x20,samples+=step;
     }
     window += bo1<<1;
@@ -256,16 +240,7 @@ DECODE_SCOPE int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pn
       sum -= window[-0xE] * b0[0xD];
       sum -= window[-0xF] * b0[0xE];
       sum -= window[-0x0] * b0[0xF];
-
-{
-  union { double dtemp; int itemp[2]; } u; int v; 
-  u.dtemp = ((((65536.0 * 65536.0 * 16)+(65536.0 * 0.5))* 65536.0)) + (sum);
-  v = u.itemp[MANTISSA_OFFSET] - 0x80000000; 
-  if( v > 32767) { *(samples) = 0x7fff; (clip)++; } 
-  else if( v < -32768) { *(samples) = -0x8000; (clip)++; } 
-  else { *(samples) = v; }
-}
-
+      WRITE_SAMPLE(samples,sum,clip);
     }
   }
 
