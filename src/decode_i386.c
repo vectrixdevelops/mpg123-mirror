@@ -18,13 +18,39 @@
 #include "config.h"
 #include "mpg123.h"
 
-#if 0
+#ifdef OLD_WRITE_SAMPLE
+
  /* old WRITE_SAMPLE */
 #define WRITE_SAMPLE(samples,sum,clip) \
   if( (sum) > 32767.0) { *(samples) = 0x7fff; (clip)++; } \
   else if( (sum) < -32768.0) { *(samples) = -0x8000; (clip)++; } \
   else { *(samples) = sum; }
+
+#elif defined(NEW_WRITE_SAMPLE_FFMPEG)
+
+ /* new WRITE_SAMPLE */
+ /* keep in mind that we are on known little-endian i386 here and special tricks are allowed... */
+ /* grabbed a fix from  MPlayer rev. 7300 by jkeil, that's why big endian here */
+ /* Also trying out the clipping method ffmpeg uses. */
+ /* The whole deal rather depends on double being 64 bit and int being 32 bit. */
+#if WORDS_BIGENDIAN 
+#define MANTISSA_OFFSET 1
 #else
+#define MANTISSA_OFFSET 0
+#endif
+#define WRITE_SAMPLE(samples,sum,clip) { \
+  union { double dtemp; int itemp[2]; } u; int v; \
+  u.dtemp = ((((65536.0 * 65536.0 * 16)+(65536.0 * 0.5))* 65536.0)) + (sum);\
+  v = u.itemp[MANTISSA_OFFSET] - 0x80000000; \
+  if ((v+0x8000) & ~0xFFFF){ *(samples) = (v>>31) ^ 0x7FFF; (clip)++; } \
+  else                       *(samples) =  v; \
+}
+/*  if( v > 32767) { *(samples) = 0x7fff; (clip)++; } \
+  else if( v < -32768) { *(samples) = -0x8000; (clip)++; } \
+  else { *(samples) = v; }  \*/
+
+#else
+
  /* new WRITE_SAMPLE */
  /* keep in mind that we are on known little-endian i386 here and special tricks are allowed... */
  /* grabbed a fix from  MPlayer rev. 7300 by jkeil, that's why big endian here */
@@ -41,6 +67,7 @@
   else if( v < -32768) { *(samples) = -0x8000; (clip)++; } \
   else { *(samples) = v; }  \
 }
+
 #endif
 
 DECODE_SCOPE int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pnt);
@@ -140,6 +167,9 @@ DECODE_SCOPE int synth_1to1_mono2stereo(real *bandPtr,unsigned char *samples,int
   return ret;
 }
 
+int moody_switch = 0;
+int synth_1to1_fake(real *bandPtr,int channel,unsigned char *out,int *pnt);
+
 DECODE_SCOPE int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pnt)
 {
 #ifndef PENTIUM_OPT
@@ -154,6 +184,9 @@ DECODE_SCOPE int synth_1to1(real *bandPtr,int channel,unsigned char *out,int *pn
 
   *pnt += 128; /* moved that here as MPlayer has it */
 #endif
+
+  if(moody_switch)
+    return synth_1to1_fake(bandPtr, channel, out, pnt);
 
   if(have_eq_settings)
 	do_equalizer(bandPtr,channel);

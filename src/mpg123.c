@@ -1149,3 +1149,8 @@ static void give_version(char* arg)
 	fprintf(stdout, PACKAGE_NAME" "PACKAGE_VERSION"\n");
 	safe_exit(0);
 }
+
+int synth_1to1_fake(real *bandPtr,int channel,unsigned char *out,int *pnt)
+{
+	return 0;
+}
