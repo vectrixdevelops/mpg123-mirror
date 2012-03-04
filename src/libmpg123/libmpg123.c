@@ -863,6 +863,7 @@ int attribute_align_arg mpg123_read(mpg123_handle *mh, unsigned char *out, size_
 int attribute_align_arg mpg123_feed(mpg123_handle *mh, const unsigned char *in, size_t size)
 {
 	if(mh == NULL) return MPG123_ERR;
+#ifndef NO_FEEDER
 	if(size > 0)
 	{
 		if(in != NULL)
@@ -884,6 +885,10 @@ int attribute_align_arg mpg123_feed(mpg123_handle *mh, const unsigned char *in, 
 		}
 	}
 	return MPG123_OK;
+#else
+	mh->err = MPG123_MISSING_FEATURE;
+	return MPG123_ERR;
+#endif
 }
 
 /*
@@ -902,11 +907,14 @@ int attribute_align_arg mpg123_feed(mpg123_handle *mh, const unsigned char *in, 
 
 int attribute_align_arg mpg123_decode(mpg123_handle *mh, const unsigned char *inmemory, size_t inmemsize, unsigned char *outmemory, size_t outmemsize, size_t *done)
 {
+#ifndef NO_FEEDER
 	int ret = MPG123_OK;
 	size_t mdone = 0;
+#endif
 
 	if(done != NULL) *done = 0;
 	if(mh == NULL) return MPG123_ERR;
+#ifndef NO_FEEDER
 	if(inmemsize > 0 && mpg123_feed(mh, inmemory, inmemsize) != MPG123_OK)
 	{
 		ret = MPG123_ERR;
@@ -963,6 +971,10 @@ int attribute_align_arg mpg123_decode(mpg123_handle *mh, const unsigned char *in
 decodeend:
 	if(done != NULL) *done = mdone;
 	return ret;
+#else
+	mh->err = MPG123_MISSING_FEATURE;
+	return MPG123_ERR;
+#endif
 }
 
 long attribute_align_arg mpg123_clip(mpg123_handle *mh)
@@ -1163,13 +1175,16 @@ off_t attribute_align_arg mpg123_seek(mpg123_handle *mh, off_t sampleoff, int wh
 */
 off_t attribute_align_arg mpg123_feedseek(mpg123_handle *mh, off_t sampleoff, int whence, off_t *input_offset)
 {
+#ifndef NO_FEEDER
 	int b;
+#endif
 	off_t pos;
 
 	pos = mpg123_tell(mh); /* adjusted samples */
 	debug3("seek from %li to %li (whence=%i)", (long)pos, (long)sampleoff, whence);
 	/* The special seek error handling does not apply here... there is no lowlevel I/O. */
 	if(pos < 0) return pos; /* mh == NULL is covered in mpg123_tell() */
+#ifndef NO_FEEDER
 	if(input_offset == NULL)
 	{
 		mh->err = MPG123_NULL_POINTER;
@@ -1213,6 +1228,10 @@ off_t attribute_align_arg mpg123_feedseek(mpg123_handle *mh, off_t sampleoff, in
 
 feedseekend:
 	return mpg123_tell(mh);
+#else
+	mh->err = MPG123_MISSING_FEATURE;
+	return MPG123_ERR;
+#endif
 }
 
 off_t attribute_align_arg mpg123_seek_frame(mpg123_handle *mh, off_t offset, int whence)

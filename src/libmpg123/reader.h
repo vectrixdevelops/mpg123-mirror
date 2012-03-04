@@ -12,6 +12,7 @@
 #include "config.h"
 #include "mpg123.h"
 
+#ifndef NO_FEEDER
 struct buffy
 {
 	unsigned char *data;
@@ -31,6 +32,7 @@ struct bufferchain
 	/* The "real" filepos is fileoff + pos. */
 	off_t fileoff;       /* Beginning of chain is at this file offset. */
 };
+#endif
 
 struct reader_data
 {
@@ -56,7 +58,9 @@ struct reader_data
 	off_t   (*lseek)(int fd, off_t offset, int whence);
 	/* Buffered readers want that abstracted, set internally. */
 	ssize_t (*fullread)(mpg123_handle *, unsigned char *, ssize_t);
+#ifndef NO_FEEDER
 	struct bufferchain buffer; /* Not dynamically allocated, these few struct bytes aren't worth the trouble. */
+#endif
 };
 
 /* start to use off_t to properly do LFS in future ... used to be long */
