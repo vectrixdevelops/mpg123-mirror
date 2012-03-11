@@ -1,3 +1,7 @@
+1.13.6
+---
+- Fix output of one random character in -vvv mode for ID3v2.2 frames (no buffer overflow, move along, folks;-).
+
 1.13.5
 ---
 - Fix reading of ReplayGain values from Lame tag (nobody seen this before?!)
