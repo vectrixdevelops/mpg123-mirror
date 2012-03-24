@@ -17,6 +17,7 @@ struct newhuff
 {
   unsigned int linbits;
   const short *table;
+  const short *ltable;
 };
 
 static const short tab0[] = 
@@ -291,43 +292,58 @@ static const short tab_c1[] =
    0
 };
 
-
+static short ltab0[524288];
+static short ltab1[524288];
+static short ltab2[524288];
+static short ltab3[524288];
+static short ltab5[524288];
+static short ltab6[524288];
+static short ltab7[524288];
+static short ltab8[524288];
+static short ltab9[524288];
+static short ltab10[524288];
+static short ltab11[524288];
+static short ltab12[524288];
+static short ltab13[524288];
+static short ltab15[524288];
+static short ltab16[524288];
+static short ltab24[524288];
 
 static const struct newhuff ht[] = 
 {
- { /* 0 */ 0 , tab0  } ,
- { /* 2 */ 0 , tab1  } ,
- { /* 3 */ 0 , tab2  } ,
- { /* 3 */ 0 , tab3  } ,
- { /* 0 */ 0 , tab0  } ,
- { /* 4 */ 0 , tab5  } ,
- { /* 4 */ 0 , tab6  } ,
- { /* 6 */ 0 , tab7  } ,
- { /* 6 */ 0 , tab8  } ,
- { /* 6 */ 0 , tab9  } ,
- { /* 8 */ 0 , tab10 } ,
- { /* 8 */ 0 , tab11 } ,
- { /* 8 */ 0 , tab12 } ,
- { /* 16 */ 0 , tab13 } ,
- { /* 0  */ 0 , tab0  } ,
- { /* 16 */ 0 , tab15 } ,
+ { /* 0 */ 0 , tab0, ltab0  } ,
+ { /* 2 */ 0 , tab1, ltab1  } ,
+ { /* 3 */ 0 , tab2, ltab2  } ,
+ { /* 3 */ 0 , tab3, ltab3  } ,
+ { /* 0 */ 0 , tab0, ltab0  } ,
+ { /* 4 */ 0 , tab5, ltab5  } ,
+ { /* 4 */ 0 , tab6, ltab6  } ,
+ { /* 6 */ 0 , tab7, ltab7  } ,
+ { /* 6 */ 0 , tab8, ltab8  } ,
+ { /* 6 */ 0 , tab9, ltab9  } ,
+ { /* 8 */ 0 , tab10, ltab10 } ,
+ { /* 8 */ 0 , tab11, ltab11 } ,
+ { /* 8 */ 0 , tab12, ltab12 } ,
+ { /* 16 */ 0 , tab13, ltab13 } ,
+ { /* 0  */ 0 , tab0, ltab0  } ,
+ { /* 16 */ 0 , tab15, ltab15 } ,
 
- { /* 16 */ 1 , tab16 } ,
- { /* 16 */ 2 , tab16 } ,
- { /* 16 */ 3 , tab16 } ,
- { /* 16 */ 4 , tab16 } ,
- { /* 16 */ 6 , tab16 } ,
- { /* 16 */ 8 , tab16 } ,
- { /* 16 */ 10, tab16 } ,
- { /* 16 */ 13, tab16 } ,
- { /* 16 */ 4 , tab24 } ,
- { /* 16 */ 5 , tab24 } ,
- { /* 16 */ 6 , tab24 } ,
- { /* 16 */ 7 , tab24 } ,
- { /* 16 */ 8 , tab24 } ,
- { /* 16 */ 9 , tab24 } ,
- { /* 16 */ 11, tab24 } ,
- { /* 16 */ 13, tab24 }
+ { /* 16 */ 1 , tab16, ltab16 } ,
+ { /* 16 */ 2 , tab16, ltab16 } ,
+ { /* 16 */ 3 , tab16, ltab16 } ,
+ { /* 16 */ 4 , tab16, ltab16 } ,
+ { /* 16 */ 6 , tab16, ltab16 } ,
+ { /* 16 */ 8 , tab16, ltab16 } ,
+ { /* 16 */ 10, tab16, ltab16 } ,
+ { /* 16 */ 13, tab16, ltab16 } ,
+ { /* 16 */ 4 , tab24, ltab24 } ,
+ { /* 16 */ 5 , tab24, ltab24 } ,
+ { /* 16 */ 6 , tab24, ltab24 } ,
+ { /* 16 */ 7 , tab24, ltab24 } ,
+ { /* 16 */ 8 , tab24, ltab24 } ,
+ { /* 16 */ 9 , tab24, ltab24 } ,
+ { /* 16 */ 11, tab24, ltab24 } ,
+ { /* 16 */ 13, tab24, ltab24 }
 };
 
 static const struct newhuff htc[] = 
