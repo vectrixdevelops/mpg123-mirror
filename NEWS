@@ -1,3 +1,7 @@
+1.13.7
+---
+- Fix endless loop in module loader when starting mpg123 in a directory that does not exist.
+
 1.13.6
 ---
 - Fix output of one random character in -vvv mode for ID3v2.2 frames (no buffer overflow, move along, folks;-).
