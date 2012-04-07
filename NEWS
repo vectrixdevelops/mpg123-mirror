@@ -1,3 +1,7 @@
+1.13.8
+---
+- Fix build for ARM Thumb (incompatible assembly in some macros).
+
 1.13.7
 ---
 - Fix endless loop in module loader when starting mpg123 in a directory that does not exist.
