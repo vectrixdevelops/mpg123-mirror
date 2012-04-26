@@ -17,6 +17,7 @@
 - Now freeing meta data memory after printout.
 - Some documentation cleanup, including manpage fixes by quadrispro.
 - Re-enabled wildcard expansion on Windows (been broken by unicode file name support).
+- Fix SGI audio output (been broken since change to modules).
 
 1.13.8
 ---
