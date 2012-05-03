@@ -12,6 +12,7 @@
 #include "config.h"
 #include "mpg123.h"
 
+#ifndef NO_FEEDER
 struct buffy
 {
 	unsigned char *data;
@@ -44,6 +45,10 @@ void bc_prepare(struct bufferchain *, size_t pool_size, size_t bufblock);
 void bc_cleanup(struct bufferchain *);
 /* Change pool size. This does not actually allocate/free anything on itself, just instructs later operations to free less / allocate more buffers. */
 void bc_poolsize(struct bufferchain *, size_t pool_size, size_t bufblock);
+/* Return available byte count in the buffer. */
+size_t bc_fill(struct bufferchain *bc);
+
+#endif
 
 struct reader_data
 {
@@ -69,10 +74,12 @@ struct reader_data
 	off_t   (*lseek)(int fd, off_t offset, int whence);
 	/* Buffered readers want that abstracted, set internally. */
 	ssize_t (*fullread)(mpg123_handle *, unsigned char *, ssize_t);
-	struct bufferchain buffer; /* Not dynamically allocated, these few struct bytes aren't worth the trouble. */
 	struct mpgraw_state* rs; /* backpointer to the caller's state structure */
 	ssize_t skip; /* raw api amount to skip on read */
 	int advance_this_frame;
+#ifndef NO_FEEDER
+	struct bufferchain buffer; /* Not dynamically allocated, these few struct bytes aren't worth the trouble. */
+#endif
 };
 
 /* start to use off_t to properly do LFS in future ... used to be long */

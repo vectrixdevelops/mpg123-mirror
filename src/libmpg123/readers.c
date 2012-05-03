@@ -51,9 +51,6 @@ static ssize_t bc_give(struct bufferchain *bc, unsigned char *out, ssize_t size)
 static ssize_t bc_skip(struct bufferchain *bc, ssize_t count);
 static ssize_t bc_seekback(struct bufferchain *bc, ssize_t count);
 static void bc_forget(struct bufferchain *bc);
-#else
-#define bc_init(a)
-#define bc_reset(a)
 #endif
 
 /* A normal read and a read with timeout. */
@@ -205,6 +202,9 @@ static ssize_t plain_fullread(mpg123_handle *fr,unsigned char *buf, ssize_t coun
 {
 	ssize_t ret,cnt=0;
 
+#ifdef EXTRA_DEBUG
+	debug1("plain fullread of %"SSIZE_P, (size_p)count);
+#endif
 	/*
 		There used to be a check for expected file end here (length value or ID3 flag).
 		This is not needed:
@@ -242,7 +242,9 @@ static void stream_close(mpg123_handle *fr)
 
 	fr->rdat.filept = 0;
 
+#ifndef NO_FEEDER
 	if(fr->rdat.flags & READER_BUFFERED)  bc_reset(&fr->rdat.buffer);
+#endif
 	if(fr->rdat.flags & READER_HANDLEIO)
 	{
 		if(fr->rdat.cleanup_handle != NULL) fr->rdat.cleanup_handle(fr->rdat.iohandle);
@@ -348,6 +350,7 @@ static off_t stream_skip_bytes(mpg123_handle *fr,off_t len)
 		}
 		return fr->rd->tell(fr);
 	}
+#ifndef NO_FEEDER
 	else if(fr->rdat.flags & READER_BUFFERED)
 	{ /* Perhaps we _can_ go a bit back. */
 		if(fr->rdat.buffer.pos >= -len)
@@ -361,6 +364,7 @@ static off_t stream_skip_bytes(mpg123_handle *fr,off_t len)
 			return READER_ERROR;
 		}
 	}
+#endif
 	else
 	{
 		fr->err = MPG123_NO_SEEK;
@@ -395,8 +399,10 @@ static int generic_read_frame_body(mpg123_handle *fr,unsigned char *buf, int siz
 
 static off_t generic_tell(mpg123_handle *fr)
 {
+#ifndef NO_FEEDER
 	if(fr->rdat.flags & READER_BUFFERED)
 	fr->rdat.filepos = fr->rdat.buffer.fileoff+fr->rdat.buffer.pos;
+#endif
 
 	return fr->rdat.filepos;
 }
@@ -405,13 +411,20 @@ static off_t generic_tell(mpg123_handle *fr)
 static void stream_rewind(mpg123_handle *fr)
 {
 	if(fr->rdat.flags & READER_SEEKABLE)
-	fr->rdat.buffer.fileoff = fr->rdat.filepos = stream_lseek(fr,0,SEEK_SET);
+	{
+		fr->rdat.filepos = stream_lseek(fr,0,SEEK_SET);
+#ifndef NO_FEEDER
+		fr->rdat.buffer.fileoff = fr->rdat.filepos;
+#endif
+	}
+#ifndef NO_FEEDER
 	if(fr->rdat.flags & READER_BUFFERED)
 	{
 		fr->rdat.buffer.pos      = 0;
 		fr->rdat.buffer.firstpos = 0;
 		fr->rdat.filepos = fr->rdat.buffer.fileoff;
 	}
+#endif
 }
 
 /*
@@ -485,6 +498,12 @@ void bc_prepare(struct bufferchain *bc, size_t pool_size, size_t bufblock)
 	bc_poolsize(bc, pool_size, bufblock);
 	bc->pool = NULL;
 	bc->pool_fill = 0;
+	bc_init(bc); /* Ensure that members are zeroed for read-only use. */
+}
+
+size_t bc_fill(struct bufferchain *bc)
+{
+	return (size_t)(bc->size - bc->pos);
 }
 
 void bc_poolsize(struct bufferchain *bc, size_t pool_size, size_t bufblock)
@@ -1017,8 +1036,10 @@ static int default_init(mpg123_handle *fr)
 
 	fr->rdat.read  = fr->rdat.r_read  != NULL ? fr->rdat.r_read  : posix_read;
 	fr->rdat.lseek = fr->rdat.r_lseek != NULL ? fr->rdat.r_lseek : posix_lseek;
+#ifndef NO_ICY
 	/* ICY streams of any sort shall not be seekable. */
 	if(fr->p.icy_interval > 0) fr->rdat.lseek = nix_lseek;
+#endif
 
 	fr->rdat.filelen = get_fileinfo(fr);
 	fr->rdat.filepos = 0;
@@ -1072,12 +1093,16 @@ static int default_init(mpg123_handle *fr)
 
 void open_bad(mpg123_handle *mh)
 {
+	debug("open_bad");
 #ifndef NO_ICY
 	clear_icy(&mh->icy);
 #endif
 	mh->rd = &bad_reader;
 	mh->rdat.flags = 0;
+#ifndef NO_FEEDER
 	bc_init(&mh->rdat.buffer);
+#endif
+	mh->rdat.filelen = -1;
 }
 
 int open_feed(mpg123_handle *fr)
@@ -1100,6 +1125,8 @@ int open_feed(mpg123_handle *fr)
 	fr->rd = &readers[READER_FEED];
 	fr->rdat.flags = 0;
 	if(fr->rd->init(fr) < 0) return -1;
+
+	debug("feed reader init successful");
 	return 0;
 #endif /* NO_FEEDER */
 }

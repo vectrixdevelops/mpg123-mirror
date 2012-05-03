@@ -1,10 +1,61 @@
+1.15.0
+---
+
+- added --continue (also see scripts/conplay)
+- added number row to terminal control keys for 10% jump points (for navigating long tracks)
+- Set xterm title always if asked, disregarding the -q switch (if you want fully quiet, don't specify --title).
+
 1.14.0
 ---
+
+- libmpg123 API version 36 (see NEWS.libmpg123)
 - Add --ignore-streamlength.
+- But also deal with concatenated (Frankenstein) streams: Not applying gapless cutting once we're over the announced number of frames.
+- Add --lyrics for printout of lyrics (from USLT in ID3v2).
 - Added handling of SIGUSR1 and SIGUSER2 to terminal control code, configurable via --ctrlusr1 and --ctrlusr2.
-  TODO: Make mpg123 smarter to recognize concatenated streams, re-start the frame counter.
-AND TAKE PROPER CARE OF THAT HACK TO UN-IGNORE FRAMES FAR OVER LASTFRAME!
-This hack brings the sound, but also brings funky behaviour of mpg123 -k <n> ... with suddenly non-present verbose position info, for example.
+- Some low-level API added (mpg123_framedata(), mpg123_framepos(), buffering and resampling control).
+- Added info about input buffer fill to mpg123_getstate().
+- ReplayGain: Try to detect LAME below 3.95 for the different reference level of 83 dB (adding preamp of 6 dB). Version 3.95 itself (not 3.95.1) I cannot detect. User-set gain values are not touched.
+- Keep silent about missing bit reservoir when ignoring frames. That is the whole point (mostly;-).
+- Add the new/old WRITE_SAMPLE variant from MPlayer that makes the generic decoder faster on older CPUs (x86 at least). Not on x86-64, though (it's not enabled per default there).
+- Handle out-of-disk in the file writers (a bit, see http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=67259)
+- Added Xcode project files to build libmpg123 on Mac OS and iOS
+- 32 bit output for sndio output (patch by Brad Smith).
+- Remote control interface knows LOADLIST command now.
+- Now freeing meta data memory after printout.
+- Some documentation cleanup, including manpage fixes by quadrispro.
+- Re-enabled wildcard expansion on Windows (been broken by unicode file name support).
+- Fix MMX tabinit syntax (thanks to Marcel Müller for pointing that out).
+- Fix SGI audio output (been broken since change to modules).
+- Fix some fringe behaviour (mpg123_getformat() triggering needless reading of next frame, possibly hitting bogus MPG123_NEED_MORE).
+- Resync limit now also serves to increase amount of skipped junk on beginning.
+- Better separation of stream end and read error (in case there is no stream opened, even).
+- Don't always complain about failed free format header search (only with verbosity level 3).
+
+1.13.8
+---
+- Fix build for ARM Thumb (incompatible assembly in some macros).
+
+1.13.7
+---
+- Fix endless loop in module loader when starting mpg123 in a directory that does not exist.
+
+1.13.6
+---
+- Fix output of one random character in -vvv mode for ID3v2.2 frames (no buffer overflow, move along, folks;-).
+
+1.13.5
+---
+- Fix reading of ReplayGain values from Lame tag (nobody seen this before?!)
+  (both actual values and the distinction between audiophile / radio).
+- Accept application/octet-stream as input from HTTP.
+- Update man page with encodings.
+- Build fixes.
+
+1.13.4
+---
+- Fix bogus error on resync with big offsets (hits systems that have bigger off_t than int), bug 3393801.
+- Fix windows binary package build script again with plugdir.
 
 1.13.3
 ---

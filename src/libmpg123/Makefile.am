@@ -62,6 +62,7 @@ libmpg123_la_SOURCES = \
 	raw_api.c \
 	tabinit.c \
 	libmpg123.c \
+	gapless.h \
 	mpg123lib_intern.h \
 	mangle.h \
 	getcpuflags.h \

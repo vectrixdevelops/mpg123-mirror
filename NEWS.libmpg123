@@ -1,5 +1,21 @@
 Changes in libmpg123 libtool interface versions...
 
+36.0.36
+	- Extended MPG123_RESYNC_LIMIT to initial header search.
+
+35.0.35
+	- Added mpg123_meta_free().
+
+34.0.34
+	- Added flag MPG123_AUTO_RESAMPLE.
+	- Changed (improved;-) outbuffer behaviour.
+
+33.0.33
+	- Added MPG123_BUFFERFILL.
+
+32.0.32
+	- Added mpg123_framepos()
+
 31.0.31
 	- Added mpg123_framedata() and MPG123_IGNORE_INFOFRAME.
 

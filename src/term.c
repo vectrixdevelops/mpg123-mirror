@@ -40,7 +40,7 @@ struct keydef term_help[] =
 	,{ MPG123_NEXT_KEY,    0, "next track" }
 	,{ MPG123_PREV_KEY,    0, "previous track" }
 	,{ MPG123_BACK_KEY,    0, "back to beginning of track" }
-	,{ MPG123_PAUSE_KEY,   0, "loop around current position (like a damaged audio CD;-)" }
+	,{ MPG123_PAUSE_KEY,   0, "loop around current position (don't combine with output buffer)" }
 	,{ MPG123_FORWARD_KEY, 0, "forward" }
 	,{ MPG123_REWIND_KEY,  0, "rewind" }
 	,{ MPG123_FAST_FORWARD_KEY, 0, "fast forward" }
@@ -262,7 +262,7 @@ static int get_key(int do_delay, char *val)
 
 static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 {
-	switch(val)
+	switch(tolower(val))
 	{
 	case MPG123_BACK_KEY:
 		if(!param.usebuffer) ao->flush(ao);
@@ -427,6 +427,7 @@ static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 
 			fprintf(stderr, "\t%s\n", term_help[i].desc);
 		}
+		fprintf(stderr, "\nAlso, the number row (starting at 1, ending at 0) gives you jump points into the current track at 10%% intervals.\n");
 		fprintf(stderr, "\n");
 	}
 	break;
@@ -453,6 +454,28 @@ static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 			}
 		}
 	break;
+	case '0':
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	case '8':
+	case '9':
+	{
+		off_t len;
+		int num;
+		num = val == '0' ? 10 : val - '0';
+		--num; /* from 0 to 9 */
+
+		seekmode();
+		len = mpg123_length(fr);
+		if(len > 0) mpg123_seek(fr, (off_t)( (num/10.)*len ), SEEK_SET);
+
+	}
+	break;
 	default:
 		;
 	}
@@ -464,7 +487,7 @@ static void term_handle_input(mpg123_handle *fr, audio_output_t *ao, int do_dela
 	/* Do we really want that while loop? This means possibly handling multiple inputs that come very rapidly in one go. */
 	while(get_key(do_delay, &val))
 	{
-		term_handle_key(fr, ao, tolower(val));
+		term_handle_key(fr, ao, val);
 	}
 }
 
