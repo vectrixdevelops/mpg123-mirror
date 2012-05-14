@@ -6,7 +6,7 @@
 	initially written by Vincent Falco, then meanly beaten up by Thomas Orgis...
 */
 
-#include "mpg123.h"
+#include "mpg123lib_intern.h"
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
