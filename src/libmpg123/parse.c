@@ -436,6 +436,7 @@ static int halfspeed_do(mpg123_handle *fr)
 if(ret < 0){ debug1("%s", ret == MPG123_NEED_MORE ? "need more" : "read error"); goto read_frame_bad; } \
 else if(ret == PARSE_AGAIN) goto read_again; \
 else if(ret == PARSE_RESYNC) goto init_resync; \
+else if(ret == PARSE_END) goto read_frame_bad; \
 }
 
 /*
@@ -641,8 +642,7 @@ static int guess_freeformat_framesize(mpg123_handle *fr)
 	return ret;
 
 	/* We are already 4 bytes into it */
-	/* Fix that limit to be absolute for the first header search! */
-	for(i=4;i<65536;i++)
+	for(i=4;i<MAXFRAMESIZE+4;i++)
 	{
 		if((ret=fr->rd->head_shift(fr,&head))<=0) return ret;
 
@@ -728,7 +728,7 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead, int *freeforma
 			*freeformat_count += 1;
 			if(*freeformat_count > 5)
 			{
-				error("You fooled me too often. Refusing to guess free format frame size _again_.");
+				if(VERBOSE3) error("You fooled me too often. Refusing to guess free format frame size _again_.");
 				return 0;
 			}
 			ret = guess_freeformat_framesize(fr);
