@@ -44,12 +44,47 @@
 
 #include "debug.h"
 
+#ifdef OSC
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <strings.h>
+#include <unistd.h>
+
+#include "lo/lo.h"
+#include "osc.h"
+#endif
+
 static void usage(int err);
 static void want_usage(char* arg);
 static void long_usage(int err);
 static void want_long_usage(char* arg);
 static void print_title(FILE* o);
 static void give_version(char* arg);
+#ifdef OSC
+void start_osc_server();
+void set_run_osc(char *arg);
+static void osc_help();
+
+void error_handler(int num, const char *m, const char *path);
+
+/*int generic_handler   (const char *path, const char *types, lo_arg **argv,int argc, void *data, void *user_data);*/
+int self_test_handler (const char *path, const char *types, lo_arg **argv, int argc,void *data, void *user_data);
+int osc_cmd_handler   (const char *path, const char *types, lo_arg **argv, int argc,void *data, void *user_data);
+
+int run_osc=0;
+
+char *osc_port="8888";
+char *osc_id="p1";
+
+/*answer / send to these*/
+char *osc_to_host="localhost";
+char *osc_to_port="3333";
+
+lo_server_thread st;
+
+#endif
 
 struct parameter param = { 
   FALSE , /* aggressiv */
@@ -500,6 +535,14 @@ topt opts[] = {
 	{0, "streamdump", GLO_ARG|GLO_CHAR, 0, &param.streamdump, 0},
 	{0, "icy-interval", GLO_ARG|GLO_LONG, 0, &param.icy_interval, 0},
 	{0, "ignore-streamlength", GLO_INT, set_frameflag, &frameflag, MPG123_IGNORE_STREAMLENGTH},
+#ifdef OSC
+	{0, "osc_port",            GLO_ARG|GLO_CHAR, set_run_osc, &osc_port, 0 },
+	{0, "osc_id",            GLO_ARG|GLO_CHAR, set_run_osc, &osc_id, 0 },
+	{0, "osc_to_host",            GLO_ARG|GLO_CHAR, set_run_osc, &osc_to_host, 0 },
+	{0, "osc_to_port",            GLO_ARG|GLO_CHAR, set_run_osc, &osc_to_port, 0 },
+	{0, "osc_help",            0, osc_help, 0, 0 },
+#endif
+
 	{0, 0, 0, 0, 0, 0}
 };
 
@@ -869,6 +912,12 @@ int main(int sys_argc, char ** sys_argv)
 	}
 	/* Do this _after_ parameter parsing. */
 	check_locale(); /* Check/set locale; store if it uses UTF-8. */
+#ifdef OSC
+	if(run_osc==1)
+	{	
+		start_osc_server();
+	}
+#endif
 
 	if(param.list_cpu)
 	{
@@ -1228,6 +1277,13 @@ int main(int sys_argc, char ** sys_argv)
 	/* Free up memory used by playlist */    
 	if(!param.remote) free_playlist();
 
+#ifdef OSC
+	if(run_osc==1)
+	{
+    		lo_server_thread_free(st);
+	}
+#endif
+
 	safe_exit(0); /* That closes output and restores terminal, too. */
 	return 0;
 }
@@ -1237,6 +1293,9 @@ static void print_title(FILE *o)
 	fprintf(o, "High Performance MPEG 1.0/2.0/2.5 Audio Player for Layers 1, 2 and 3\n");
 	fprintf(o, "\tversion %s; written and copyright by Michael Hipp and others\n", PACKAGE_VERSION);
 	fprintf(o, "\tfree software (LGPL/GPL) without any warranty but with best wishes\n");
+#ifdef OSC
+	fprintf(o, "\t*** experimental OSC release ***\n");
+#endif
 }
 
 static void usage(int err)  /* print syntax & exit */
@@ -1412,6 +1471,22 @@ static void long_usage(int err)
 	fprintf(o,"                           accepts -2 to 3 as integer arguments\n");
 	fprintf(o,"                           -2 as idle, 0 as normal and 3 as realtime.\n");
 	#endif
+#ifdef OSC
+	fprintf(o,"\n");
+/*	fprintf(o,"        --**to_xml         write xml of all known meta data to std out\n");
+	fprintf(o,"                           and quit without playing anything\n");*/
+	fprintf(o,"\n");
+	fprintf(o,"                           note: to control mpg123 via OSC, use\n");
+	fprintf(o,"                           --remote and at least one osc_* option\n");
+	fprintf(o,"        --osc_port         start osc udp server on port\n");
+	fprintf(o,"        --osc_id           set id, i.e. 'p1' will be addressed in osc as /p1\n");
+	fprintf(o,"        --osc_to_host      send msg to this host, regardless of request source\n");
+	fprintf(o,"        --osc_to_port      port of host where msg is sent to\n");
+	fprintf(o,"        --osc_help         show osc commands\n");
+	fprintf(o,"\n");
+
+#endif
+
 	fprintf(o," -?     --help             give compact help\n");
 	fprintf(o,"        --longhelp         give this long help listing\n");
 	fprintf(o,"        --version          give name / version string\n");
@@ -1435,3 +1510,139 @@ void continue_msg(const char *name)
 {
 		fprintf(aux_out, "\n[%s] track %"SIZE_P" frame %"OFF_P"\n", name,  (size_p)pl.pos, (off_p)framenum);
 }
+
+
+#ifdef OSC
+static void osc_help()
+{
+	FILE* o = stdout;
+	print_title(o);
+
+	fprintf(o,"\n\nOSC Help:\n\n");
+	fprintf(o,"start mpg123 with:\n");
+	fprintf(o,"$ mpg123 --remote --fifo osc.fifo --osc_port 1234 --osc_to_port 3333\n\n");
+
+	fprintf(o,"check OSC output of mpg123:\n");
+	fprintf(o,"$ oscdump 3333\n\n");
+
+	fprintf(o,"all output of ThOr except the help text is transmitted via OSC.\n\n");
+
+	fprintf(o,"every ThOr command is also an OSC command, following the pattern:\n");
+	fprintf(o,"/cmd s \"<ThOr command>\"\n\n");
+
+	fprintf(o,"get info for remote inferface via local fifo:\n");
+	fprintf(o,"$ echo \"help\" > osc.fifo\n\n");
+
+	fprintf(o,"load track via OSC:\n");
+	fprintf(o,"$ oscsend localhost 1234 /cmd s \"load /tmp/a.mp3\"\n\n");
+
+	fprintf(o,"start mpg123 as OSC node in background:\n");
+	fprintf(o,"$ mpg123 --remote --fifo osc.fifo --osc_port 1234 \\\n");
+	fprintf(o,"         --osc_to_host 10.1.1.7 --osc_to_port 3333 \\\n");
+	fprintf(o,"         >/dev/null &\n\n");
+
+	safe_exit(0);
+}
+
+void start_osc_server()
+{
+	/*f## difficult to concatenate */
+	char str[40];
+
+        printf("@OSC INFO Starting OSC UDP Server with these Properties:\n");
+	printf("@OSC INFO My Port:                 %s\n",osc_port);
+	printf("@OSC INFO My ID:                   %s\n",osc_id);
+	printf("@OSC INFO Sending Reports to Host: %s:%s\n",osc_to_host,osc_to_port);
+
+	/*order of handler definition matters*/
+
+	/* create a new server on given port */
+	//lo_server_thread 
+	st = lo_server_thread_new(osc_port, error_handler);
+
+	/* add self test method */
+	lo_server_thread_add_method(st, "/self/test", "fis", self_test_handler, NULL);
+
+	/* GENERIC STRING PARSE */
+	/* oscsend localhost 1234 /cmd s "load /tmp/a.mp3" */
+	lo_server_thread_add_method(st, "/cmd", "s", osc_cmd_handler, NULL);
+
+	/* add method that will match any path and args */
+	/*lo_server_thread_add_method(st, NULL, NULL, generic_handler, NULL);*/
+
+	lo_server_thread_start(st);
+
+	/*self test (always on localhost)*/
+	lo_address a = lo_address_new_with_proto(LO_UDP, "localhost", osc_port);
+	if (lo_send(a, "/self/test", "fis", 0.1234f, 56, "a string") == -1) {
+		printf("OSC error %d: %s\n", lo_address_errno(a), lo_address_errstr(a));
+	}
+}
+
+void set_run_osc(char *id)
+{
+	run_osc=1;
+}
+
+void error_handler(int num, const char *msg, const char *path)
+{
+    printf("liblo server error %d in path %s: %s\n", num, path, msg);
+    fflush(stdout);
+}
+
+/* catch any incoming messages and display them. returning 1 means that the
+ * message has not been fully handled and the server should try other methods */
+/*
+int generic_handler(const char *path, const char *types, lo_arg **argv,
+                    int argc, void *data, void *user_data)
+{
+    int i;
+
+    printf("@OSC OTHER %s ", path);
+    for (i=0; i<argc; i++) {
+        //printf("arg %d '%c' ", i, types[i]);
+        lo_arg_pp(types[i], argv[i]);
+        printf(" ");
+    }
+    printf("\n");
+    fflush(stdout);
+
+    return 1;
+}
+*/
+
+int self_test_handler(const char *path, const char *types, lo_arg **argv, int argc,
+                 void *data, void *user_data)
+{
+    /* example showing pulling the argument values out of the argv array */
+
+    printf("@OSC REC SELFTEST %s %f, %d \"%s\"\n", path, argv[0]->f, argv[1]->i, argv[2]);
+    fflush(stdout);
+
+    return 0;
+}
+
+/*================================================================================*/
+
+int osc_cmd_handler(const char *path, const char *types, lo_arg **argv, int argc,
+                 void *data, void *user_data)
+{
+	printf("@OSC CMD %s\n",argv[0]);
+	fflush(stdout);
+
+	/*real dirty write to local fifo (must exist when --conrol !!)*/
+	char str[lo_strsize(argv[0])];
+
+	strcpy(str,argv[0]);
+	strcat(str,"\n");
+
+	int fd_write=open(param.fifo,O_WRONLY);
+	if(fd_write>0){
+		int numbytes=write(fd_write,str,sizeof(str));
+	}close(fd_write);
+
+    return 0;
+}
+#endif
+/*endif def osc*/
+

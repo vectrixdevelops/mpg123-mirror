@@ -66,6 +66,10 @@ mpg123_SOURCES += \
 	win32_net.c
 endif
 
+if OSC_CODE
+mpg123_SOURCES += osc.h
+endif
+
 # That is not nice... but it is how I manage to get the dependency on output/alsa.o without error about .deps/output/alsa.Tpo .
 # Did I mention that recursive make sucks?
 # `%'-style pattern rules are a GNU make extension

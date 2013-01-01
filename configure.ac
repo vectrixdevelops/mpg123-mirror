@@ -496,7 +496,7 @@ case $host in
     newoldwritesample=enabled
   ;;
   x86_64-*-linux*|x86_64-*-kfreebsd*-gnu)
-    cpu_type="x86-64_all"
+    cpu_type="x86-64"
   ;;
   *-*-linux*|*-*-kfreebsd*-gnu)
     cpu_type="generic_fpu"
@@ -506,7 +506,7 @@ case $host in
     case `sysctl -n hw.optional.x86_64` in
       1)
         AC_MSG_RESULT([yes])
-        cpu_type="x86-64_all"
+        cpu_type="x86-64"
       ;;
       *)
         AC_MSG_RESULT([no])
@@ -520,7 +520,7 @@ case $host in
     newoldwritesample=enabled
   ;;
   x86_64-apple-darwin*)
-    cpu_type="x86-64_all"
+    cpu_type="x86-64"
   ;;
   *-apple-darwin*)
     AC_MSG_CHECKING([if CPU type supports AltiVec])
@@ -540,7 +540,7 @@ case $host in
     newoldwritesample=enabled
   ;;
   x86_64-*-dragonfly* | x86_64-*-freebsd* | x86_64-*-midnightbsd* | x86_64-*-mirbsd* | x86_64-*-netbsd* | x86_64-*-openbsd*)
-    cpu_type="x86-64_all"
+    cpu_type="x86-64"
   ;;
   *-*-dragonfly* | *-*-freebsd* | *-*-midnightbsd* | *-*-mirbsd* | *-*-netbsd* | *-*-openbsd*)
     cpu_type="generic_fpu"
@@ -550,7 +550,7 @@ case $host in
     newoldwritesample=enabled
   ;;
   x86_64-*-solaris*)
-    cpu_type=x86-64_all
+    cpu_type=x86-64
   ;;
   *-*-solaris*)
     cpu_type="generic_fpu"
@@ -572,7 +572,7 @@ case $host in
     cpu_type="generic_fpu"
   ;;
   x86_64-pc-cygwin*)
-    cpu_type="x86-64_all"
+    cpu_type="x86-64"
   ;;
   i686-pc-cygwin*)
     cpu_type="x86"
@@ -634,7 +634,7 @@ case $host in
 	;;
 	x86_64-*)
 		AC_MSG_WARN([Unknown host operating system])
-		cpu_type="x86-64_all"
+		cpu_type="x86-64"
 		buffer=disabled
 		ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
 	;;
@@ -1225,7 +1225,7 @@ dnl Not disabling buffer for float mode... check that this is OK now!
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_X86_64 -DREAL_IS_FLOAT"
     more_sources="$s_fpu $s_x86_64"
   ;;
-  x86-64)
+  x86-64|x86-64_all|x86-64_dither)
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_MULTI -DOPT_X86_64 -DOPT_GENERIC -DOPT_GENERIC_DITHER -DREAL_IS_FLOAT"
     more_sources="$s_fpu $s_x86_64 $s_dither"
   ;;
@@ -2078,6 +2078,35 @@ if test x"$ipv6" = xenabled; then
 		AC_MSG_WARN( [ You forced IPv6 code while I think there is no getaddrinfo() available! ] )
 	fi
 fi
+###############################
+
+PKG_CHECK_MODULES(LIBLO,liblo >= 0.26,
+	[
+		have_liblo=enabled
+	],
+	[
+		have_liblo=disabled
+	]
+)
+
+if test x"$fifo" = xenabled; then
+	if test x"$have_liblo" = xenabled; then
+		AC_DEFINE(OSC, 1, [ Define if OSC enabled / built-in or not  ] )
+		osc_enabled=enabled
+
+		LIBS="-llo $LIBS"
+
+	else
+		osc_enabled=disabled
+	fi
+else
+	osc_enabled=disabled
+fi
+
+###############################
+
+
+
 
 dnl ############## Final Output
 
@@ -2096,6 +2125,8 @@ AC_CONFIG_FILES([
 	src/libmpg123/Makefile
 	src/libmpg123/mpg123.h
 ])
+
+AM_CONDITIONAL([OSC_CODE], [ test "x$osc_enabled" = xenabled ])
 
 AC_OUTPUT
 
@@ -2158,6 +2189,10 @@ echo -n "
 
 Note: Disabling core features is not commonly done and some combinations might not build/work. If you encounter such a case, help yourself (and provide a patch) or just poke the maintainers.
 "
+echo 
+echo "  Liblo ................... $have_liblo"
+echo "  OSC control interface ... $osc_enabled"
+
 # just an empty line
 echo
 

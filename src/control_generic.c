@@ -1,7 +1,7 @@
 /*
 	control_generic.c: control interface for frontends and real console warriors
 
-	copyright 1997-99,2004-8 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 1997-99,2004-13 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Andreas Neuhaus and Michael Hipp
 	reworked by Thomas Orgis - it was the entry point for eventually becoming maintainer...
@@ -43,6 +43,40 @@ static int mode = MODE_STOPPED;
 static int init = 0;
 
 #include "debug.h"
+#ifdef OSC
+#include "osc.h"
+#include "lo/lo.h"
+extern char *osc_port;
+extern char *osc_id;
+extern char *osc_to_host;
+extern char *osc_to_port;
+
+/* UGLY string hack! Fix that!
+   After deciding if hacking mpg123 just for some string reformatting
+   makes sense at all.
+   Hint about why this variable is here: There was
+
+   char g[40]
+   ....
+   param.fifo = str
+
+   some place in the code. This assigns param.fifo to point to
+   some volatile location on the stack. Not what was intended. */
+char osc_fifo_name[40];
+#endif
+
+/*for show simple*/
+double bass=1.0;
+double mid=1.0;
+double treble=1.0;
+
+int statcounter=0;
+int report_interval=10;
+/* Oh no, you didn't! This needs replacement with mpg123_string. */
+char track_name[256];
+
+
+#include <sys/time.h>
 
 void generic_sendmsg (const char *fmt, ...)
 {
@@ -97,12 +131,56 @@ static void generic_send_lines(const char* fmt, mpg123_string *inlines)
 	}
 }
 
+
+#ifdef OSC
+void set_report_interval(int v)
+{
+	report_interval=v;
+}
+#endif
+
 void generic_sendstat (mpg123_handle *fr)
 {
 	off_t current_frame, frames_left;
 	double current_seconds, seconds_left;
 	if(!mpg123_position(fr, 0, xfermem_get_usedspace(buffermem), &current_frame, &frames_left, &current_seconds, &seconds_left))
 	generic_sendmsg("F %"OFF_P" %"OFF_P" %3.2f %3.2f", (off_p)current_frame, (off_p)frames_left, current_seconds, seconds_left);
+}
+
+void generic_sendstat_limited (mpg123_handle *fr, int doLimit)
+{
+	if(doLimit==1)
+	{
+		statcounter++;
+		if(statcounter<report_interval){return;}else{statcounter=0;}
+	}
+	/*leave out some*/
+	/* int modulo=4; */
+	/* if(param.pitch && param.pitch >0) */
+	/* { */
+	/* modulo=10*param.pitch; */
+	/* } */
+	/* if(statcounter%modulo==0) */
+	if(1==1)
+	{
+		off_t current_frame, frames_left;
+		double current_seconds, seconds_left;
+		if(!mpg123_position(fr, 0, xfermem_get_usedspace(buffermem), &current_frame, &frames_left, &current_seconds, &seconds_left))
+		{
+			generic_sendmsg("F %"OFF_P" %"OFF_P" %3.2f %3.2f", (off_p)current_frame, (off_p)frames_left, current_seconds, seconds_left);
+
+#ifdef OSC
+			if(run_osc==1)
+			{
+		        	lo_address a = lo_address_new_with_proto(LO_UDP, osc_to_host, osc_to_port);
+				char str[40];strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/pos");
+		        	lo_send(a, str, "hhff", (off_p)current_frame, (off_p)frames_left, current_seconds, seconds_left);
+			}
+#endif
+
+		}
+	}
+
 }
 
 static void generic_sendv1(mpg123_id3v1 *v1, const char *prefix)
@@ -121,6 +199,19 @@ static void generic_sendv1(mpg123_id3v1 *v1, const char *prefix)
 	generic_sendmsg("%s ID3.genre:%i", prefix, v1->genre);
 	if(v1->comment[28] == 0 && v1->comment[29] != 0)
 	generic_sendmsg("%s ID3.track:%i", prefix, (unsigned char)v1->comment[29]);
+#ifdef OSC
+	if(run_osc==1)
+	{
+        	lo_address a = lo_address_new_with_proto(LO_UDP, osc_to_host, osc_to_port);
+		char str[40];strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/meta");
+		/*because not null terminated*/
+		char y[5];
+		memcpy(y,v1->year,4);
+		y[5]='\0';
+	       	lo_send(a, str, "sssssiss", "v1", v1->title,v1->artist,v1->album,y,v1->genre,((v1->genre<=genre_count) ? genre_table[v1->genre] : "Unknown"),v1->comment);
+	}
+#endif
+
 }
 
 static void generic_sendinfoid3(mpg123_handle *mh)
@@ -196,6 +287,18 @@ void generic_sendalltag(mpg123_handle *mh)
 		}
 	}
 	generic_sendmsg("T }");
+	if(v1 == NULL && v2 == NULL)
+	{
+#ifdef OSC
+		if(run_osc==1)
+		{
+			lo_address a = lo_address_new_with_proto(LO_UDP, osc_to_host, osc_to_port);
+			char str[40];strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/tag");
+			lo_send(a, str, "iss", 108, "No tag data or no track loaded", "");
+		}
+#endif
+	}
+
 }
 
 void generic_sendinfo (char *filename)
@@ -214,6 +317,11 @@ void generic_sendinfo (char *filename)
 
 static void generic_load(mpg123_handle *fr, char *arg, int state)
 {
+#ifdef OSC
+		lo_address a = lo_address_new_with_proto(LO_UDP, osc_to_host, osc_to_port);
+		char str[40];
+#endif
+
 	if(param.usebuffer)
 	{
 		buffer_resync();
@@ -228,8 +336,30 @@ static void generic_load(mpg123_handle *fr, char *arg, int state)
 	{
 		generic_sendmsg("E Error opening stream: %s", arg);
 		generic_sendmsg("P 0");
+#ifdef OSC
+		if(run_osc==1)
+		{
+			strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/open");
+	        	lo_send(a, str, "iss", 101, "Error opening stream", arg);
+			strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/pause");
+			lo_send(a, str, "i", 0);
+		}
+#endif
 		return;
 	}
+
+	/* Fixed string. Evil. */
+	strncpy(track_name,arg, sizeof(track_name)-1);
+	track_name[sizeof(track_name)-1] = 0;
+
+#ifdef OSC
+	if(run_osc==1)
+	{
+		strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/load");
+		lo_send(a, str, "s", track_name);
+	}
+#endif
+
 	mpg123_seek(fr, 0, SEEK_SET); /* This finds ID3v2 at beginning. */
 	if(mpg123_meta_check(fr) & MPG123_NEW_ID3)
 	{
@@ -244,6 +374,24 @@ static void generic_load(mpg123_handle *fr, char *arg, int state)
 	mode = state;
 	init = 1;
 	generic_sendmsg(mode == MODE_PAUSED ? "P 1" : "P 2");
+#ifdef OSC
+	if(run_osc==1)
+	{
+			strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/pause");
+
+			if(MODE_PAUSED == mode)
+			{
+	        		lo_send(a, str, "i", 1);
+				generic_sendstat_limited(fr,0);
+			}
+			else
+			{
+			        lo_send(a, str, "i", 2);
+			}
+	}
+#endif
+
+
 }
 
 static void generic_loadlist(mpg123_handle *fr, char *arg)
@@ -287,6 +435,14 @@ static void generic_loadlist(mpg123_handle *fr, char *arg)
 
 int control_generic (mpg123_handle *fr)
 {
+	/*f## difficult to concatenate */
+	/* Hint: use sprintf, but we're also switching
+	   to mpg123_string for storage */
+#ifdef OSC
+	lo_address a = lo_address_new_with_proto(LO_UDP, osc_to_host, osc_to_port);
+	char str[40];
+#endif
+
 	struct timeval tv;
 	fd_set fds;
 	int n;
@@ -313,6 +469,17 @@ int control_generic (mpg123_handle *fr)
 	/* the command behaviour is different, so is the ID */
 	/* now also with version for command availability */
 	fprintf(outstream, "@R MPG123 (ThOr) v7\n");
+#ifdef OSC
+	if(run_osc==1)
+	{
+		strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/started");
+		lo_send(a, str,"ssss",osc_id,osc_port,osc_to_host,osc_to_port);
+
+		strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/pause");
+	}
+#endif
+
+
 #ifdef FIFO
 	if(param.fifo)
 	{
@@ -337,8 +504,41 @@ int control_generic (mpg123_handle *fr)
 #endif /* WANT_WIN32_FIFO */
 		debug("opened");
 	}
-#endif
+/* no fifo param but osc needs one */
+#ifdef OSC
+	else if(run_osc==1)
+	{
+		/* create fifo name depending on osc_id */
 
+ 		/*f## difficult to concatenate */
+		/* Nope, not when using formatted printing! */
+		snprintf(osc_fifo_name, sizeof(osc_fifo_name)-1, "osc_%s.fifo", osc_id);
+		/* Quick and dirty paranoia to ensure that the string is terminated. */
+		osc_fifo_name[sizeof(osc_fifo_name)-1] = 0;
+		param.fifo=osc_fifo_name;
+
+		/* check if fifo already exists */
+		if(access(param.fifo,F_OK)==0)
+		{
+			printf("@OSC INFO using existing fifo for osc operation: %s\n",param.fifo);
+		}
+		else
+		{
+			printf("@OSC INFO creating new fifo for osc operation: %s\n",param.fifo);
+
+			if(mkfifo(param.fifo, 0666) == -1)
+			{
+				error2("Failed to create FIFO at %s (%s)", param.fifo, strerror(errno));
+				return 1;
+			}
+		}
+		debug("going to open named pipe ... blocking until someone gives command");
+		control_file = open(param.fifo,O_RDONLY);
+		debug("opened");
+	}
+#endif
+#endif
+fprintf(stderr, "fifo: %s\n", param.fifo);
 	while (alive)
 	{
 		tv.tv_sec = 0;
@@ -357,18 +557,38 @@ int control_generic (mpg123_handle *fr)
 				{
 					/* When the track ended, user may want to keep it open (to seek back),
 					   so there is a decision between stopping and pausing at the end. */
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/pause");
+					}
+#endif
+
 					if(param.keep_open)
 					{
 						mode = MODE_PAUSED;
 						/* Hm, buffer should be stopped already, shouldn't it? */
 						if(param.usebuffer) buffer_stop();
 						generic_sendmsg("P 1");
+#ifdef OSC
+						if(run_osc==1)
+						{
+				        		lo_send(a, str,"i",1);
+							generic_sendstat_limited(fr,0);
+						}
+#endif
 					}
 					else
 					{
 						mode = MODE_STOPPED;
 						close_track();
 						generic_sendmsg("P 0");
+#ifdef OSC
+						if(run_osc==1)
+						{
+				        		lo_send(a, str,"i",0);
+						}
+#endif
 					}
 					continue;
 				}
@@ -436,7 +656,7 @@ int control_generic (mpg123_handle *fr)
 					close(control_file);
 					control_file = open(param.fifo,O_RDONLY|O_NONBLOCK);
 #endif
-					if(control_file < 0){ error1("open of fifo failed... %s", strerror(errno)); break; }
+					if(control_file < 0){ error2("open of fifo %s failed... %s", param.fifo, strerror(errno)); break; }
 					continue;
 				}
 #endif
@@ -467,23 +687,61 @@ int control_generic (mpg123_handle *fr)
 
 				/* PAUSE */
 				if (!strcasecmp(comstr, "P") || !strcasecmp(comstr, "PAUSE")) {
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/pause");
+					}
+#endif
+
 					if(mode != MODE_STOPPED)
 					{	
 						if (mode == MODE_PLAYING) {
 							mode = MODE_PAUSED;
 							if(param.usebuffer) buffer_stop();
 							generic_sendmsg("P 1");
+#ifdef OSC
+							if(run_osc==1)
+							{
+					        		lo_send(a, str,"i",1);
+								generic_sendstat_limited(fr,0);
+							}
+#endif
+
 						} else {
 							mode = MODE_PLAYING;
 							if(param.usebuffer) buffer_start();
 							generic_sendmsg("P 2");
+#ifdef OSC
+							if(run_osc==1)
+							{
+					        		lo_send(a, str,"i",2);
+							}
+#endif
+
 						}
-					} else generic_sendmsg("P 0");
+					} else 
+					{
+						generic_sendmsg("P 0");
+#ifdef OSC
+						if(run_osc==1)
+						{
+							lo_send(a, str,"i",0);
+						}
+#endif
+					}
 					continue;
 				}
 
 				/* STOP */
 				if (!strcasecmp(comstr, "S") || !strcasecmp(comstr, "STOP")) {
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/pause");
+					}
+#endif
+
 					if (mode != MODE_STOPPED) {
 						if(param.usebuffer)
 						{
@@ -493,7 +751,23 @@ int control_generic (mpg123_handle *fr)
 						close_track();
 						mode = MODE_STOPPED;
 						generic_sendmsg("P 0");
-					} else generic_sendmsg("P 0");
+#ifdef OSC
+						if(run_osc==1)
+						{
+							lo_send(a, str,"i",0);
+						}
+#endif
+
+					} else 
+					{
+						generic_sendmsg("P 0");
+#ifdef OSC
+						if(run_osc==1)
+						{
+							lo_send(a, str,"i",0);
+						}
+#endif
+					}
 					continue;
 				}
 
@@ -501,8 +775,106 @@ int control_generic (mpg123_handle *fr)
 				if(!strcasecmp(comstr, "SILENCE")) {
 					silent = 1;
 					generic_sendmsg("silence");
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/silence");
+						lo_send(a, str, "i", 1);
+					}
+#endif
 					continue;
 				}
+				/* UNSILENCE */
+				if(!strcasecmp(comstr, "UNSILENCE")) {
+					silent = 0;
+					generic_sendmsg("unsilence");
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/silence");
+						lo_send(a, str, "i", 0);
+					}
+#endif
+					continue;
+				}
+
+				/* SHOWINTERVAL */
+				if(!strcasecmp(comstr, "SHOWINTERVAL")) {
+					generic_sendmsg("showinterval %i",report_interval);
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/showinterval");
+						lo_send(a, str, "i", report_interval);
+					}
+#endif
+					continue;
+				}
+
+				/* SHOWLOADED */
+				if(!strcasecmp(comstr, "SHOWLOADED")) {
+
+					generic_sendmsg("showloaded %s", track_name);
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/showloaded");
+						lo_send(a, str, "s", track_name);
+					}
+#endif
+					continue;
+				}
+
+
+				/* SHOWPAUSE */
+				if(!strcasecmp(comstr, "SHOWPAUSE")) {
+/*
+MODE_STOPPED 0
+MODE_PLAYING 1
+MODE_PAUSED 2
+-> does not match ThOr
+*/
+					int iPause=-1;
+					if(mode==MODE_STOPPED){iPause=0;}
+					else if(mode==MODE_PLAYING){iPause=2;}
+					else if(mode==MODE_PAUSED)
+					{
+						iPause=1;
+					}
+
+					generic_sendmsg("showpause %i", iPause);
+
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/showpause");
+						lo_send(a, str, "i", iPause);
+						if(iPause==1)
+						{
+							generic_sendstat_limited(fr,0);
+						}
+					}
+#endif
+					continue;
+				}
+
+
+				/* SHOWALL */
+				if(!strcasecmp(comstr, "SHOWALL")) {
+
+/* generic_sendmsg("showall %s", track_name); */
+
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/ra/started");
+						lo_send(a, str,"ssss",osc_id,osc_port,osc_to_host,osc_to_port);
+					}
+#endif
+					continue;
+				}
+
+
 
 				if(!strcasecmp(comstr, "T") || !strcasecmp(comstr, "TAG")) {
 					generic_sendalltag(fr);
@@ -528,8 +900,42 @@ int control_generic (mpg123_handle *fr)
 					off_t pos = mpg123_tell(fr);
 					off_t len = mpg123_length(fr);
 					/* I need to have portable printf specifiers that do not truncate the type... more autoconf... */
-					if(len < 0) generic_sendmsg("E %s", mpg123_strerror(fr));
-					else generic_sendmsg("SAMPLE %li %li", (long)pos, (long)len);
+					if(len < 0) 
+					{
+						generic_sendmsg("E %s", mpg123_strerror(fr));
+
+#ifdef OSC
+						if(run_osc==1)
+						{
+							strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/sample");
+							lo_send(a, str, "iss", 102, mpg123_strerror(fr),"");
+						}
+#endif
+					}
+					else 
+					{
+						generic_sendmsg("SAMPLE %li %li", (long)pos, (long)len);
+
+#ifdef OSC
+						if(run_osc==1)
+						{
+							strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/sample");
+					       		lo_send(a, str, "hh", pos,len);
+						}
+#endif
+					}
+					continue;
+				}
+
+				/* Show Simple EQ: SEQ <BASS> <MID> <TREBLE>  */
+				if (!strcasecmp(comstr, "SHOWSEQ")) {
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/showseq");
+			       			lo_send(a, str, "fff", bass,mid,treble);
+					}
+#endif
 					continue;
 				}
 
@@ -541,6 +947,14 @@ int control_generic (mpg123_handle *fr)
 					{
 						generic_sendmsg("SHOWEQ %i : %i : %f", MPG123_LEFT, i, mpg123_geteq(fr, MPG123_LEFT, i));
 						generic_sendmsg("SHOWEQ %i : %i : %f", MPG123_RIGHT, i, mpg123_geteq(fr, MPG123_RIGHT, i));
+#ifdef OSC
+						if(run_osc==1)
+						{
+							strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/showeq");
+					       		lo_send(a, str, "iif", MPG123_LEFT,i,mpg123_geteq(fr, MPG123_LEFT, i));
+					       		lo_send(a, str, "iif", MPG123_RIGHT,i,mpg123_geteq(fr, MPG123_RIGHT, i));
+						}
+#endif
 					}
 					generic_sendmsg("SHOWEQ }");
 					continue;
@@ -582,9 +996,19 @@ int control_generic (mpg123_handle *fr)
 					generic_sendmsg("H SCAN: scan through the file, building seek index");
 					generic_sendmsg("H SAMPLE: print out the sample position and total number of samples");
 					generic_sendmsg("H SEQ <bass> <mid> <treble>: simple eq setting...");
+					generic_sendmsg("H SHOWSEQ <bass> <mid> <treble>: show simple eq setting...");
+
 					generic_sendmsg("H PITCH <[+|-]value>: adjust playback speed (+0.01 is 1 %% faster)");
 					generic_sendmsg("H SILENCE: be silent during playback (meaning silence in text form)");
-					generic_sendmsg("H STATE: Print auxiliary state info in several lines (just try it to see what info is there).");
+					/*tb test*/
+					generic_sendmsg("H UNSILENCE: be verbose again");
+					generic_sendmsg("H INTERVAL <int>: set report interval, every nth cycle");
+					generic_sendmsg("H SHOWINTERVAL: print current interval");
+					generic_sendmsg("H SHOWLOADED: print currently loaded file");
+					generic_sendmsg("H SHOWPAUSE: print current pause status");
+					generic_sendmsg("H **SHOWALL: print all info available");
+
+					generic_sendmsg("H STATE: Print auxilliary state info in several lines (just try it to see what info is there).");
 					generic_sendmsg("H TAG/T: Print all available (ID3) tag info, for ID3v2 that gives output of all collected text fields, using the ID3v2.3/4 4-character names.");
 					generic_sendmsg("H    The output is multiple lines, begin marked by \"@T {\", end by \"@T }\".");
 					generic_sendmsg("H    ID3v1 data is like in the @I info lines (see below), just with \"@T\" in front.");
@@ -615,23 +1039,42 @@ int control_generic (mpg123_handle *fr)
 				{
 					/* Simple EQ: SEQ <BASS> <MID> <TREBLE>  */
 					if (!strcasecmp(cmd, "SEQ")) {
-						double b,m,t;
+						/*double b,m,t;*/
 						int cn;
-						if(sscanf(arg, "%lf %lf %lf", &b, &m, &t) == 3)
+						if(sscanf(arg, "%lf %lf %lf", &bass, &mid, &treble) == 3)
 						{
 							/* Consider adding mpg123_seq()... but also, on could define a nicer courve for that. */
-							if ((t >= 0) && (t <= 3))
-							for(cn=0; cn < 1; ++cn)	mpg123_eq(fr, MPG123_LEFT|MPG123_RIGHT, cn, b);
+							if ((treble >= 0) && (treble <= 3))
+							for(cn=0; cn < 1; ++cn)	mpg123_eq(fr, MPG123_LEFT|MPG123_RIGHT, cn, bass);
 
-							if ((m >= 0) && (m <= 3))
-							for(cn=1; cn < 2; ++cn) mpg123_eq(fr, MPG123_LEFT|MPG123_RIGHT, cn, m);
+							if ((mid >= 0) && (mid <= 3))
+							for(cn=1; cn < 2; ++cn) mpg123_eq(fr, MPG123_LEFT|MPG123_RIGHT, cn, mid);
 
-							if ((b >= 0) && (b <= 3))
-							for(cn=2; cn < 32; ++cn) mpg123_eq(fr, MPG123_LEFT|MPG123_RIGHT, cn, t);
+							if ((bass >= 0) && (bass <= 3))
+							for(cn=2; cn < 32; ++cn) mpg123_eq(fr, MPG123_LEFT|MPG123_RIGHT, cn, treble);
 
-							generic_sendmsg("bass: %f mid: %f treble: %f", b, m, t);
+							generic_sendmsg("bass: %f mid: %f treble: %f", bass, mid, treble);
+
+#ifdef OSC
+							if(run_osc==1)
+							{
+								strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/seq");
+						       		lo_send(a, str, "fff", bass, mid, treble);
+							}
+#endif
 						}
-						else generic_sendmsg("E invalid arguments for SEQ: %s", arg);
+						else 
+						{
+							generic_sendmsg("E invalid arguments for SEQ: %s", arg);
+
+#ifdef OSC
+							if(run_osc==1)
+							{
+								strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/seq");
+						       		lo_send(a, str, "iss", 111,"Invalid arguments for SEQ",arg);
+							}
+#endif
+						}
 						continue;
 					}
 
@@ -643,11 +1086,40 @@ int control_generic (mpg123_handle *fr)
 						if(sscanf(arg, "%i %i %lf", &c, &v, &e) == 3)
 						{
 							if(mpg123_eq(fr, c, v, e) == MPG123_OK)
-							generic_sendmsg("%i : %i : %f", c, v, e);
+							{
+								generic_sendmsg("%i : %i : %f", c, v, e);
+#ifdef OSC
+								if(run_osc==1)
+								{
+									strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/eq");
+							       		lo_send(a, str, "iif", c, v, e);
+								}
+#endif
+
+							}
 							else
-							generic_sendmsg("E failed to set eq: %s", mpg123_strerror(fr));
+							{
+								generic_sendmsg("E failed to set eq: %s", mpg123_strerror(fr));
+#ifdef OSC
+								if(run_osc==1)
+								{
+									strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/eq");
+							       		lo_send(a, str, "iss", 112,"Failed to set EQ",mpg123_strerror(fr));
+								}
+#endif
+							}
 						}
-						else generic_sendmsg("E invalid arguments for EQ: %s", arg);
+						else 
+						{
+							generic_sendmsg("E invalid arguments for EQ: %s", arg);
+#ifdef OSC
+							if(run_osc==1)
+							{
+								strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/eq");
+						       		lo_send(a, str, "iss", 113,"Invalid arguments for EQ",arg);
+							}
+#endif
+						}
 						continue;
 					}
 
@@ -663,6 +1135,17 @@ int control_generic (mpg123_handle *fr)
 					}
 
 					/* SEEK to a sample offset */
+/*seek does not seem to update position on pause?
+TODO: Talk to Thomas about this.
+Hint: seek +10 just seeks 10 samples .. a tiny difference that gets lost?
+
+while pause:
+jump +10s
+seek +10
+jump -10s
+-> same position!
+*/
+
 					if(!strcasecmp(cmd, "K") || !strcasecmp(cmd, "SEEK"))
 					{
 						off_t soff;
@@ -671,6 +1154,13 @@ int control_generic (mpg123_handle *fr)
 						if(mode == MODE_STOPPED)
 						{
 							generic_sendmsg("E No track loaded!");
+#ifdef OSC
+							if(run_osc==1)
+							{
+								strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/seek");
+						       		lo_send(a, str, "iss", 103, "No track loaded","");
+							}
+#endif
 							continue;
 						}
 
@@ -679,11 +1169,26 @@ int control_generic (mpg123_handle *fr)
 						if(0 > (soff = mpg123_seek(fr, soff, whence)))
 						{
 							generic_sendmsg("E Error while seeking: %s", mpg123_strerror(fr));
+#ifdef OSC
+							if(run_osc==1)
+							{
+								strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/seek");
+								lo_send(a, str, "iss", 104, "Error while seeking",mpg123_strerror(fr));
+							}
+#endif
+
 							mpg123_seek(fr, 0, SEEK_SET);
 						}
 						if(param.usebuffer) buffer_resync();
 
 						generic_sendmsg("K %li", (long)mpg123_tell(fr));
+#ifdef OSC
+						if(run_osc==1)
+						{
+							strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/seek");
+							lo_send(a, str, "hs", mpg123_tell(fr),arg);
+						}
+#endif
 						continue;
 					}
 					/* JUMP */
@@ -696,6 +1201,13 @@ int control_generic (mpg123_handle *fr)
 						if(mode == MODE_STOPPED)
 						{
 							generic_sendmsg("E No track loaded!");
+#ifdef OSC
+							if(run_osc==1)
+							{
+								strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/jump");
+						       		lo_send(a, str, "iss", 105, "No track loaded", "");
+							}
+#endif
 							continue;
 						}
 
@@ -708,11 +1220,28 @@ int control_generic (mpg123_handle *fr)
 						if(0 > (framenum = mpg123_seek_frame(fr, offset, SEEK_SET)))
 						{
 							generic_sendmsg("E Error while seeking");
+	
+#ifdef OSC
+							if(run_osc==1)
+							{
+								strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/jump");
+						       		lo_send(a, str, "iss", 106, "Error while seeking", arg);
+							}
+#endif
 							mpg123_seek_frame(fr, 0, SEEK_SET);
 						}
 						if(param.usebuffer)	buffer_resync();
 
 						generic_sendmsg("J %d", framenum);
+#ifdef OSC
+						if(run_osc==1)
+						{
+							strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/jump");
+						       	lo_send(a, str, "hs", framenum, arg);
+							generic_sendstat_limited(fr,0);
+						}
+#endif
+
 						continue;
 					}
 
@@ -723,8 +1252,33 @@ int control_generic (mpg123_handle *fr)
 						mpg123_volume(fr, atof(arg)/100);
 						mpg123_getvolume(fr, &v, NULL, NULL); /* Necessary? */
 						generic_sendmsg("V %f%%", v * 100);
+#ifdef OSC
+						if(run_osc==1)
+						{
+							strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/volume");
+					       		lo_send(a, str, "f", v * 100);
+						}
+#endif
 						continue;
 					}
+					/* INTERVAL */
+					if(!strcasecmp(cmd, "INTERVAL"))
+					{
+						report_interval=atoi(arg);
+						generic_sendmsg("interval %i%", report_interval);
+
+#ifdef OSC
+						if(run_osc==1)
+						{
+							strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/interval");
+					       		lo_send(a, str, "i", report_interval);
+						}
+#endif
+
+						continue;
+					}
+
+
 
 					/* PITCH (playback speed) in percent */
 					if(!strcasecmp(cmd, "PITCH"))
@@ -734,8 +1288,27 @@ int control_generic (mpg123_handle *fr)
 						{
 							set_pitch(fr, ao, p);
 							generic_sendmsg("PITCH %f", param.pitch);
+#ifdef OSC
+							if(run_osc==1)
+							{
+								strcpy(str,"/");strcat(str,osc_id);strcat(str,"/r/pitch");
+						       		lo_send(a, str, "f", param.pitch);
+							}
+#endif
 						}
-						else generic_sendmsg("E invalid arguments for PITCH: %s", arg);
+						else 
+						{
+							generic_sendmsg("E invalid arguments for PITCH: %s", arg);
+
+#ifdef OSC
+							if(run_osc==1)
+							{
+								strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/pitch");
+						       		lo_send(a, str, "iss", 107, "Invalid arguments for pitch", arg);
+							}
+#endif
+						}
+
 						continue;
 					}
 
@@ -760,8 +1333,28 @@ int control_generic (mpg123_handle *fr)
 
 					/* no command matched */
 					generic_sendmsg("E Unknown command: %s", cmd); /* unknown command */
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/unknown");
+					       	lo_send(a, str, "iss", 109, "Unknown command", cmd);
+					}
+#endif
+
 				} /* end commands with arguments */
-				else generic_sendmsg("E Unknown command or no arguments: %s", comstr); /* unknown command */
+				else 
+				{
+					generic_sendmsg("E Unknown command or no arguments: %s", comstr); /* unknown command */
+
+#ifdef OSC
+					if(run_osc==1)
+					{
+						strcpy(str,"/");strcat(str,osc_id);strcat(str,"/e/unknown");
+					       	lo_send(a, str, "iss", 110, "Unknown command or no arguments", comstr);
+					}
+#endif
+
+				}
 
 				} /* end of single command processing */
 			} /* end of scanning the command buffer */
@@ -775,12 +1368,14 @@ int control_generic (mpg123_handle *fr)
 				 command and have fingers crossed that the rest of this
 				 unfinished one qualifies as "unknown". 
 			*/
+			/* TODO: Why disabling this?
 			if(buf[len-1] != 0)
 			{
 				char lasti = buf[len-1];
 				buf[len-1] = 0;
 				generic_sendmsg("E Unfinished command: %s%c", comstr, lasti);
 			}
+			*/
 		} /* end command reading & processing */
 	} /* end main (alive) loop */
 	debug("going to end");
