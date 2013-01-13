@@ -1,10 +1,99 @@
+1.15.0
+---
+- added --continue (also see scripts/conplay)
+- added number row to terminal control keys for 10% jump points (for navigating long tracks)
+- Set xterm title always if asked, disregarding the -q switch (if you want fully quiet, don't specify --title).
+- Enable terminal mode in OS/2 by explicitly checking for and using os2term library.
+- Getting WAV/AU/CDR writing back to a sane state while still catching out-of-disk when writing headers (none in case of CDR) but removing that initial test that prevented writing on any non-seekable file (like, /dev/stdout to a pipe).
+- more robust recovery from ALSA issues (device suspend)
+- fix crash in module loader on *BSD
+- extend time display to switch to hours above 60 minutes (hh:mm:ss, ditching the sub-second precision)
+- really include dithering in default x86-64 build
+
+TODO: fix/describe logic for changing input format (multiple headers in non-seekable streams)
+TODO: fix mpg123_scan not properly seeking back for all types of files (see tracker)
+
+1.14.4
+---
+
+Who reworks a parsing and data mangling without really making sure that things still work like before? I hope I won't do so in future. Not again.
+
+- Fix resync logic to properly work again (used to prematurely end stream on bad headers). A regression again, this sucks, but at least we got a regression test for that now.
+- Fix aeon-old regression (since 1.11.0) about short seeks: Bit reservoir was reset also for short seeks that did not break continuity.
+- Another damned regression got fixed: Sample-accurate seek for files without full gapless info.
+
+1.14.3
+---
+- Fix regression from 1.14.1 in parsing of bad free format streams, avoiding apparently endless loops (just very slow reading, in fact).
+
+1.14.2
+---
+- Fix writing of WAV to stdout.
+  It is still not the best of ideas to do so, though. At least make sure to fix rate and channels.
+
+1.14.1
+---
+- Fix subtle bug that could trigger failure to detect a format change on resync when using libmpg123's feeder API.
+  That bug has been there since ages but was neutralized by other (buggy) behaviour of the parser before the little overhaul. The Law of an Even Number of Bugs.
+
 1.14.0
 ---
+- libmpg123 API version 36 (see NEWS.libmpg123)
 - Add --ignore-streamlength.
-  TODO: Make mpg123 smarter to recognize concatenated streams, re-start the frame counter.
-AND TAKE PROPER CARE OF THAT HACK TO UN-IGNORE FRAMES FAR OVER LASTFRAME!
-This hack brings the sound, but also brings funky behaviour of mpg123 -k <n> ... with suddenly non-present verbose position info, for example.
+- But also deal with concatenated (Frankenstein) streams: Not applying gapless cutting once we're over the announced number of frames.
+- Also, gapless cutting is only applied if relevant information is present. Previously, at least the decoder delay has been cut.
+- Add --lyrics for printout of lyrics (from USLT in ID3v2).
+- Added handling of SIGUSR1 and SIGUSER2 to terminal control code, configurable via --ctrlusr1 and --ctrlusr2.
+- Some low-level API added (mpg123_framedata(), mpg123_framepos(), buffering and resampling control).
+- Added info about input buffer fill to mpg123_getstate().
+- ReplayGain: Try to detect LAME below 3.95 for the different reference level of 83 dB (adding preamp of 6 dB). Version 3.95 itself (not 3.95.1) I cannot detect. User-set gain values are not touched.
+- Keep silent about missing bit reservoir when ignoring frames. That is the whole point (mostly;-).
+- Add the new/old WRITE_SAMPLE variant from MPlayer that makes the generic decoder faster on older CPUs (x86 at least). Not on x86-64, though (it's not enabled per default there).
+- Handle out-of-disk in the file writers (a bit, see http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=67259)
+- Added Xcode project files to build libmpg123 on Mac OS and iOS
+- 32 bit output for sndio output (patch by Brad Smith).
+- Remote control interface knows LOADLIST command now.
+- Now freeing meta data memory after printout.
+- Some documentation cleanup, including manpage fixes by quadrispro.
+- Re-enabled wildcard expansion on Windows (been broken by unicode file name support).
+- Fix MMX tabinit syntax (thanks to Marcel Müller for pointing that out).
+- Fix SGI audio output (been broken since change to modules).
+- Fix some fringe behaviour (mpg123_getformat() triggering needless reading of next frame, possibly hitting bogus MPG123_NEED_MORE).
+- Resync limit now also serves to increase amount of skipped junk on beginning.
+- Better separation of stream end and read error (in case there is no stream opened, even).
+- Don't always complain about failed free format header search (only with verbosity level 3).
 
+1.13.8
+---
+- Fix build for ARM Thumb (incompatible assembly in some macros).
+
+1.13.7
+---
+- Fix endless loop in module loader when starting mpg123 in a directory that does not exist.
+
+1.13.6
+---
+- Fix output of one random character in -vvv mode for ID3v2.2 frames (no buffer overflow, move along, folks;-).
+
+1.13.5
+---
+- Fix reading of ReplayGain values from Lame tag (nobody seen this before?!)
+  (both actual values and the distinction between audiophile / radio).
+- Accept application/octet-stream as input from HTTP.
+- Update man page with encodings.
+- Build fixes.
+
+1.13.4
+---
+- Fix bogus error on resync with big offsets (hits systems that have bigger off_t than int), bug 3393801.
+- Fix windows binary package build script again with plugdir.
+
+1.13.3
+---
+- Fix an endless loop on bad headers, bug 3267863.
+- Prevent compiler warnings about unused variables with gcc 4.6 .
+- Fix return value handling of getaddrinfo(), bug 3288333.
+- Make decwin size computation work for OPT_ARM and sizeof(long) != 4 (bug 3288360).
 
 1.13.2
 ---

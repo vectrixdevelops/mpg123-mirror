@@ -56,6 +56,7 @@
 #define MPG123_PITCH_DOWN_KEY  'x'
 #define MPG123_PITCH_BDOWN_KEY 'X'
 #define MPG123_PITCH_ZERO_KEY  'w'
+#define MPG123_BOOKMARK_KEY    'k'
 /* This counts as "undocumented" and can disappear */
 #define MPG123_FRAME_INDEX_KEY 'i'
 #define MPG123_VARIOUS_INFO_KEY 'I'
@@ -66,6 +67,10 @@
 #define MPG123_PAUSED_STRING	"Paused. \b\b\b\b\b\b\b\b"
 #define MPG123_STOPPED_STRING	"Stopped.\b\b\b\b\b\b\b\b"
 #define MPG123_EMPTY_STRING	"        \b\b\b\b\b\b\b\b"
+
+/* Need it as string for the param struct, change according to the above. */
+#define MPG123_TERM_USR1 "s"
+#define MPG123_TERM_USR2 "f"
 
 void term_init(void);
 off_t term_control(mpg123_handle *mh, audio_output_t *ao);

@@ -48,33 +48,36 @@ extern char* binpath; /* argv[0], actually... */
 
 struct parameter
 {
-  int aggressive; /* renice to max. priority */
-  int shuffle;	/* shuffle/random play */
-  int remote;	/* remote operation */
-  int remote_err;	/* remote operation to stderr */
-  int outmode;	/* where to out the decoded sampels */
-  int quiet;	/* shut up! */
-  int xterm_title;	/* Change xterm title to song names? */
-  long usebuffer;	/* second level buffer size */
-  int verbose;    /* verbose level */
-  char* output_module;	/* audio output module to use */
-  char* output_device;	/* audio output device to use */
-  int   output_flags;	/* legacy output destination for AIX/HP/Sun */
+	int aggressive; /* renice to max. priority */
+	int shuffle;	/* shuffle/random play */
+	int remote;	/* remote operation */
+	int remote_err;	/* remote operation to stderr */
+	int outmode;	/* where to out the decoded sampels */
+	int quiet;	/* shut up! */
+	int xterm_title;	/* Change xterm title to song names? */
+	long usebuffer;	/* second level buffer size */
+	int verbose;    /* verbose level */
+	char* output_module;	/* audio output module to use */
+	char* output_device;	/* audio output device to use */
+	int   output_flags;	/* legacy output destination for AIX/HP/Sun */
 #ifdef HAVE_TERMIOS
-  int term_ctrl;
+	int term_ctrl;
+	/* Those are supposed to be single characters. */
+	char* term_usr1;
+	char* term_usr2;
 #endif
-  int checkrange;
-  int force_reopen;
-  int test_cpu;
-  long realtime;
+	int checkrange;
+	int force_reopen;
+	int test_cpu;
+	long realtime;
 #ifdef HAVE_WINDOWS_H
-  int w32_priority;
+	int w32_priority;
 #endif
-  char *filename;
-  long listentry; /* possibility to choose playback of one entry in playlist (0: off, > 0 : select, < 0; just show list*/
-  char* listname; /* name of playlist */
-  int long_id3;
-  int list_cpu;
+	char *filename;
+	long listentry; /* possibility to choose playback of one entry in playlist (0: off, > 0 : select, < 0; just show list*/
+	char* listname; /* name of playlist */
+	int long_id3;
+	int list_cpu;
 	char *cpu;
 #ifdef FIFO
 	char* fifo;
@@ -97,7 +100,7 @@ struct parameter
 	long resync_limit;
 	int smooth;
 	double pitch; /* <0 or >0, 0.05 for 5% speedup. */
-	int ignore_mime; /* An mpg123 app flag field in future? */
+	unsigned long appflags; /* various switches for mpg123 application */
 	char *proxyurl;
 	int keep_open; /* Whether to keep files open after end reached, for remote control mode, perhaps terminal control, too. */
 	int force_utf8; /* Regardless of environment, always print out verbatim UTF for metadata. */
@@ -109,6 +112,16 @@ struct parameter
 	char* streamdump;
 	long icy_interval;
 };
+
+enum mpg123app_flags
+{
+	 MPG123APP_IGNORE_MIME = 0x01
+	,MPG123APP_LYRICS = 0x02
+	,MPG123APP_CONTINUE = 0x04
+};
+
+/* shortcut to check application flags */
+#define APPFLAG(a) (param.appflags & (a))
 
 extern char *equalfile;
 extern off_t framenum;
@@ -155,5 +168,7 @@ void set_intflag(void);
 
 /* equalizer... success is 0, failure -1 */
 int load_equalizer(mpg123_handle *mh);
+
+void continue_msg(const char *name);
 
 #endif 

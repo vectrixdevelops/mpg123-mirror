@@ -9,10 +9,10 @@ AC_PREREQ(2.57)
 
 
 dnl ############# Initialisation
-AC_INIT([mpg123], [1.14.0], [mpg123-devel@lists.sourceforge.net])
+AC_INIT([mpg123], [1.15.0], [mpg123-devel@lists.sourceforge.net])
 dnl Increment API_VERSION when the API gets changes (new functions).
-API_VERSION=31
-LIB_PATCHLEVEL=1
+API_VERSION=36
+LIB_PATCHLEVEL=7
 dnl Since we want to be backwards compatible, both sides get set to API_VERSION.
 LIBMPG123_VERSION=$API_VERSION:$LIB_PATCHLEVEL:$API_VERSION
 AC_SUBST(LIBMPG123_VERSION)
@@ -35,10 +35,11 @@ AM_CONFIG_HEADER(src/config.h)
 AC_MSG_CHECKING([for -Werror in CFLAGS (It breaks tests)])
 if echo "$CFLAGS" | grep Werror; then
 	AC_MSG_RESULT([yes])
-	AC_MSG_ERROR([I refuse to run with -Werror in CFLAGS. That breaks tests and makes this configure bogus.
+	AC_MSG_WARN([You have -Werror in CFLAGS. That may break some tests and make this configure bogus.
 If you want paranoid compilation, use --enable-nagging option, which adds -Werror for gcc.
 Also note that you shall not run make distcheck after configuring with --enable-nagging.
-distcheck uses the generated CFLAGS...])
+distcheck uses the generated CFLAGS...
+Anyhow, continuing at your own risk.])
 else
 	AC_MSG_RESULT([no])
 fi
@@ -168,16 +169,13 @@ if test x"$modules" = xdisabled
 then
 	echo "Modules still disabled..."
 	MODULE_OBJ="legacy_module.\$(OBJEXT)"
-	MODULE_LOBJ="legacy_module.lo"
 else
 	MODULE_OBJ="module.\$(OBJEXT)"
-	MODULE_LOBJ="module.lo"
 fi
 
 AM_CONDITIONAL( [HAVE_MODULES], [test "x$modules" = xenabled] )
 
 AC_SUBST(MODULE_OBJ)
-AC_SUBST(MODULE_LOBJ)
 AC_SUBST(LT_LDFLAGS)
 AC_SUBST(EXEC_LT_LDFLAGS)
 
@@ -475,7 +473,7 @@ if test "x$ieee" = xyes; then
   AC_DEFINE(IEEE_FLOAT,   1, [ Define to indicate that float storage follows IEEE754. ])
 fi
 
-
+newoldwritesample=disabled
 case $host in
   arm*-*-linux*)
     # check that... perhaps we are better off on arm with kernel math emulation
@@ -483,18 +481,22 @@ case $host in
   ;;
   i386-*-linux*|i386-*-kfreebsd*-gnu)
     cpu_type="i386_fpu"
+    newoldwritesample=enabled
   ;;
   i486-*-linux*|i486-*-kfreebsd*-gnu)
     cpu_type="i486"
+    newoldwritesample=enabled
   ;;
   i586-*-linux*|i586-*-kfreebsd*-gnu)
     cpu_type="x86"
+    newoldwritesample=enabled
   ;;
   i686-*-linux*|i686-*-kfreebsd*-gnu)
     cpu_type="x86"
+    newoldwritesample=enabled
   ;;
   x86_64-*-linux*|x86_64-*-kfreebsd*-gnu)
-    cpu_type="x86-64_all"
+    cpu_type="x86-64"
   ;;
   *-*-linux*|*-*-kfreebsd*-gnu)
     cpu_type="generic_fpu"
@@ -504,19 +506,21 @@ case $host in
     case `sysctl -n hw.optional.x86_64` in
       1)
         AC_MSG_RESULT([yes])
-        cpu_type="x86-64_all"
+        cpu_type="x86-64"
       ;;
       *)
         AC_MSG_RESULT([no])
         cpu_type="x86"
+        newoldwritesample=enabled
       ;;
     esac
   ;;
   i386-apple-darwin*)
     cpu_type="x86"
+    newoldwritesample=enabled
   ;;
   x86_64-apple-darwin*)
-    cpu_type="x86-64_all"
+    cpu_type="x86-64"
   ;;
   *-apple-darwin*)
     AC_MSG_CHECKING([if CPU type supports AltiVec])
@@ -533,18 +537,20 @@ case $host in
   ;;
   i?86-*-dragonfly* | i?86-*-freebsd* | i?86-*-midnightbsd* | i?86-*-mirbsd* | i?86-*-netbsd* | i?86-*-openbsd*)
     cpu_type="x86"
+    newoldwritesample=enabled
   ;;
   x86_64-*-dragonfly* | x86_64-*-freebsd* | x86_64-*-midnightbsd* | x86_64-*-mirbsd* | x86_64-*-netbsd* | x86_64-*-openbsd*)
-    cpu_type="x86-64_all"
+    cpu_type="x86-64"
   ;;
   *-*-dragonfly* | *-*-freebsd* | *-*-midnightbsd* | *-*-mirbsd* | *-*-netbsd* | *-*-openbsd*)
     cpu_type="generic_fpu"
   ;;
   i386-*-solaris*)
     cpu_type=x86
+    newoldwritesample=enabled
   ;;
   x86_64-*-solaris*)
-    cpu_type=x86-64_all
+    cpu_type=x86-64
   ;;
   *-*-solaris*)
     cpu_type="generic_fpu"
@@ -553,6 +559,7 @@ case $host in
   # Till we sorted out the assembler troubles, generic CPU is default.
   i386-pc-os2-emx)
     cpu_type=generic_fpu
+    newoldwritesample=enabled
   ;;
   x86_64-pc-os2-emx)
     # We are optimistic hat the future knows OS/2 on x86-64;-)
@@ -565,19 +572,23 @@ case $host in
     cpu_type="generic_fpu"
   ;;
   x86_64-pc-cygwin*)
-    cpu_type="x86-64_all"
+    cpu_type="x86-64"
   ;;
   i686-pc-cygwin*)
     cpu_type="x86"
+    newoldwritesample=enabled
   ;;
   i586-pc-cygwin*)
     cpu_type="x86"
+    newoldwritesample=enabled
   ;;
   i486-pc-cygwin*)
     cpu_type="i486"
+    newoldwritesample=enabled
   ;;
   i386-pc-cygwin*)
     cpu_type="i386"
+    newoldwritesample=enabled
   ;;
   *-pc-cygwin*)
     cpu_type="generic_fpu"
@@ -586,6 +597,7 @@ case $host in
     LIBS="$LIBS"
     buffer=disabled
     cpu_type="x86"
+    newoldwritesample=enabled
   ;;
   x86_64-*-mingw32*)
     LIBS="$LIBS"
@@ -597,28 +609,32 @@ case $host in
 		cpu_type="i386"
 		buffer=disabled
 		ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
+    newoldwritesample=enabled
 	;;
 	i486-*)
 		AC_MSG_WARN([Unknown host operating system])
 		cpu_type="i486"
 		buffer=disabled
 		ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
+    newoldwritesample=enabled
 	;;
 	i586-*)
 		AC_MSG_WARN([Unknown host operating system])
 		cpu_type="x86"
 		buffer=disabled
 		ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
+    newoldwritesample=enabled
 	;;
 	i686-*)
 		AC_MSG_WARN([Unknown host operating system])
 		cpu_type="x86"
 		buffer=disabled
 		ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
+    newoldwritesample=enabled
 	;;
 	x86_64-*)
 		AC_MSG_WARN([Unknown host operating system])
-		cpu_type="x86-64_all"
+		cpu_type="x86-64"
 		buffer=disabled
 		ADD_CPPFLAGS="-DGENERIC $ADD_CPPFLAGS"
 	;;
@@ -643,6 +659,19 @@ AC_ARG_ENABLE(buffer,
     fi
   ]
 )
+
+AC_ARG_ENABLE(newoldwritesample,
+[  --enable-newoldwritesample=[no/yes] enable new/old WRITE_SAMPLE macro for non-accurate 16 bit output, faster on certain CPUs (default on on x86-32)],
+[
+	if test "x$enableval" = xyes
+	then
+		newoldwritesample=enabled
+	else
+		newoldwritesample=disabled
+	fi
+])
+
+
 
 dnl Did user choose other CPU type ?
 if test "x$with_cpu" != "x"; then
@@ -826,6 +855,8 @@ if test x"$asmalign_exp" = xunknown; then
 fi
 if test x"$asmalign_exp" = xyes; then
 	AC_DEFINE(ASMALIGN_EXP, 1, [ Define if .align takes 3 for alignment of 2^3=8 bytes instead of 8. ])
+else
+	AC_DEFINE(ASMALIGN_BYTE, 1, [ Define if .align just takes byte count. ])
 fi
 
 ccalign="unknown"
@@ -1025,7 +1056,10 @@ ADD_CPPFLAGS=""
 ADD_LDFLAGS=""
 LIBS="$LIBS"
 
+# Consider moving that stuff.
 AC_CHECK_HEADER([os2.h], [ADD_CPPFLAGS="$ADD_CPPFLAGS -DOS2"])
+# On OS/2, we need to link to os2term to make terminal control actually work.
+AC_CHECK_LIB([os2term], [tcsetattr], [ADD_LDFLAGS="$ADD_LDFLAGS -los2term"])
 
 # If debugging is enabled then make warnings errors
 if test x"$debugging" = xenabled; then
@@ -1043,7 +1077,7 @@ dnl Only try the attribute_align_arg mumbo-jumbo on x86, x86-64 warns/errors out
 dnl ...dunno even what about other architectures.
 case $host in
   i?86-*)
-    AC_DEFINE(ABI_ALIGN_FUN, 1, [ Define if your architecture wants/needs/can use attribute_align_arg and alignment checks. It's for 32bit x86... ])
+    AC_DEFINE(ABI_ALIGN_FUN, 1, [ Define if your architecture wants/needs/can use attribute_align_arg and alignment checks. It is for 32bit x86... ])
  ;;
 esac
 
@@ -1103,7 +1137,7 @@ dnl Not disabling buffer for float mode... check that this is OK now!
     ccalign=no
   ;;
   ppc_nofpu)
-    ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_GENERIC -DOPT_PPC -DREAL_IS_FIXED"
+    ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_PPC -DREAL_IS_FIXED"
     more_sources=
     ccalign=no
   ;;
@@ -1187,11 +1221,11 @@ dnl Not disabling buffer for float mode... check that this is OK now!
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_MULTI -DOPT_GENERIC -DOPT_GENERIC_DITHER -DOPT_I386 -DOPT_I586 -DOPT_I586_DITHER -DOPT_MMX -DOPT_3DNOW -DOPT_3DNOWEXT -DOPT_SSE -DREAL_IS_FLOAT"
     more_sources="$s_fpu $s_i386 $s_i586 $s_i586d $s_mmx $s_3dnow $s_3dnowext $s_sse $s_x86multi $s_dither"
   ;;
-  x86-64) 
+  x86-64_alone) 
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_X86_64 -DREAL_IS_FLOAT"
     more_sources="$s_fpu $s_x86_64"
   ;;
-  x86-64_all|x86-64_dither)
+  x86-64|x86-64_all|x86-64_dither)
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_MULTI -DOPT_X86_64 -DOPT_GENERIC -DOPT_GENERIC_DITHER -DREAL_IS_FLOAT"
     more_sources="$s_fpu $s_x86_64 $s_dither"
   ;;
@@ -1629,7 +1663,6 @@ fi
 default_output_modules=$default_output_module
 
 OUTPUT_OBJ=
-OUTPUT_LOBJ=
 OUTPUT_MOD=
 OUTPUT_CFLAGS=
 OUTPUT_LIBS=
@@ -1640,8 +1673,7 @@ if test "x$modules" = xdisabled
 then
 	echo "Preparing static output $default_output_module"
 	OUTPUT_MOD="$default_output_module"
-	OUTPUT_OBJ="modules/$default_output_module.\$(OBJEXT)"
-	OUTPUT_LOBJ="modules/$default_output_module.lo"
+	OUTPUT_OBJ="output/$default_output_module.\$(OBJEXT)"
 	OUTPUT_CFLAGS=
 	OUTPUT_LIBS=
 	# That feels stupid... what about hashed arrays?
@@ -1771,7 +1803,6 @@ AC_DEFINE_UNQUOTED( DEFAULT_OUTPUT_MODULE, "$default_output_modules", [The defau
 
 
 AC_SUBST(OUTPUT_OBJ)
-AC_SUBST(OUTPUT_LOBJ)
 AC_SUBST(OUTPUT_MOD)
 AC_SUBST(OUTPUT_CFLAGS)
 AC_SUBST(OUTPUT_LIBS)
@@ -1782,6 +1813,9 @@ dnl ############## Compiler Optimizations
 CFLAGS="$ADD_CFLAGS $CFLAGS"
 if test x"$buffer" = xdisabled; then
 	ADD_CPPFLAGS="$ADD_CPPFLAGS -DNOXFERMEM"
+fi
+if test x"$newoldwritesample" = xenabled; then
+	ADD_CPPFLAGS="$ADD_CPPFLAGS -DNEWOLD_WRITE_SAMPLE"
 fi
 CPPFLAGS="$ADD_CPPFLAGS $CPPFLAGS"
 LDFLAGS="$ADD_LDFLAGS $LDFLAGS"
@@ -2103,6 +2137,7 @@ fi
 echo -n "
   Core libmpg123 features:
   Integer conversion ...... $integers
+  New/old WRITE_SAMPLE .... $newoldwritesample
   Layer I ................. $layer1
   Layer II ................ $layer2
   Layer III ............... $layer3
@@ -2120,6 +2155,8 @@ echo -n "
   16 bit integer .......... $int16
   32/24 bit integer ....... $int32
   real (32 bit float) ..... $real
+
+Note: Disabling core features is not commonly done and some combinations might not build/work. If you encounter such a case, help yourself (and provide a patch) or just poke the maintainers.
 "
 # just an empty line
 echo

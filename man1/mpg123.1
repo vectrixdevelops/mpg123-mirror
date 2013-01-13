@@ -1,4 +1,4 @@
-.TH mpg123 1 "31 Jan 2008"
+.TH mpg123 1 "22 Apr 2012"
 .SH NAME
 mpg123 \- play audio MPEG 1.0/2.0/2.5 stream (layers 1, 2 and 3)
 .SH SYNOPSIS
@@ -63,8 +63,9 @@ With this switch you can make it bail out on data errors
 The old name still works, but is not advertised or recommened to use (subject to removal in future).
 .TP
 \fB\-\^-resync\-limit \fIbytes\fR
-Set number of bytes to search for valid MPEG data; <0 means search whole stream.
+Set number of bytes to search for valid MPEG data once lost in stream; <0 means search whole stream.
 If you know there are huge chunks of invalid data in your files... here is your hammer.
+Note: Only since version 1.14 this also increases the amount of junk skipped on beginning.
 .TP
 \fB\-p \fIURL \fR| \fBnone\fR, \fB\-\^\-proxy \fIURL \fR| \fBnone
 The specified
@@ -101,8 +102,13 @@ Of the playlist, play specified entry only.
 .I n
 is the number of entry starting at 1. A value of 0 is the default and means playling the whole list,  a negative value means showing of the list of titles with their numbers...
 .TP
+\fB\-\^\-continue
+Enable playlist continuation mode. This changes frame skipping to apply only to the first track and also continues to play following tracks in playlist after the selected one. Also, the option to play a number of frames only applies to the whole playlist. Basically, this tries to treat the playlist more like one big stream (like, an audio book).
+The current track number in list (1-based) and frame number (0-based) are printed at exit (useful if you interrupted playback and want to continue later).
+Note that the continuation info is printed to standard output unless the switch for piping audio data to standard out is used. Also, it really makes sense to work with actual playlist files instead of lists of file names as arguments, to keep track positions consistent.
+.TP
 \fB\-\-loop \fItimes\fR
-for looping track(s) a certain number of times, < 0 means infinite loop (not with --random!).
+for looping track(s) a certain number of times, < 0 means infinite loop (not with \-\-random!).
 .TP
 .BR \-\-keep\-open
 For remote control mode: Keep loaded file open after reaching end.
@@ -227,7 +233,7 @@ Force stereo output
 .TP
 \fB\-r \fIrate\fR, \fB\-\^\-rate \fIrate
 Set sample rate (default: automatic).  You may want to
-change this if you need a constant bitrate independed of
+change this if you need a constant bitrate independent of
 the mpeg stream rate. mpg123 automagically converts the
 rate. You should then combine this with \-\-stereo or \-\-mono.
 .TP
@@ -241,6 +247,13 @@ Set hardware pitch (speedup/down, 0 is neutral; 0.05 is 5%). This changes the ou
 .TP
 .BR \-\-8bit
 Forces 8bit output
+.TP
+\fB\-\^\-float
+Forces f32 encoding
+.TP
+\fp\-e \fIenc\fR, \fB\-\^\-encoding \fIenc
+Choose output sample encoding. Possible values look like f32 (32-bit floating point), s32 (32-bit signed integer), u32 (32-bit unsigned integer) and the variants with different numbers of bits (s24, u24, s16, u16, s8, u8) and also special variants like ulaw and alaw 8-bit.
+See the output of mpg123's longhelp for actually available encodings.
 .TP
 \fB\-d \fIn\fR, \fB\-\^\-doublespeed \fIn
 Only play every

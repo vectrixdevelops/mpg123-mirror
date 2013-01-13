@@ -9,6 +9,7 @@
 
 #include "mpg123app.h"
 #include <stdarg.h>
+#include <ctype.h>
 #if !defined (WIN32) || defined (__CYGWIN__)
 #include <sys/wait.h>
 #include <sys/socket.h>
@@ -20,6 +21,7 @@
 #include "common.h"
 #include "buffer.h"
 #include "genre.h"
+#include "playlist.h"
 #define MODE_STOPPED 0
 #define MODE_PLAYING 1
 #define MODE_PAUSED 2
@@ -229,7 +231,11 @@ static void generic_load(mpg123_handle *fr, char *arg, int state)
 		return;
 	}
 	mpg123_seek(fr, 0, SEEK_SET); /* This finds ID3v2 at beginning. */
-	if(mpg123_meta_check(fr) & MPG123_NEW_ID3) generic_sendinfoid3(fr);
+	if(mpg123_meta_check(fr) & MPG123_NEW_ID3)
+	{
+		generic_sendinfoid3(fr);
+		mpg123_meta_free(fr);
+	}
 	else generic_sendinfo(arg);
 
 	if(htd.icy_name.fill) generic_sendmsg("I ICY-NAME: %s", htd.icy_name.p);
@@ -238,6 +244,45 @@ static void generic_load(mpg123_handle *fr, char *arg, int state)
 	mode = state;
 	init = 1;
 	generic_sendmsg(mode == MODE_PAUSED ? "P 1" : "P 2");
+}
+
+static void generic_loadlist(mpg123_handle *fr, char *arg)
+{
+	/* arguments are two: first the index to play, then the URL */
+	long entry;
+	long i = 0;
+	char *file = NULL;
+	char *thefile = NULL;
+
+	/* I feel retarted with string parsing outside Perl. */
+	while(*arg && isspace(*arg)) ++arg;
+	entry = atol(arg);
+	while(*arg && !isspace(*arg)) ++arg;
+	while(*arg && isspace(*arg)) ++arg;
+	if(!*arg)
+	{
+		generic_sendmsg("E empty list name");
+		return;
+	}
+
+	/* Now got the plain playlist path in arg. On to evil manupulation of mpg123's playlist code. */
+	param.listname = arg;
+	param.listentry = 0; /* The playlist shall not filter. */
+	prepare_playlist(0, NULL);
+	while((file = get_next_file()))
+	{
+		++i;
+		/* semantics: 0 brings you to the last track */
+		if(entry == 0 || entry == i) thefile = file;
+
+		generic_sendmsg("I LISTENTRY %li: %s", i, file);
+	}
+	if(!i) generic_sendmsg("I LIST EMPTY");
+
+	/* If we have something to play, play it. */
+	if(thefile) generic_load(fr, thefile, MODE_PLAYING);
+
+	free_playlist(); /* Free memory after it is not needed anymore. */
 }
 
 int control_generic (mpg123_handle *fr)
@@ -267,7 +312,7 @@ int control_generic (mpg123_handle *fr)
 #endif
 	/* the command behaviour is different, so is the ID */
 	/* now also with version for command availability */
-	fprintf(outstream, "@R MPG123 (ThOr) v6\n");
+	fprintf(outstream, "@R MPG123 (ThOr) v7\n");
 #ifdef FIFO
 	if(param.fifo)
 	{
@@ -524,6 +569,7 @@ int control_generic (mpg123_handle *fr)
 					generic_sendmsg("H HELP/H: command listing (LONG/SHORT forms), command case insensitve");
 					generic_sendmsg("H LOAD/L <trackname>: load and start playing resource <trackname>");
 					generic_sendmsg("H LOADPAUSED/LP <trackname>: load but do not start playing resource <trackname>");
+					generic_sendmsg("H LOADLIST <entry> <url>: load a playlist from given <url>, and display its entries, optionally load and play one of these specificed by the integer <entry> (<0: just list, 0: play last track, >0:play track with that position in list)");
 					generic_sendmsg("H PAUSE/P: pause playback");
 					generic_sendmsg("H STOP/S: stop playback (closes file)");
 					generic_sendmsg("H JUMP/J <frame>|<+offset>|<-offset>|<[+|-]seconds>s: jump to mpeg frame <frame> or change position by offset, same in seconds if number followed by \"s\"");
@@ -538,7 +584,7 @@ int control_generic (mpg123_handle *fr)
 					generic_sendmsg("H SEQ <bass> <mid> <treble>: simple eq setting...");
 					generic_sendmsg("H PITCH <[+|-]value>: adjust playback speed (+0.01 is 1 %% faster)");
 					generic_sendmsg("H SILENCE: be silent during playback (meaning silence in text form)");
-					generic_sendmsg("H STATE: Print auxilliary state info in several lines (just try it to see what info is there).");
+					generic_sendmsg("H STATE: Print auxiliary state info in several lines (just try it to see what info is there).");
 					generic_sendmsg("H TAG/T: Print all available (ID3) tag info, for ID3v2 that gives output of all collected text fields, using the ID3v2.3/4 4-character names.");
 					generic_sendmsg("H    The output is multiple lines, begin marked by \"@T {\", end by \"@T }\".");
 					generic_sendmsg("H    ID3v1 data is like in the @I info lines (see below), just with \"@T\" in front.");
@@ -706,6 +752,8 @@ int control_generic (mpg123_handle *fr)
 
 					/* LOAD - actually play */
 					if (!strcasecmp(cmd, "L") || !strcasecmp(cmd, "LOAD")){ generic_load(fr, arg, MODE_PLAYING); continue; }
+
+					if (!strcasecmp(cmd, "L") || !strcasecmp(cmd, "LOADLIST")){ generic_loadlist(fr, arg); continue; }
 
 					/* LOADPAUSED */
 					if (!strcasecmp(cmd, "LP") || !strcasecmp(cmd, "LOADPAUSED")){ generic_load(fr, arg, MODE_PAUSED); continue; }
