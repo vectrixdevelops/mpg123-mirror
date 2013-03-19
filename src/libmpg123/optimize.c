@@ -469,7 +469,7 @@ int frame_cpu_opt(mpg123_handle *fr, const char* cpu)
 
 #ifdef OPT_MULTI
 #ifndef NO_LAYER3
-#if (defined OPT_3DNOW || defined OPT_3DNOWEXT)
+#if (defined OPT_3DNOW || defined OPT_3DNOWEXT || defined OPT_SSE || defined OPT_X86_64)
 	fr->cpu_opts.the_dct36 = dct36;
 #endif
 #endif
@@ -486,6 +486,9 @@ int frame_cpu_opt(mpg123_handle *fr, const char* cpu)
 		{
 			chosen = "SSE";
 			fr->cpu_opts.type = sse;
+#			ifndef NO_LAYER3
+			/* if(cpu_fast_sse(cpu_flags)) */ fr->cpu_opts.the_dct36 = dct36_sse;
+#			endif
 #			ifndef NO_16BIT
 			fr->synths.plain[r_1to1][f_16] = synth_1to1_sse;
 #			ifdef ACCURATE_ROUNDING
@@ -634,6 +637,9 @@ int frame_cpu_opt(mpg123_handle *fr, const char* cpu)
 	{
 		chosen = "x86-64 (SSE)";
 		fr->cpu_opts.type = x86_64;
+#		ifndef NO_LAYER3
+		fr->cpu_opts.the_dct36 = dct36_x86_64;
+#		endif
 #		ifndef NO_16BIT
 		fr->synths.plain[r_1to1][f_16] = synth_1to1_x86_64;
 		fr->synths.stereo[r_1to1][f_16] = synth_1to1_stereo_x86_64;

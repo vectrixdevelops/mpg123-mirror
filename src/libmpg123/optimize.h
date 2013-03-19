@@ -139,6 +139,7 @@ enum optcla decclass(const enum optdec);
 #define OPT_X86
 #ifndef OPT_MULTI
 #	define defopt sse
+#	define opt_dct36(fr) dct36_sse
 #endif
 #endif
 
@@ -176,6 +177,7 @@ extern const int costab_mmxsse[];
 #define OPT_MMXORSSE
 #ifndef OPT_MULTI
 #	define defopt x86_64
+#	define opt_dct36(fr) dct36_x86_64
 #endif
 #endif
 
@@ -205,7 +207,7 @@ void check_decoders(void);
 
 #	define defopt nodec
 
-#	if (defined OPT_3DNOW || defined OPT_3DNOWEXT)
+#	if (defined OPT_3DNOW || defined OPT_3DNOWEXT || defined OPT_SSE || defined OPT_X86_64 )
 #		define opt_dct36(fr) ((fr)->cpu_opts.the_dct36)
 #	endif
 

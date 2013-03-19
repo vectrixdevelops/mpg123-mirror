@@ -83,6 +83,8 @@ EXTRA_libmpg123_la_SOURCES = \
 	feature.c \
 	dct36_3dnowext.S \
 	dct36_3dnow.S \
+	dct36_sse.S \
+	dct36_x86_64.S \
 	dct64_3dnowext.S \
 	dct64_3dnow.S \
 	dct64_altivec.c \

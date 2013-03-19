@@ -31,6 +31,7 @@
 #define ALIGN8  .balign 8
 #define ALIGN16 .balign 16
 #define ALIGN32 .balign 32
+#define ALIGN64 .balign 64
 
 #else
 
@@ -39,12 +40,14 @@
 #define ALIGN8  .align 3
 #define ALIGN16 .align 4
 #define ALIGN32 .align 5
+#define ALIGN64 .align 6
 #else
 #ifdef ASMALIGN_BYTE
 #define ALIGN4  .align 4
 #define ALIGN8  .align 8
 #define ALIGN16 .align 16
 #define ALIGN32 .align 32
+#define ALIGN64 .align 64
 #else
 #error "Dunno how assembler alignment works. Please specify."
 #endif
