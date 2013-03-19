@@ -1128,6 +1128,7 @@ s_mmx="$s_i386 dct64_mmx tabinit_mmx synth_mmx"
 s_sse="$s_i386 tabinit_mmx dct36_sse dct64_sse dct64_sse_float synth_sse_float synth_stereo_sse_float synth_sse_s32 synth_stereo_sse_s32 "
 s_x86_64="dct36_x86_64 dct64_x86_64 dct64_x86_64_float synth_x86_64_float synth_x86_64_s32 synth_stereo_x86_64_float synth_stereo_x86_64_s32"
 s_x86multi="getcpuflags"
+s_x86_64_multi="getcpuflags_x86_64"
 s_dither="dither"
 s_neon="dct64_neon dct64_neon_float synth_neon_float synth_neon_s32 synth_stereo_neon_float synth_stereo_neon_s32"
 
@@ -1259,7 +1260,7 @@ dnl Not disabling buffer for float mode... check that this is OK now!
   ;;
   x86-64|x86-64_all|x86-64_dither)
     ADD_CPPFLAGS="$ADD_CPPFLAGS -DOPT_MULTI -DOPT_X86_64 -DOPT_GENERIC -DOPT_GENERIC_DITHER -DREAL_IS_FLOAT"
-    more_sources="$s_fpu $s_x86_64 $s_dither"
+    more_sources="$s_fpu $s_x86_64 $s_dither $s_x86_64_multi"
   ;;
   *)
   	AC_MSG_ERROR([Unknown CPU type '$cpu_type'])

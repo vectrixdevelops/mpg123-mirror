@@ -49,7 +49,7 @@ static const char* decname[] =
 	, "nodec"
 };
 
-#if (defined OPT_X86) && (defined OPT_MULTI)
+#if ((defined OPT_X86) || (defined OPT_X86_64)) && (defined OPT_MULTI)
 #include "getcpuflags.h"
 static struct cpuflags cpu_flags;
 #else
@@ -897,8 +897,10 @@ void check_decoders(void )
 	return;
 #else
 	const char **d = mpg123_supported_decoder_list;
-#ifdef OPT_X86
+#if (defined OPT_X86) || (defined OPT_X86_64)
 	getcpuflags(&cpu_flags);
+#endif
+#ifdef OPT_X86
 	if(cpu_i586(cpu_flags))
 	{
 		/* not yet: if(cpu_sse2(cpu_flags)) printf(" SSE2");

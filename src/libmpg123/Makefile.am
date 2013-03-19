@@ -139,6 +139,7 @@ EXTRA_libmpg123_la_SOURCES = \
 	tabinit_mmx.S \
 	stringbuf.c \
 	getcpuflags.S \
+	getcpuflags_x86_64.S \
 	l12_integer_tables.h \
 	l3_integer_tables.h
 
