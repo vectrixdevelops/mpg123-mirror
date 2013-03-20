@@ -469,7 +469,7 @@ int frame_cpu_opt(mpg123_handle *fr, const char* cpu)
 
 #ifdef OPT_MULTI
 #ifndef NO_LAYER3
-#if (defined OPT_3DNOW || defined OPT_3DNOWEXT || defined OPT_SSE || defined OPT_X86_64)
+#if (defined OPT_3DNOW || defined OPT_3DNOWEXT || defined OPT_SSE)
 	fr->cpu_opts.the_dct36 = dct36;
 #endif
 #endif
@@ -633,6 +633,11 @@ int frame_cpu_opt(mpg123_handle *fr, const char* cpu)
 #endif /* OPT_X86 */
 
 #ifdef OPT_X86_64
+#ifdef OPT_MULTI
+#ifndef NO_LAYER3
+	fr->cpu_opts.the_dct36 = dct36;
+#endif
+#endif
 	if(!done && (auto_choose || want_dec == x86_64))
 	{
 		chosen = "x86-64 (SSE)";
