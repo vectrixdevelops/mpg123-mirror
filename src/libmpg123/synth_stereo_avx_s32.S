@@ -30,7 +30,7 @@
 
 /*
 	int synth_1to1_s32_s_avx_asm(real *window, real *b0l, real *b0r, real *samples, int bo1);
-	return value: number of clipped samples (0)
+	return value: number of clipped samples
 */
 
 #ifndef __APPLE__

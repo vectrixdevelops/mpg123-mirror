@@ -153,6 +153,7 @@ AVX_OBJS = \
 	dct36_avx.o \
 	dct64_avx.o \
 	dct64_avx_float.o \
+	synth_stereo_avx.o \
 	synth_stereo_avx_float.o \
 	synth_stereo_avx_s32.o \
 	synth_stereo_avx_accurate.o

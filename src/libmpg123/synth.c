@@ -537,8 +537,8 @@ int synth_1to1_stereo_avx(real *bandPtr_l, real *bandPtr_r, mpg123_handle *fr)
 /* This is defined in assembler. */
 #ifndef OPT_X86_64
 int synth_1to1_x86_64_asm(short *window, short *b0, short *samples, int bo1);
-int synth_1to1_s_x86_64_asm(short *window, short *b0l, short *b0r, short *samples, int bo1);
 #endif
+int synth_1to1_s_avx_asm(short *window, short *b0l, short *b0r, short *samples, int bo1);
 void dct64_avx(short *out0, short *out1, real *samples);
 /* This is just a hull to use the mpg123 handle. */
 int synth_1to1_avx(real *bandPtr,int channel, mpg123_handle *fr, int final)
@@ -617,7 +617,7 @@ int synth_1to1_stereo_avx(real *bandPtr_l,real *bandPtr_r, mpg123_handle *fr)
 		dct64_avx(bufr[0]+fr->bo,bufr[1]+fr->bo+1,bandPtr_r);
 	}
 
-	clip = synth_1to1_s_x86_64_asm((short *)fr->decwins, b0l, b0r, samples, bo1);
+	clip = synth_1to1_s_avx_asm((short *)fr->decwins, b0l, b0r, samples, bo1);
 
 	fr->buffer.fill += 128;
 
