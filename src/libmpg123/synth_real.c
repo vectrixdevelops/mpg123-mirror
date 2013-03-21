@@ -144,8 +144,8 @@ int synth_1to1_real_stereo_x86_64(real *bandPtr_l, real *bandPtr_r, mpg123_handl
 /* Assembler routines. */
 #ifndef OPT_X86_64
 int synth_1to1_real_x86_64_asm(real *window, real *b0, real *samples, int bo1);
-int synth_1to1_real_s_x86_64_asm(real *window, real *b0l, real *b0r, real *samples, int bo1);
 #endif
+int synth_1to1_real_s_avx_asm(real *window, real *b0l, real *b0r, real *samples, int bo1);
 void dct64_real_avx(real *out0, real *out1, real *samples);
 /* Hull for C mpg123 API */
 int synth_1to1_real_avx(real *bandPtr,int channel, mpg123_handle *fr, int final)
@@ -224,7 +224,7 @@ int synth_1to1_real_stereo_avx(real *bandPtr_l, real *bandPtr_r, mpg123_handle *
 		dct64_real_avx(bufr[0]+fr->bo,bufr[1]+fr->bo+1,bandPtr_r);
 	}
 
-	synth_1to1_real_s_x86_64_asm(fr->decwin, b0l, b0r, samples, bo1);
+	synth_1to1_real_s_avx_asm(fr->decwin, b0l, b0r, samples, bo1);
 
 	fr->buffer.fill += 256;
 
