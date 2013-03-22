@@ -165,11 +165,12 @@ ASM_NAME(synth_1to1_s32_s_avx_asm):
 	vmulps		%ymm14, %ymm0, %ymm0
 	vextractf128	$0x1, %ymm1, %xmm3
 	vextractf128	$0x1, %ymm2, %xmm4
-	vpackssdw	%xmm2, %xmm1, %xmm1
+	vpackssdw	%xmm2, %xmm1, %xmm5
 	vpackssdw	%xmm4, %xmm3, %xmm3
-	vpaddw		%xmm3, %xmm1, %xmm1
-	vpaddw		%xmm1, %xmm15, %xmm15
 	vcvtps2dq	%ymm0, %ymm0
+	vpaddw		%xmm3, %xmm5, %xmm5
+	vpaddw		%xmm5, %xmm15, %xmm15
+	vxorps		%ymm1, %ymm0, %ymm0
 	
 	vmovups		%ymm0, (SAMPLES)
 	add			$32, SAMPLES
@@ -247,11 +248,12 @@ ASM_NAME(synth_1to1_s32_s_avx_asm):
 	vmulps		%ymm14, %ymm0, %ymm0
 	vextractf128	$0x1, %ymm1, %xmm3
 	vextractf128	$0x1, %ymm2, %xmm4
-	vpackssdw	%xmm2, %xmm1, %xmm1
+	vpackssdw	%xmm2, %xmm1, %xmm5
 	vpackssdw	%xmm4, %xmm3, %xmm3
-	vpaddw		%xmm3, %xmm1, %xmm1
-	vpaddw		%xmm1, %xmm15, %xmm15
 	vcvtps2dq	%ymm0, %ymm0
+	vpaddw		%xmm3, %xmm5, %xmm5
+	vpaddw		%xmm5, %xmm15, %xmm15
+	vxorps		%ymm1, %ymm0, %ymm0
 	
 	vmovups		%ymm0, (SAMPLES)
 	add			$32, SAMPLES
