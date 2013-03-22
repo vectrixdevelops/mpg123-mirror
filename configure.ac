@@ -927,12 +927,12 @@ fi
 if test x"$avx_support" = xno; then
 	AC_CHECK_PROGS(YASM,[yasm],no)
 	if test x"$YASM" != xno; then
-		AC_MSG_CHECKING([if $YASM supports GAS syntax, CPP, and AVX instructions])
+		AC_MSG_CHECKING([if $YASM supports GAS syntax and AVX instructions])
 		echo '.text' > conftest.s
 		echo 'vaddps %ymm0,%ymm0,%ymm0' >> conftest.s
 		if $YASM -pgas -rcpp -o conftest.o conftest.s 1>/dev/null 2>&1; then
 			avx_support="yes"
-			YASMFLAGS="-pgas -rcpp -mamd64"
+			YASMFLAGS="-pgas -rgas -mamd64"
 			AC_MSG_RESULT([yes])
 		else
 			AC_MSG_RESULT([no])
