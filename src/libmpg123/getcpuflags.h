@@ -48,7 +48,7 @@ unsigned int getcpuflags(struct cpuflags* cf);
 #define cpu_sse(s) (FLAG2_SSE & s.std2)
 #define cpu_sse2(s) (FLAG2_SSE2 & s.std2)
 #define cpu_sse3(s) (FLAG_SSE3 & s.std)
-#define cpu_avx(s) ((FLAG_AVX & s.std) && (XCR0FLAG_AVX & s.xcr0_lo))
+#define cpu_avx(s) ((FLAG_AVX & s.std) == FLAG_AVX && (XCR0FLAG_AVX & s.xcr0_lo) == XCR0FLAG_AVX)
 #define cpu_fast_sse(s) ((((s.id & 0xf00)>>8) == 6 && FLAG_SSSE3 & s.std) /* for Intel/VIA; family 6 CPUs with SSSE3 */ || \
 						   (((s.id & 0xf00)>>8) == 0xf && (((s.id & 0x0ff00000)>>20) > 0 && ((s.id & 0x0ff00000)>>20) != 5))) /* for AMD; family > 0xF CPUs except Bobcat */
 
