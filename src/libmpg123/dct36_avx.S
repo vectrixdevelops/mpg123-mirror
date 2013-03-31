@@ -65,10 +65,6 @@ dct36_avx_tfcos36:
 	.long 0x3f5f2944
 	.long 0x3f3504f3
 	ALIGN16
-dct36_avx_mask:
-	.long 0,0xffffffff,0,0xffffffff
-	.text
-	ALIGN16
 dct36_avx_sign:
 	.long 0x80000000,0x80000000,0x80000000,0x80000000
 	.text
@@ -117,17 +113,16 @@ ASM_NAME(dct36_avx):
 	movss		%xmm6, %xmm5
 	addps		%xmm5, %xmm0 #[0123]
 	
-	movaps		dct36_avx_mask(%rip), %xmm5
-	vandps		%xmm5, %xmm3, %xmm7
+	vblendps	$0x5, %xmm6, %xmm3, %xmm7
 	vshufps		$0x4e, %xmm4, %xmm3, %xmm4
 	addps		%xmm7, %xmm4
-	vandps		%xmm5, %xmm2, %xmm7
+	vblendps	$0x5, %xmm6, %xmm2, %xmm7
 	vshufps		$0x4e, %xmm3, %xmm2, %xmm3
 	addps		%xmm7, %xmm3
-	vandps		%xmm5, %xmm1, %xmm7
+	vblendps	$0x5, %xmm6, %xmm1, %xmm7
 	vshufps		$0x4e, %xmm2, %xmm1, %xmm2
 	addps		%xmm7, %xmm2
-	vandps		%xmm5, %xmm0, %xmm7
+	vblendps	$0x5, %xmm6, %xmm0, %xmm7
 	vshufps		$0x4e, %xmm1, %xmm0, %xmm1
 	addps		%xmm7, %xmm1
 	vmovlhps	%xmm0, %xmm6, %xmm0
@@ -140,9 +135,9 @@ xmm3 in[10,11,12,13]
 xmm4 in[14,15,16,17]
 */
 
-	vshufps		$0xe4, %xmm3, %xmm2, %xmm5
-	shufps		$0xe4, %xmm4, %xmm3
-	shufps		$0xe4, %xmm2, %xmm4
+	vblendps	$0xc, %xmm3, %xmm2, %xmm5
+	blendps		$0xc, %xmm4, %xmm3
+	blendps		$0xc, %xmm2, %xmm4
 	movaps		%xmm5, %xmm2
 
 /*
