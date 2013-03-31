@@ -28,15 +28,22 @@
 #endif
 	ALIGN64
 dct36_sse_COS9:
-	.long 0x3f800000
+	.long 0x3f5db3d7
+	.long 0x3f5db3d7
+	.long 0x3f000000
+	.long 0x3f000000
+	.long 0x3f7c1c5c
 	.long 0x3f7c1c5c
 	.long 0x3f708fb2
-	.long 0x3f5db3d7
-	.long 0x3f441b7d
+	.long 0x3f708fb2
 	.long 0x3f248dbb
-	.long 0x3f000000
-	.long 0x3eaf1d44
+	.long 0x3f248dbb
 	.long 0x3e31d0d4
+	.long 0x3e31d0d4
+	.long 0x3eaf1d44
+	.long 0x3eaf1d44
+	.long 0x3f441b7d
+	.long 0x3f441b7d
 	ALIGN16
 dct36_sse_tfcos36:
 	.long 0x3f007d2b
@@ -51,6 +58,9 @@ dct36_sse_tfcos36:
 	ALIGN16
 dct36_sse_mask:
 	.long 0,0xffffffff,0,0xffffffff
+	ALIGN16
+dct36_sse_sign:
+	.long 0x80000000,0x80000000,0x80000000,0x80000000
 	.text
 	ALIGN16
 	.globl ASM_NAME(dct36_sse)
@@ -128,97 +138,79 @@ xmm4 in[14,15,16,17]
 */
 
 	movaps		%xmm2, %xmm5
-	movss		12(COS9_), %xmm6
-	movss		24(COS9_), %xmm7
-	shufps		$0x00, %xmm7, %xmm6
 	shufps		$0xe4, %xmm3, %xmm5
-	mulps		%xmm6, %xmm5
+	shufps		$0xe4, %xmm4, %xmm3
+	shufps		$0xe4, %xmm2, %xmm4
+	movaps		%xmm5, %xmm2
+
+/*
+xmm2 in[6,7,12,13]
+xmm3 in[10,11,16,17]
+xmm4 in[14,15,8,9]
+*/
+
+	mulps		(COS9_), %xmm5
 	addps		%xmm0, %xmm5
 	
 	movaps		%xmm0, (tmp)
-	movaps		%xmm6, 16(tmp)
+	movaps		%xmm2, 16(tmp)
 
 /*
 0(tmp) in[-,-,0,1]
-16(tmp) COS9_[3,3,6,6]
 xmm5 [ta33,tb33,ta66,tb66]
 */
 
-	movlps		4(COS9_), %xmm6
-	movlps		16(COS9_), %xmm7
-	shufps		$0x50, %xmm6, %xmm6
-	shufps		$0x05, %xmm7, %xmm7
-	mulps		%xmm1, %xmm6
-	movaps		%xmm3, %xmm0
-	shufps		$0xe4, %xmm2, %xmm0
-	mulps		%xmm0, %xmm7
-	addps		%xmm7, %xmm6
-	movlps		28(COS9_), %xmm7
-	shufps		$0x50, %xmm7, %xmm7
-	mulps		%xmm4, %xmm7
-	addps		%xmm5, %xmm6
-	addps		%xmm7, %xmm6
-	movaps		%xmm6, 32(tmp)
-	
 	movaps		%xmm1, %xmm6
-	subps		%xmm0, %xmm6
+	subps		%xmm3, %xmm6
 	subps		%xmm4, %xmm6
-	xorps		%xmm0, %xmm0
-	shufps		$0xe0, %xmm3, %xmm0
-	movaps		(tmp), %xmm7
-	mulps		16(tmp), %xmm6
-	subps		%xmm0, %xmm7
-	addps		%xmm7, %xmm6
+	xorps		%xmm7, %xmm7
+	shufps		$0xe0, %xmm2, %xmm7
+	mulps		(COS9_), %xmm6
+	subps		%xmm7, %xmm0
+	addps		%xmm0, %xmm6
 	movaps		%xmm6, 48(tmp)
 	
-	movaps		%xmm1, %xmm6
-	movlhps		%xmm6, %xmm6
-	movss		20(COS9_), %xmm7
-	movss		28(COS9_), %xmm0
-	shufps		$0x00, %xmm0, %xmm7
-	mulps		%xmm7, %xmm6
-	movaps		%xmm5, %xmm0
-	movlhps		%xmm0, %xmm0
-	subps		%xmm0, %xmm6
-	shufps		$0x4e, %xmm7, %xmm7
-	movaps		%xmm3, %xmm0
-	movlhps		%xmm4, %xmm0
-	mulps		%xmm0, %xmm7
-	subps		%xmm7, %xmm6
-	movss		4(COS9_), %xmm7
-	shufps		$0x4e, %xmm0, %xmm0
-	shufps		$0x00, %xmm7, %xmm7
-	mulps		%xmm7, %xmm0
-	addps		%xmm0, %xmm6
-	movaps		%xmm6, 64(tmp)
+	movaps		16(COS9_), %xmm2
+
+	movaps		%xmm1, %xmm0
+	movaps		%xmm3, %xmm6
+	movaps		%xmm4, %xmm7
+	mulps		%xmm2, %xmm0
+	mulps		32(COS9_), %xmm6
+	mulps		48(COS9_), %xmm7
+	addps		%xmm5, %xmm0
+	addps		%xmm7, %xmm6
+	addps		%xmm6, %xmm0
+	movaps		%xmm0, 32(tmp)
+	
+	movaps		%xmm1, %xmm0
+	movaps		%xmm3, %xmm6
+	movaps		%xmm4, %xmm7
+	mulps		32(COS9_), %xmm0
+	mulps		48(COS9_), %xmm6
+	mulps		%xmm2, %xmm7
+	subps		%xmm5, %xmm0
+	subps		%xmm6, %xmm7
+	addps		%xmm7, %xmm0
+	movaps		%xmm0, 64(tmp)
 	
 	movaps		%xmm1, %xmm6
-	movhlps		%xmm6, %xmm6
-	movss		32(COS9_), %xmm7
-	movss		16(COS9_), %xmm0
-	shufps		$0x00, %xmm0, %xmm7
-	mulps		%xmm7, %xmm6
-	movhlps		%xmm5, %xmm5
-	subps		%xmm6, %xmm5
-	shufps		$0x4e, %xmm7, %xmm7
-	movaps		%xmm2, %xmm0
-	movhlps		%xmm4, %xmm0
-	mulps		%xmm0, %xmm7
-	movss		8(COS9_), %xmm6
-	shufps		$0x4e, %xmm0, %xmm0
-	shufps		$0x00, %xmm6, %xmm6
-	addps		%xmm7, %xmm5
-	mulps		%xmm6, %xmm0
-	subps		%xmm0, %xmm5
+	movaps		%xmm4, %xmm7
+	mulps		48(COS9_), %xmm6
+	mulps		%xmm3, %xmm2
+	mulps		32(COS9_), %xmm7
+	subps		%xmm5, %xmm6
+	subps		%xmm7, %xmm2
+	addps		%xmm2, %xmm6
 	
 	movaps		(tmp), %xmm0
-	movss		32(tfcos36_), %xmm6
+	movss		32(tfcos36_), %xmm5
 	subps		%xmm1, %xmm0
-	subps		%xmm3, %xmm2
+	subps		16(tmp), %xmm4
+	addps		%xmm3, %xmm0
 	addps		%xmm4, %xmm0
-	addps		%xmm2, %xmm0
 	shufps		$0xaf, %xmm0, %xmm0
-	mulss		%xmm6, %xmm0
+	mulss		%xmm5, %xmm0
 	movaps		%xmm0, (tmp)
 	
 	movaps		32(tmp), %xmm0
@@ -226,17 +218,19 @@ xmm5 [ta33,tb33,ta66,tb66]
 	movaps		64(tmp), %xmm2
 
 /*
-xmm0 [1a-0,1b-0,2a-0,2b-0]
-xmm1 [1a-1,1b-1,2a-1,2b-1]
-xmm2 [1a-2,1b-2,1a-3,1b-3]
-xmm5 [2a-2,2b-2,2a-3,2b-3]
+xmm0 [1a-0,1b-0, 2a-0, 2b-0]
+xmm1 [1a-1,1b-1, 2a-1, 2b-1]
+xmm2 [1a-2,1b-2,-2a-2,-2b-2]
+xmm6 [1a-3,1b-3,-2a-3,-2b-3]
 */
 
 	movaps		%xmm0, %xmm3
 	unpcklps	%xmm1, %xmm0
 	unpckhps	%xmm1, %xmm3
-	shufps		$0xd8, %xmm2, %xmm2
-	shufps		$0xd8, %xmm5, %xmm5
+	movaps		%xmm2, %xmm5
+	unpcklps	%xmm6, %xmm2
+	unpckhps	%xmm6, %xmm5
+	xorps		dct36_sse_sign-1b(%ebx), %xmm5
 
 /*
 xmm0 [1a-0,1a-1,1b-0,1b-1]
