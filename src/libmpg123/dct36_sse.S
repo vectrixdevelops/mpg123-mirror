@@ -26,7 +26,7 @@
 #else
 	.data
 #endif
-	ALIGN64
+	ALIGN16
 dct36_sse_COS9:
 	.long 0x3f5db3d7
 	.long 0x3f5db3d7
