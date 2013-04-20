@@ -133,6 +133,10 @@ EXTRA_libmpg123_la_SOURCES = \
 	synth_stereo_neon_float.S \
 	synth_stereo_neon_s32.S \
 	synth_stereo_neon_accurate.S \
+	synth_stereo_avx.S \
+	synth_stereo_avx_float.S \
+	synth_stereo_avx_s32.S \
+	synth_stereo_avx_accurate.S \
 	ntom.c \
 	synth.c \
 	synth_8bit.c \
