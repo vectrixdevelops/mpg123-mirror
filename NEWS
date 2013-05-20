@@ -4,6 +4,7 @@
 - some cleanup for nagging mode
 - more resync strictness to really catch (all) cases with changing decoder structure; in practice badly needed when disabling seekbuffer (so it's your fault, somehow ...) for non-seekable streams, otherwise not really an issue because of readahead checking
   I repeat: This fixes possibly fatal behaviour in the parser when readahead checking is explicitly disabled (p.ex. via mpg123 --no-seekbuffer on http streams). By default, readahead checking is _always_ active!
+- build system fixed for automake 1.13 (thanks to Nix)
 
 1.15.3
 ---
