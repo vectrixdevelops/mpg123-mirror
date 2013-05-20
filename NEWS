@@ -3,11 +3,22 @@
 - Taihei strikes again: New Huffman decoding scheme (configurable, on by default) brings nice boost to mpg123 to make it the fastest decoder on modern CPUs again.
 - added FORMAT command to generic control
 - not deleting ID3 data right after printing in generic control
+- module loader a bit more flexible with relative MPG123_MODDIR
+- Fix chopped-off playback with pulseaudio output: draining the output now on closing.
+- SDL output fixup, a) not chopping off end and b) non-fatal underrun
+- Fix obvious errors in win32 output ... does it now play the end of tracks? Need someone to test this.
+- added support for screen and iris-ansi terminals with --title (as prompted by patch from sf.net user canavan)
+- fixes/enhancements for sgi audio output
 
 1.15.4
 ---
+- Writing CDDA data via --cdr works again; had also been broken by attempts to catch failing writes because of full disk.
+- Also, the return values of WAV/CDR writing routines now properly indicate error to avoid stupid endless loop of "smart" audio writing code that wants to handle interruptions. Really, --cdr could just go and nobody would miss it ...
 - Fix stupid bug in mpg123_chomp_string() (introduced in 1.15.1), empty lines were badly treated. Only usage in mpg123 is for parsing HTTP redirect headers; malicious HTTP servers might exploit that (possibility to zero bytes in memory).
 - some cleanup for nagging mode
+- more resync strictness to really catch (all) cases with changing decoder structure; in practice badly needed when disabling seekbuffer (so it's your fault, somehow ...) for non-seekable streams, otherwise not really an issue because of readahead checking
+  I repeat: This fixes possibly fatal behaviour in the parser when readahead checking is explicitly disabled (p.ex. via mpg123 --no-seekbuffer on http streams). By default, readahead checking is _always_ active!
+- build system fixed for automake 1.13 (thanks to Nix)
 
 1.15.3
 ---

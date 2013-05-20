@@ -387,6 +387,13 @@ static int header_mono(unsigned long newhead)
 	return HDR_CHANNEL_VAL(newhead) == MPG_MD_MONO ? TRUE : FALSE;
 }
 
+/* true if the two headers will work with the same decoding routines */
+static int head_compatible(unsigned long fred, unsigned long bret)
+{
+	return ( (fred & HDR_CMPMASK) == (bret & HDR_CMPMASK)
+		&&       header_mono(fred) == header_mono(bret)    );
+}
+
 static void halfspeed_prepare(mpg123_handle *fr)
 {
 	/* save for repetition */
@@ -474,14 +481,10 @@ init_resync:
 	{
 		if(fr->oldhead == newhead) fr->header_change = 0;
 		else
-		/* If they have the same sample rate. Note that only is _not_ the case for the first header, as we enforce sample rate match for following frames.
-			 So, during one stream, only change of stereoness is possible and indicated by header_change == 2. */
-		if((fr->oldhead & HDR_SAMPMASK) == (newhead & HDR_SAMPMASK))
-		{
-			/* Now if both channel modes are mono or both stereo, it's no big deal. */
-			if( header_mono(fr->oldhead) == header_mono(newhead))
-			fr->header_change = 1;
-		}
+		/* Headers that match in this test behave the same for the outside world.
+		   namely: same decoding routines, same amount of decoded data. */
+		if(head_compatible(fr->oldhead, newhead))
+		fr->header_change = 1;
 	}
 
 #ifdef SKIP_JUNK
@@ -986,7 +989,7 @@ static int do_readahead(mpg123_handle *fr, unsigned long newhead)
 	}
 
 	debug2("does next header 0x%08lx match first 0x%08lx?", nexthead, newhead);
-	if(!head_check(nexthead) || (nexthead & HDR_CMPMASK) != (newhead & HDR_CMPMASK))
+	if(!head_check(nexthead) || !head_compatible(newhead, nexthead))
 	{
 		debug("No, the header was not valid, start from beginning...");
 		fr->oldhead = 0; /* start over */
@@ -1165,6 +1168,7 @@ static int wetwork(mpg123_handle *fr, unsigned long *newheadp)
 		{
 			debug1("Found possibly valid header 0x%lx... unsetting firsthead to reinit stream.", newhead);
 			fr->firsthead = 0;
+			fr->oldhead = 0;
 			return PARSE_RESYNC;
 		}
 	}

@@ -11,7 +11,7 @@ dnl ############# Initialisation
 AC_INIT([mpg123], [1.16.0-dctavx], [mpg123-devel@lists.sourceforge.net])
 dnl Increment API_VERSION when the API gets changes (new functions).
 API_VERSION=37
-LIB_PATCHLEVEL=2
+LIB_PATCHLEVEL=5
 dnl Since we want to be backwards compatible, both sides get set to API_VERSION.
 LIBMPG123_VERSION=$API_VERSION:$LIB_PATCHLEVEL:$API_VERSION
 AC_SUBST(LIBMPG123_VERSION)
@@ -25,7 +25,7 @@ AC_CANONICAL_HOST
 
 dnl Version 1.7 of automake is recommended
 AM_INIT_AUTOMAKE(1.7)
-AM_CONFIG_HEADER(src/config.h)
+AC_CONFIG_HEADERS([src/config.h])
 
 
 # You get strange symptoms like jack module build failing because the AC_C_CONST failed to detect the working const support.
