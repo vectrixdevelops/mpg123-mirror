@@ -22,17 +22,37 @@
 /*
 	ALIGNX: align to X bytes
 	This differs per compiler/platform in taking the byte count or an exponent for base 2.
+	A way out is balign, if the assembler supports it (gas extension).
 */
+
+#ifdef ASMALIGN_BALIGN
+
+#define ALIGN4  .balign 4
+#define ALIGN8  .balign 8
+#define ALIGN16 .balign 16
+#define ALIGN32 .balign 32
+#define ALIGN64 .balign 64
+
+#else
+
 #ifdef ASMALIGN_EXP
 #define ALIGN4  .align 2
 #define ALIGN8  .align 3
 #define ALIGN16 .align 4
 #define ALIGN32 .align 5
+#define ALIGN64 .align 6
 #else
+#ifdef ASMALIGN_BYTE
 #define ALIGN4  .align 4
 #define ALIGN8  .align 8
 #define ALIGN16 .align 16
 #define ALIGN32 .align 32
+#define ALIGN64 .align 64
+#else
+#error "Dunno how assembler alignment works. Please specify."
+#endif
+#endif
+
 #endif
 
 #define MANGLE_MACROCAT_REALLY(a, b) a ## b
@@ -65,9 +85,13 @@
 /* Mark non-executable stack.
    It's mainly for GNU on Linux... who else does (not) like this? */
 #if !defined(__SUNPRO_C) && defined(__linux__) && defined(__ELF__)
-#define NONEXEC_STACK .section .note.GNU-stack,"",%progbits
+#define NONEXEC_STACK .section .note.GNU-stack,"",@progbits
 #else
 #define NONEXEC_STACK
+#endif
+
+#if defined(__x86_64__) && (defined(_WIN64) || defined (__CYGWIN__))
+#define IS_MSABI 1 /* Not using SYSV */
 #endif
 
 #endif /* !__MANGLE_H */

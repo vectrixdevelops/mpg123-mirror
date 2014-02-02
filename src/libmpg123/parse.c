@@ -1,7 +1,7 @@
 /*
 	parse: spawned from common; clustering around stream/frame parsing
 
-	copyright ?-2009 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright ?-2014 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Michael Hipp & Thomas Orgis
 */
@@ -34,12 +34,14 @@
 
 #define bsbufid(fr) (fr)->bsbuf==(fr)->bsspace[0] ? 0 : ((fr)->bsbuf==fr->bsspace[1] ? 1 : ( (fr)->bsbuf==(fr)->bsspace[0]+512 ? 2 : ((fr)->bsbuf==fr->bsspace[1]+512 ? 3 : -1) ) )
 
+/* PARSE_GOOD and PARSE_BAD have to be 1 and 0 (TRUE and FALSE), others can vary. */
 enum parse_codes
 {
 	 PARSE_MORE = MPG123_NEED_MORE
 	,PARSE_ERR  = MPG123_ERR
-	,PARSE_END  = 0 /* No more audio data to find. */
+	,PARSE_END  = 10 /* No more audio data to find. */
 	,PARSE_GOOD = 1 /* Everything's fine. */
+	,PARSE_BAD  = 0 /* Not fine (invalid data). */
 	,PARSE_RESYNC = 2 /* Header not good, go into resync. */
 	,PARSE_AGAIN  = 3 /* Really start over, throw away and read a new header, again. */
 };
@@ -61,7 +63,7 @@ static const int tabsel_123[2][3][16] =
 
 static const long freqs[9] = { 44100, 48000, 32000, 22050, 24000, 16000 , 11025 , 12000 , 8000 };
 
-static int decode_header(mpg123_handle *fr,unsigned long newhead);
+static int decode_header(mpg123_handle *fr,unsigned long newhead, int *freeformat_count);
 static int skip_junk(mpg123_handle *fr, unsigned long *newheadp, long *headcount);
 static int do_readahead(mpg123_handle *fr, unsigned long newhead);
 static int wetwork(mpg123_handle *fr, unsigned long *newheadp);
@@ -178,16 +180,10 @@ static int check_lame_tag(mpg123_handle *fr)
 					}
 					else
 					{
-						/*
-							In theory, one should use that value for skipping...
-							When I know the exact number of samples I could simply count in flush_output,
-							but that's problematic with seeking and such.
-							I still miss the real solution for detecting the end.
-						*/
 						fr->track_frames = (off_t) make_long(fr->bsbuf, lame_offset);
 						if(fr->track_frames > TRACK_MAX_FRAMES) fr->track_frames = 0; /* endless stream? */
 #ifdef GAPLESS
-						/* if no further info there, remove at least the decoder delay */
+						/* All or nothing: Only if encoder delay/padding is known we'll cut samples for gapless. */
 						if(fr->p.flags & MPG123_GAPLESS)
 						frame_gapless_init(fr, fr->track_frames, 0, 0);
 #endif
@@ -391,6 +387,13 @@ static int header_mono(unsigned long newhead)
 	return HDR_CHANNEL_VAL(newhead) == MPG_MD_MONO ? TRUE : FALSE;
 }
 
+/* true if the two headers will work with the same decoding routines */
+static int head_compatible(unsigned long fred, unsigned long bret)
+{
+	return ( (fred & HDR_CMPMASK) == (bret & HDR_CMPMASK)
+		&&       header_mono(fred) == header_mono(bret)    );
+}
+
 static void halfspeed_prepare(mpg123_handle *fr)
 {
 	/* save for repetition */
@@ -429,13 +432,14 @@ static int halfspeed_do(mpg123_handle *fr)
 /* 
 	Temporary macro until we got this worked out.
 	Idea is to filter out special return values that shall trigger direct jumps to end / resync / read again. 
-	Particularily, ret==PARSE_END==0 and ret==PARSE_GOOD==1 are not affected.
+	Particularily, the generic ret==PARSE_BAD==0 and ret==PARSE_GOOD==1 are not affected.
 */
 #define JUMP_CONCLUSION(ret) \
 { \
 if(ret < 0){ debug1("%s", ret == MPG123_NEED_MORE ? "need more" : "read error"); goto read_frame_bad; } \
 else if(ret == PARSE_AGAIN) goto read_again; \
 else if(ret == PARSE_RESYNC) goto init_resync; \
+else if(ret == PARSE_END){ ret=0; goto read_frame_bad; } \
 }
 
 /*
@@ -445,6 +449,7 @@ else if(ret == PARSE_RESYNC) goto init_resync; \
 int read_frame(mpg123_handle *fr)
 {
 	/* TODO: rework this thing */
+	int freeformat_count = 0;
 	unsigned long newhead;
 	off_t framepos;
 	int ret;
@@ -471,18 +476,33 @@ read_again:
 
 init_resync:
 
-	fr->header_change = 2; /* output format change is possible... */
-	if(fr->oldhead)        /* check a following header for change */
+	/* header_change > 1: decoder structure has to be updated
+	   Preserve header_change value from previous runs if it is serious.
+	   If we still have a big change pending, it should be dealt with outside,
+	   fr->header_change set to zero afterwards. */
+	if(fr->header_change < 2)
 	{
-		if(fr->oldhead == newhead) fr->header_change = 0;
-		else
-		/* If they have the same sample rate. Note that only is _not_ the case for the first header, as we enforce sample rate match for following frames.
-			 So, during one stream, only change of stereoness is possible and indicated by header_change == 2. */
-		if((fr->oldhead & HDR_SAMPMASK) == (newhead & HDR_SAMPMASK))
+		fr->header_change = 2; /* output format change is possible... */
+		if(fr->oldhead)        /* check a following header for change */
 		{
-			/* Now if both channel modes are mono or both stereo, it's no big deal. */
-			if( header_mono(fr->oldhead) == header_mono(newhead))
+			if(fr->oldhead == newhead) fr->header_change = 0;
+			else
+			/* Headers that match in this test behave the same for the outside world.
+			   namely: same decoding routines, same amount of decoded data. */
+			if(head_compatible(fr->oldhead, newhead))
 			fr->header_change = 1;
+			else
+			{
+				fr->state_flags |= FRAME_FRANKENSTEIN;
+				if(NOQUIET)
+				fprintf(stderr, "\nWarning: Big change (MPEG version, layer, rate). Frankenstein stream?\n");
+			}
+		}
+		else if(head_check(newhead) && fr->firsthead && !head_compatible(fr->firsthead, newhead))
+		{
+			fr->state_flags |= FRAME_FRANKENSTEIN;
+			if(NOQUIET)
+			fprintf(stderr, "\nWarning: Big change from first (MPEG version, layer, rate). Frankenstein stream?\n");
 		}
 	}
 
@@ -495,14 +515,15 @@ init_resync:
 #endif
 
 	ret = head_check(newhead);
-	if(ret) ret = decode_header(fr, newhead);
+	if(ret) ret = decode_header(fr, newhead, &freeformat_count);
 
-	JUMP_CONCLUSION(ret); /* That only continues for ret == 0 or 1 */
-	if(ret == 0)
+	JUMP_CONCLUSION(ret); /* That only continues for ret == PARSE_BAD or PARSE_GOOD. */
+	if(ret == PARSE_BAD)
 	{ /* Header was not good. */
 		ret = wetwork(fr, &newhead); /* Messy stuff, handle junk, resync ... */
 		JUMP_CONCLUSION(ret);
-		if(ret == 0) goto read_frame_bad;
+		/* Normally, we jumped already. If for some reason everything's fine to continue, do continue. */
+		if(ret != PARSE_GOOD) goto read_frame_bad;
 	}
 
 	if(!fr->firsthead)
@@ -621,9 +642,9 @@ read_frame_bad:
 /*
  * read ahead and find the next MPEG header, to guess framesize
  * return value: success code
- *  1: found a valid frame size (stored in the handle).
+ *  PARSE_GOOD: found a valid frame size (stored in the handle).
  * <0: error codes, possibly from feeder buffer (NEED_MORE)
- *  0: cannot get the framesize for some reason and shall silentry try the next possible header (if this is no free format stream after all...)
+ *  PARSE_BAD: cannot get the framesize for some reason and shall silentry try the next possible header (if this is no free format stream after all...)
  */
 static int guess_freeformat_framesize(mpg123_handle *fr)
 {
@@ -634,14 +655,13 @@ static int guess_freeformat_framesize(mpg123_handle *fr)
 	{
 		if(NOQUIET) error("Cannot look for freeformat frame size with non-seekable and non-buffered stream!");
 
-		return 0;
+		return PARSE_BAD;
 	}
 	if((ret=fr->rd->head_read(fr,&head))<=0)
 	return ret;
 
 	/* We are already 4 bytes into it */
-	/* Fix that limit to be absolute for the first header search! */
-	for(i=4;i<65536;i++)
+	for(i=4;i<MAXFRAMESIZE+4;i++)
 	{
 		if((ret=fr->rd->head_shift(fr,&head))<=0) return ret;
 
@@ -650,11 +670,11 @@ static int guess_freeformat_framesize(mpg123_handle *fr)
 		{
 			fr->rd->back_bytes(fr,i+1);
 			fr->framesize = i-3;
-			return 1; /* Success! */
+			return PARSE_GOOD; /* Success! */
 		}
 	}
 	fr->rd->back_bytes(fr,i);
-	return 0;
+	return PARSE_BAD;
 }
 
 
@@ -667,7 +687,7 @@ static int guess_freeformat_framesize(mpg123_handle *fr)
  * <0: some error
  * You are required to do a head_check() before calling!
  */
-static int decode_header(mpg123_handle *fr,unsigned long newhead)
+static int decode_header(mpg123_handle *fr,unsigned long newhead, int *freeformat_count)
 {
 #ifdef DEBUG /* Do not waste cycles checking the header twice all the time. */
 	if(!head_check(newhead))
@@ -675,29 +695,22 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 		error1("trying to decode obviously invalid header 0x%08lx", newhead);
 	}
 #endif
+	/* For some reason, the layer and sampling freq settings used to be wrapped
+	   in a weird conditional including MPG123_NO_RESYNC. What was I thinking?
+	   This information has to be consistent. */
+	fr->lay = 4 - HDR_LAYER_VAL(newhead);
+
 	if(HDR_VERSION_VAL(newhead) & 0x2)
 	{
 		fr->lsf = (HDR_VERSION_VAL(newhead) & 0x1) ? 0 : 1;
 		fr->mpeg25 = 0;
+		fr->sampling_frequency = HDR_SAMPLERATE_VAL(newhead) + (fr->lsf*3);
 	}
 	else
 	{
 		fr->lsf = 1;
 		fr->mpeg25 = 1;
-	}
-
-	if(   (fr->p.flags & MPG123_NO_RESYNC) || !fr->oldhead
-	   || (HDR_VERSION_VAL(fr->oldhead) != HDR_VERSION_VAL(newhead)) )
-	{
-		/* If "tryresync" is false, assume that certain
-		parameters do not change within the stream!
-		Force an update if lsf or mpeg25 settings
-		have changed. */
-		fr->lay = 4 - HDR_LAYER_VAL(newhead);
-		if(fr->mpeg25)
 		fr->sampling_frequency = 6 + HDR_SAMPLERATE_VAL(newhead);
-		else
-		fr->sampling_frequency = HDR_SAMPLERATE_VAL(newhead) + (fr->lsf*3);
 	}
 
 	#ifdef DEBUG
@@ -724,8 +737,14 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 		if(fr->freeformat_framesize < 0)
 		{
 			int ret;
+			*freeformat_count += 1;
+			if(*freeformat_count > 5)
+			{
+				if(VERBOSE3) error("You fooled me too often. Refusing to guess free format frame size _again_.");
+				return PARSE_BAD;
+			}
 			ret = guess_freeformat_framesize(fr);
-			if(ret>0)
+			if(ret == PARSE_GOOD)
 			{
 				fr->freeformat_framesize = fr->framesize - fr->padding;
 				if(VERBOSE2)
@@ -752,6 +771,7 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 	{
 #ifndef NO_LAYER1
 		case 1:
+			fr->spf = 384;
 			fr->do_layer = do_layer1;
 			if(!fr->freeformat)
 			{
@@ -763,6 +783,7 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 #endif
 #ifndef NO_LAYER2
 		case 2:
+			fr->spf = 1152;
 			fr->do_layer = do_layer2;
 			if(!fr->freeformat)
 			{
@@ -775,6 +796,7 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 #endif
 #ifndef NO_LAYER3
 		case 3:
+			fr->spf = fr->lsf ? 576 : 1152; /* MPEG 2.5 implies LSF.*/
 			fr->do_layer = do_layer3;
 			if(fr->lsf)
 			fr->ssize = (fr->stereo == 1) ? 9 : 17;
@@ -795,15 +817,15 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead)
 		default:
 			if(NOQUIET) error1("Layer type %i not supported in this build!", fr->lay); 
 
-			return 0;
+			return PARSE_BAD;
 	}
 	if (fr->framesize > MAXFRAMESIZE)
 	{
 		if(NOQUIET) error1("Frame size too big: %d", fr->framesize+4-fr->padding);
 
-		return (0);
+		return PARSE_BAD;
 	}
-	return 1;
+	return PARSE_GOOD;
 }
 
 void set_pointer(mpg123_handle *fr, long backstep)
@@ -845,14 +867,14 @@ int attribute_align_arg mpg123_spf(mpg123_handle *mh)
 {
 	if(mh == NULL) return MPG123_ERR;
 
-	return spf(mh);
+	return mh->firsthead ? mh->spf : MPG123_ERR;
 }
 
 double attribute_align_arg mpg123_tpf(mpg123_handle *fr)
 {
 	static int bs[4] = { 0,384,1152,1152 };
 	double tpf;
-	if(fr == NULL) return -1;
+	if(fr == NULL || !fr->firsthead) return -1;
 
 	tpf = (double) bs[fr->lay];
 	tpf /= freqs[fr->sampling_frequency] << (fr->lsf);
@@ -982,7 +1004,7 @@ static int do_readahead(mpg123_handle *fr, unsigned long newhead)
 	}
 
 	debug2("does next header 0x%08lx match first 0x%08lx?", nexthead, newhead);
-	if(!head_check(nexthead) || (nexthead & HDR_CMPMASK) != (newhead & HDR_CMPMASK))
+	if(!head_check(nexthead) || !head_compatible(newhead, nexthead))
 	{
 		debug("No, the header was not valid, start from beginning...");
 		fr->oldhead = 0; /* start over */
@@ -1015,6 +1037,7 @@ static int handle_id3v2(mpg123_handle *fr, unsigned long newhead)
 static int skip_junk(mpg123_handle *fr, unsigned long *newheadp, long *headcount)
 {
 	int ret;
+	int freeformat_count = 0;
 	long limit = 65536;
 	unsigned long newhead = *newheadp;
 	/* check for id3v2; first three bytes (of 4) are "ID3" */
@@ -1064,7 +1087,7 @@ static int skip_junk(mpg123_handle *fr, unsigned long *newheadp, long *headcount
 
 		if((ret=fr->rd->head_shift(fr,&newhead))<=0) return ret;
 
-		if(head_check(newhead) && (ret=decode_header(fr, newhead))) break;
+		if(head_check(newhead) && (ret=decode_header(fr, newhead, &freeformat_count))) break;
 	} while(1);
 	if(ret<0) return ret;
 
@@ -1139,7 +1162,7 @@ static int wetwork(mpg123_handle *fr, unsigned long *newheadp)
 				*newheadp = newhead;
 				if(NOQUIET) fprintf (stderr, "Note: Hit end of (available) data during resync.\n");
 
-				return ret;
+				return ret ? ret : PARSE_END;
 			}
 			if(VERBOSE3) debug3("resync try %li at %"OFF_P", got newhead 0x%08lx", try, (off_p)fr->rd->tell(fr),  newhead);
 		} while(!head_check(newhead));
@@ -1158,8 +1181,8 @@ static int wetwork(mpg123_handle *fr, unsigned long *newheadp)
 		}
 		else
 		{
-			debug1("Found possibly valid header 0x%lx... unsetting firsthead to reinit stream.", newhead);
-			fr->firsthead = 0;
+			debug1("Found possibly valid header 0x%lx... unsetting oldhead to reinit stream.", newhead);
+			fr->oldhead = 0;
 			return PARSE_RESYNC;
 		}
 	}

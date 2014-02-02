@@ -19,7 +19,7 @@
 
 #include "xfermem.h"
 #include "httpget.h"
-#ifndef BUILDING_OUTPUT_MODULES
+#if WIN32
 #include "win32_support.h"
 #endif
 
@@ -168,5 +168,7 @@ void set_intflag(void);
 
 /* equalizer... success is 0, failure -1 */
 int load_equalizer(mpg123_handle *mh);
+
+void continue_msg(const char *name);
 
 #endif 

@@ -108,6 +108,7 @@ static int initialize_device(audio_output_t *ao)
 		if(!AOQUIET) error("initialize_device(): cannot set buffer size");
 		return -1;
 	}
+	debug1("buffer_size=%lu", (unsigned long)buffer_size);
 	period_size = buffer_size / 4;
 	if (snd_pcm_hw_params_set_period_size_near(pcm, hw, &period_size, NULL) < 0) {
 		if(!AOQUIET) error("initialize_device(): cannot set period size");
@@ -123,7 +124,7 @@ static int initialize_device(audio_output_t *ao)
 		if(!AOQUIET) error("initialize_device(): cannot get sw params");
 		return -1;
 	}
-	/* start playing after the first write */
+	/* start playing right away */
 	if (snd_pcm_sw_params_set_start_threshold(pcm, sw, 1) < 0) {
 		if(!AOQUIET) error("initialize_device(): cannot set start threshold");
 		return -1;
@@ -147,10 +148,12 @@ static int initialize_device(audio_output_t *ao)
 	return 0;
 }
 
+#ifndef DEBUG
 static void error_ignorer(const char *file, int line, const char *function, int err, const char *fmt,...)
 {
 	/* I can make ALSA silent. */
 }
+#endif
 
 static int open_alsa(audio_output_t *ao)
 {
@@ -158,7 +161,9 @@ static int open_alsa(audio_output_t *ao)
 	snd_pcm_t *pcm=NULL;
 	debug1("open_alsa with %p", ao->userptr);
 
+#ifndef DEBUG
 	if(AOQUIET) snd_lib_error_set_handler(error_ignorer);
+#endif
 
 	pcm_name = ao->device ? ao->device : "default";
 	if (snd_pcm_open(&pcm, pcm_name, SND_PCM_STREAM_PLAYBACK, 0) < 0) {
@@ -212,29 +217,20 @@ static int write_alsa(audio_output_t *ao, unsigned char *buf, int bytes)
 	snd_pcm_sframes_t written;
 
 	frames = snd_pcm_bytes_to_frames(pcm, bytes);
-	written = snd_pcm_writei(pcm, buf, frames);
-	if (written == -EINTR) /* interrupted system call */
-		written = 0;
-	else if (written == -EPIPE) { /* underrun */
-		if (snd_pcm_prepare(pcm) >= 0)
-			written = snd_pcm_writei(pcm, buf, frames);
-	}
-	if (written >= 0)
-		return snd_pcm_frames_to_bytes(pcm, written);
-	else
+	while
+	( /* Try to write, recover if error, try again if recovery successful. */
+		(written = snd_pcm_writei(pcm, buf, frames)) < 0
+		&& snd_pcm_recover(pcm, (int)written, 0) == 0
+	)
 	{
-		if(snd_pcm_state(pcm) == SND_PCM_STATE_SUSPENDED)
-		{
-			/* Iamnothappyabouthisnothappyreallynot. */
-			snd_pcm_resume(pcm);
-			if(snd_pcm_state(pcm) == SND_PCM_STATE_SUSPENDED)
-			{
-				error("device still suspended after resume hackery... giving up");
-				return -1;
-			}
-		}
-		return 0;
+		debug2("recovered from alsa issue %i while trying to write %lu frames", (int)written, (unsigned long)frames);
 	}
+	if(written < 0)
+	{
+		error1("Fatal problem with alsa output, error %i.", (int)written);
+		return -1;
+	}
+	else return snd_pcm_frames_to_bytes(pcm, written);
 }
 
 static void flush_alsa(audio_output_t *ao)
@@ -256,8 +252,7 @@ static int close_alsa(audio_output_t *ao)
 	debug1("close_alsa with %p", ao->userptr);
 	if(pcm != NULL) /* be really generous for being called without any device opening */
 	{
-		if (snd_pcm_state(pcm) == SND_PCM_STATE_RUNNING)
-			snd_pcm_drain(pcm);
+		snd_pcm_drain(pcm); /* If there is something, let it drain, always. */
 		ao->userptr = NULL; /* Should alsa do this or the module wrapper? */
 		return snd_pcm_close(pcm);
 	}

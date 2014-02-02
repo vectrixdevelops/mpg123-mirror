@@ -1,7 +1,7 @@
 /*
 	mpg123: main code of the program (not of the decoder...)
 
-	copyright 1995-2010 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 1995-2013 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Michael Hipp
 */
@@ -20,7 +20,6 @@
 
 #include <errno.h>
 #include <string.h>
-#include <fcntl.h>
 #include <time.h>
 
 #ifdef HAVE_SCHED_H
@@ -659,10 +658,13 @@ int play_frame(void)
 {
 	unsigned char *audio;
 	int mc;
+	long new_header = 0;
 	size_t bytes;
 	debug("play_frame");
 	/* The first call will not decode anything but return MPG123_NEW_FORMAT! */
 	mc = mpg123_decode_frame(mh, &framenum, &audio, &bytes);
+	mpg123_getstate(mh, MPG123_FRESH_DECODER, &new_header, NULL);
+
 	/* Play what is there to play (starting with second decode_frame call!) */
 	if(bytes)
 	{
@@ -703,14 +705,15 @@ int play_frame(void)
 			mpg123_getformat(mh, &rate, &channels, &format);
 			if(param.verbose > 2) fprintf(stderr, "\nNote: New output format %liHz %ich, format %i\n", rate, channels, format);
 
-			if(!param.quiet)
-			{
-				fprintf(stderr, "\n");
-				if(param.verbose) print_header(mh);
-				else print_header_compact(mh);
-			}
+			new_header = 1;
 			reset_audio(rate, channels, format);
 		}
+	}
+	if(new_header && !param.quiet)
+	{
+		fprintf(stderr, "\n");
+		if(param.verbose) print_header(mh);
+		else print_header_compact(mh);
 	}
 	return 1;
 }
@@ -1008,7 +1011,8 @@ int main(int sys_argc, char ** sys_argv)
 	}
 #endif
 
-#ifdef HAVE_WINDOWS_H
+/* make sure not Cygwin, it doesn't need it */
+#if defined(WIN32) && defined(HAVE_WINDOWS_H)
 	/* argument "3" is equivalent to realtime priority class */
 	win32_set_priority( param.realtime ? 3 : param.w32_priority);
 #endif
@@ -1124,10 +1128,15 @@ int main(int sys_argc, char ** sys_argv)
 {
 	const char *term_type;
 	term_type = getenv("TERM");
-	if (term_type && param.xterm_title &&
-	    (!strncmp(term_type,"xterm",5) || !strncmp(term_type,"rxvt",4)))
+	if(term_type && param.xterm_title)
 	{
+		if(!strncmp(term_type,"xterm",5) || !strncmp(term_type,"rxvt",4))
 		fprintf(stderr, "\033]0;%s\007", filename);
+		else if(!strncmp(term_type,"screen",6))
+		fprintf(stderr, "\033k%s\033\\", filename);
+		else if(!strncmp(term_type,"iris-ansi",9))
+		fprintf(stderr, "\033P1.y %s\033\\\033P3.y%s\033\\", filename, filename);
+
 		fflush(stderr); /* Paranoia: will the buffer buffer the escapes? */
 	}
 }
@@ -1197,7 +1206,7 @@ int main(int sys_argc, char ** sys_argv)
 	}
 	else if(param.verbose) fprintf(stderr, "\n");
 
-	mpg123_close(mh);
+	close_track();
 
 	if (intflag)
 	{
@@ -1222,7 +1231,7 @@ int main(int sys_argc, char ** sys_argv)
 
 	if(APPFLAG(MPG123APP_CONTINUE))
 	{
-		fprintf(aux_out, "\n[CONTINUE] track %"SIZE_P" frame %"OFF_P"\n", (size_p)pl.pos, (off_p)framenum);
+		continue_msg("CONTINUE");
 	}
 
 	/* Free up memory used by playlist */    
@@ -1236,7 +1245,7 @@ static void print_title(FILE *o)
 {
 	fprintf(o, "High Performance MPEG 1.0/2.0/2.5 Audio Player for Layers 1, 2 and 3\n");
 	fprintf(o, "\tversion %s; written and copyright by Michael Hipp and others\n", PACKAGE_VERSION);
-	fprintf(o, "\tfree software (LGPL/GPL) without any warranty but with best wishes\n");
+	fprintf(o, "\tfree software (LGPL) without any warranty but with best wishes\n");
 }
 
 static void usage(int err)  /* print syntax & exit */
@@ -1276,7 +1285,11 @@ static void usage(int err)  /* print syntax & exit */
 	#endif
 	fprintf(o,"   -z    shuffle play (with wildcards)  -Z    random play\n");
 	fprintf(o,"   -u a  HTTP authentication string     -E f  Equalizer, data from file\n");
+#ifdef HAVE_TERMIOS
 	fprintf(o,"   -C    enable control keys            --no-gapless  not skip junk/padding in mp3s\n");
+#else
+	fprintf(o,"                                        --no-gapless  not skip junk/padding in mp3s\n");
+#endif
 	fprintf(o,"   -?    this help                      --version  print name + version\n");
 	fprintf(o,"See the manpage %s(1) or call %s with --longhelp for more parameters and information.\n", prgName,prgName);
 	safe_exit(err);
@@ -1308,6 +1321,7 @@ static void long_usage(int err)
 	fprintf(o," -p <f> --proxy <f>        set WWW proxy\n");
 	fprintf(o," -u     --auth             set auth values for HTTP access\n");
 	fprintf(o,"        --ignore-mime      ignore HTTP MIME types (content-type)\n");
+	fprintf(o,"        --no-seekbuffer    disable seek buffer\n");
 	fprintf(o," -@ <f> --list <f>         play songs in playlist <f> (plain list, m3u, pls (shoutcast))\n");
 	fprintf(o," -l <n> --listentry <n>    play nth title in playlist; show whole playlist for n < 0\n");
 	fprintf(o,"        --continue         playlist continuation mode (see man page)\n");
@@ -1391,7 +1405,7 @@ static void long_usage(int err)
 	fprintf(o,"                           (default is for next track)\n");
 	#endif
 	#ifndef GENERIC
-	fprintf(o,"        --title            set xterm/rxvt title to filename\n");
+	fprintf(o,"        --title            set terminal title to filename\n");
 	#endif
 	fprintf(o,"        --long-tag         spacy id3 display with every item on a separate line\n");
 	fprintf(o,"        --lyrics           show lyrics (from ID3v2 USLT frame)\n");
@@ -1429,4 +1443,9 @@ static void give_version(char* arg)
 {
 	fprintf(stdout, PACKAGE_NAME" "PACKAGE_VERSION"\n");
 	safe_exit(0);
+}
+
+void continue_msg(const char *name)
+{
+		fprintf(aux_out, "\n[%s] track %"SIZE_P" frame %"OFF_P"\n", name,  (size_p)pl.pos, (off_p)framenum);
 }

@@ -1,7 +1,7 @@
 /*
 	libmpg123: MPEG Audio Decoder library
 
-	copyright 1995-2012 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 1995-2014 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 
 */
@@ -368,6 +368,10 @@ int attribute_align_arg mpg123_getstate(mpg123_handle *mh, enum mpg123_state key
 			ret = MPG123_ERR;
 #endif
 		break;
+		case MPG123_FRESH_DECODER:
+			theval = mh->state_flags & FRAME_FRESH_DECODER;
+			mh->state_flags &= ~FRAME_FRESH_DECODER;
+		break;
 		default:
 			mh->err = MPG123_BAD_KEY;
 			ret = MPG123_ERR;
@@ -501,6 +505,7 @@ int decode_update(mpg123_handle *mh)
 		return MPG123_ERR;
 	}
 
+	mh->state_flags |= FRAME_FRESH_DECODER;
 	native_rate = frame_freq(mh);
 
 	b = frame_output_format(mh); /* Select the new output format based on given constraints. */
@@ -520,7 +525,7 @@ int decode_update(mpg123_handle *mh)
 		case 2:
 			mh->down_sample_sblimit = SBLIMIT>>(mh->down_sample);
 			/* With downsampling I get less samples per frame */
-			mh->outblock = samples_to_storage(mh, (spf(mh)>>mh->down_sample));
+			mh->outblock = samples_to_storage(mh, (mh->spf>>mh->down_sample));
 		break;
 #ifndef NO_NTOM
 		case 3:
@@ -533,7 +538,7 @@ int decode_update(mpg123_handle *mh)
 			}
 			else mh->down_sample_sblimit = SBLIMIT;
 			mh->outblock = samples_to_storage(mh,
-			                 ( ( NTOM_MUL-1+spf(mh)
+			                 ( ( NTOM_MUL-1+mh->spf
 			                   * (((size_t)NTOM_MUL*mh->af.rate)/frame_freq(mh))
 			                 )/NTOM_MUL ));
 		}
@@ -575,10 +580,19 @@ size_t attribute_align_arg mpg123_outblock(mpg123_handle *mh)
    This includes skipping/ignoring frames, in additon to skipping junk in the parser. */
 static int get_next_frame(mpg123_handle *mh)
 {
-	/* We have some decoder ready, if the desired decoder has changed,
-	   it is OK to use the old one for ignoring frames and activating
-	   the new one for real (decode_update()) after getting the frame. */
 	int change = mh->decoder_change;
+	/* Ensure we got proper decoder for ignoring frames.
+	   Header can be changed from seeking around. But be careful: Only after at
+	   least one frame got read, decoder update makes sense. */
+	if(mh->header_change > 1 && mh->num >= 0)
+	{
+		change = 1;
+		mh->header_change = 0;
+		debug("starting with big header change");
+		if(decode_update(mh) < 0)
+		return MPG123_ERR;
+	}
+
 	do
 	{
 		int b;
@@ -616,6 +630,11 @@ static int get_next_frame(mpg123_handle *mh)
 		{
 			debug("big header change");
 			change = 1;
+			mh->header_change = 0;
+			/* Need to update decoder structure right away since frame might need to
+			   be decoded on next loop iteration for properly ignoring its output. */
+			if(decode_update(mh) < 0)
+			return MPG123_ERR;
 		}
 		/* Now some accounting: Look at the numbers and decide if we want this frame. */
 		++mh->playnum;
@@ -637,11 +656,6 @@ static int get_next_frame(mpg123_handle *mh)
 	   All other situations resulted in returns from the loop. */
 	if(change)
 	{
-		if(decode_update(mh) < 0)  /* dito... */
-		return MPG123_ERR;
-
-debug1("new format: %i", mh->new_format);
-
 		mh->decoder_change = 0;
 		if(mh->fresh)
 		{
@@ -1096,6 +1110,11 @@ static int do_the_seek(mpg123_handle *mh)
 	}
 #endif
 	b = mh->rd->seek_frame(mh, fnum);
+	if(mh->header_change > 1)
+	{
+		if(decode_update(mh) < 0) return MPG123_ERR;
+		mh->header_change = 0;
+	}
 	debug1("seek_frame returned: %i", b);
 	if(b<0) return b;
 	/* Only mh->to_ignore is TRUE. */
@@ -1265,12 +1284,12 @@ off_t attribute_align_arg mpg123_length(mpg123_handle *mh)
 	b = init_track(mh);
 	if(b<0) return b;
 	if(mh->track_samples > -1) length = mh->track_samples;
-	else if(mh->track_frames > 0) length = mh->track_frames*spf(mh);
+	else if(mh->track_frames > 0) length = mh->track_frames*mh->spf;
 	else if(mh->rdat.filelen > 0) /* Let the case of 0 length just fall through. */
 	{
 		/* A bad estimate. Ignoring tags 'n stuff. */
 		double bpf = mh->mean_framesize ? mh->mean_framesize : compute_bpf(mh);
-		length = (off_t)((double)(mh->rdat.filelen)/bpf*spf(mh));
+		length = (off_t)((double)(mh->rdat.filelen)/bpf*mh->spf);
 	}
 	else if(mh->rdat.filelen == 0) return mpg123_tell(mh); /* we could be in feeder mode */
 	else return MPG123_ERR; /* No length info there! */
@@ -1286,8 +1305,9 @@ off_t attribute_align_arg mpg123_length(mpg123_handle *mh)
 int attribute_align_arg mpg123_scan(mpg123_handle *mh)
 {
 	int b;
-	off_t backframe;
-	int to_decode, to_ignore;
+	off_t oldpos;
+	off_t track_frames = 0;
+	off_t track_samples = 0;
 
 	if(mh == NULL) return MPG123_ERR;
 	if(!(mh->rdat.flags & READER_SEEKABLE)){ mh->err = MPG123_NO_SEEK; return MPG123_ERR; }
@@ -1300,30 +1320,28 @@ int attribute_align_arg mpg123_scan(mpg123_handle *mh)
 		if(b == MPG123_DONE) return MPG123_OK;
 		else return MPG123_ERR; /* Must be error here, NEED_MORE is not for seekable streams. */
 	}
-	backframe = mh->num;
-	to_decode = mh->to_decode;
-	to_ignore = mh->to_ignore;
+	oldpos = mpg123_tell(mh);
 	b = mh->rd->seek_frame(mh, 0);
 	if(b<0 || mh->num != 0) return MPG123_ERR;
 	/* One frame must be there now. */
-	mh->track_frames = 1;
-	mh->track_samples = spf(mh); /* Internal samples. */
-	debug("TODO: We should disable gapless code when encountering inconsistent spf(mh)!");
+	track_frames = 1;
+	track_samples = mh->spf; /* Internal samples. */
+	debug("TODO: We should disable gapless code when encountering inconsistent mh->spf!");
+	debug("      ... at least unset MPG123_ACCURATE.");
+	/* Do not increment mh->track_frames in the loop as tha would confuse Frankenstein detection. */
 	while(read_frame(mh) == 1)
 	{
-		++mh->track_frames;
-		mh->track_samples += spf(mh);
+		++track_frames;
+		track_samples += mh->spf;
 	}
+	mh->track_frames = track_frames;
+	mh->track_samples = track_samples;
 	debug2("Scanning yielded %"OFF_P" track samples, %"OFF_P" frames.", (off_p)mh->track_samples, (off_p)mh->track_frames);
 #ifdef GAPLESS
 	/* Also, think about usefulness of that extra value track_samples ... it could be used for consistency checking. */
-	frame_gapless_update(mh, mh->track_samples);
-#endif	
-	b = mh->rd->seek_frame(mh, backframe);
-	if(b<0 || mh->num != backframe) return MPG123_ERR;
-	mh->to_decode = to_decode;
-	mh->to_ignore = to_ignore;
-	return MPG123_OK;
+	if(mh->p.flags & MPG123_GAPLESS) frame_gapless_update(mh, mh->track_samples);
+#endif
+	return mpg123_seek(mh, oldpos, SEEK_SET) >= 0 ? MPG123_OK : MPG123_ERR;
 }
 
 int attribute_align_arg mpg123_meta_check(mpg123_handle *mh)
