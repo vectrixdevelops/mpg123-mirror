@@ -58,6 +58,13 @@ static int flipendian=0;
 int bytes_per_sample = -1;
 int floatwav = 0; /* If we write a floating point WAV file. */
 
+/* Open routines only prepare a header, stored here and written on first actual
+   data write. If no data is written at all, proper files will still get a
+   header via the update at closing; non-seekable streams will just have no
+   no header if there is no data. */
+void *the_header = NULL;
+size_t the_header_size = 0;
+
 /* Convertfunctions: */
 /* always little endian */
 
@@ -107,6 +114,7 @@ static int testEndian(void)
   return ret;
 }
 
+/* return: 0 is good, -1 is bad */
 static int open_file(char *filename)
 {
 #if defined(HAVE_SETUID) && defined(HAVE_GETUID)
@@ -114,7 +122,11 @@ static int open_file(char *filename)
 #endif
    if(!strcmp("-",filename))  {
       wavfp = stdout;
-	return 0;
+      /* If stdout is redirected to a file, seeks suddenly can work.
+         Doing one here to ensure that such a file has the same output
+         it had when opening directly as such. */
+      fseek(wavfp, 0L, SEEK_SET);
+      return 0;
    }
    else {
 #ifdef WANT_WIN32_UNICODE
@@ -136,6 +148,7 @@ static int open_file(char *filename)
    }
 }
 
+/* return: 0 is good, -1 is bad */
 static int close_file()
 {
 	if(wavfp != NULL && wavfp != stdout)
@@ -152,10 +165,10 @@ static int close_file()
 	return 0;
 }
 
-/* Wrapper over header writing; ensure that stdout doesn't get multiple headers. */
+/* return: 0 is good, -1 is bad */
 static int write_header(const void*ptr, size_t size)
 {
-	if(fwrite(ptr, size, 1, wavfp) != 1 || fflush(wavfp))
+	if(size > 0 && (fwrite(ptr, size, 1, wavfp) != 1 || fflush(wavfp)))
 	{
 		error1("cannot write header: %s", strerror(errno));
 		return -1;
@@ -206,7 +219,10 @@ int au_open(audio_output_t *ao)
 
   datalen = 0;
 
-	return write_header(&auhead, sizeof(auhead));
+	the_header = &auhead;
+	the_header_size = sizeof(auhead);
+
+	return 0;
 }
 
 int cdr_open(audio_output_t *ao)
@@ -228,6 +244,9 @@ int cdr_open(audio_output_t *ao)
 
   if(open_file(ao->device) < 0)
     return -1;
+
+	the_header = NULL;
+	the_header_size = 0;
 
   return 0;
 }
@@ -306,10 +325,15 @@ int wav_open(audio_output_t *ao)
 		long2littleendian(datalen+sizeof(RIFF.WAVE),RIFF.WAVElen,sizeof(RIFF.WAVElen));
 	}
 
-	if(!(    ( floatwav && !write_header(&RIFF_FLOAT, sizeof(RIFF_FLOAT)))
-	      || (!floatwav && !write_header(&RIFF,       sizeof(RIFF))) ))
+	if(floatwav)
 	{
-		return -1;
+		the_header = &RIFF_FLOAT;
+		the_header_size = sizeof(RIFF_FLOAT);
+	}
+	else
+	{
+		the_header = &RIFF;
+		the_header_size = sizeof(RIFF);
 	}
 
 	datalen = 0;
@@ -326,6 +350,11 @@ int wav_write(unsigned char *buf,int len)
 	if(!wavfp)
 	return 0;
 
+	if(datalen == 0)
+	{
+		if(write_header(the_header, the_header_size) < 0) return -1;
+	}
+
 	if(flipendian)
 	{
 		if(bytes_per_sample == 4) /* 32 bit */
@@ -333,7 +362,7 @@ int wav_write(unsigned char *buf,int len)
 			if(len & 3)
 			{
 				error("Number of bytes no multiple of 4 (32bit)!");
-				return 0;
+				return -1;
 			}
 			for(i=0;i<len;i+=4)
 			{
@@ -348,7 +377,7 @@ int wav_write(unsigned char *buf,int len)
 			if(len & 1)
 			{
 				error("Odd number of bytes!");
-				return 0;
+				return -1;
 			}
 			for(i=0;i<len;i+=2)
 			{
@@ -361,14 +390,13 @@ int wav_write(unsigned char *buf,int len)
 	}
 
 	temp = fwrite(buf, 1, len, wavfp);
-	if(temp <= 0)
-	return 0;
+	if(temp <= 0) return temp;
 /* That would kill it of early when running out of disk space. */
 #if 0
 if(fflush(wavfp))
 {
 	fprintf(stderr, "flushing failed: %s\n", strerror(errno));
-	return 0;
+	return -1;
 }
 #endif
 	datalen += temp;
@@ -378,7 +406,7 @@ if(fflush(wavfp))
 
 int wav_close(void)
 {
-	if(!wavfp) return 0;
+	if(!wavfp) return -1;
 
 	/* flush before seeking to catch out-of-disk explicitly at least at the end */
 	if(fflush(wavfp))
@@ -396,14 +424,14 @@ int wav_close(void)
 			long2littleendian(datalen/(from_little(RIFF_FLOAT.WAVE.fmt.Channels,2)*from_little(RIFF_FLOAT.WAVE.fmt.BitsPerSample,2)/8),
 				RIFF_FLOAT.WAVE.fact.samplelen,sizeof(RIFF_FLOAT.WAVE.fact.samplelen));
 			/* Always (over)writing the header here; also for stdout, when fseek worked, this overwrite works. */
-			fwrite(&RIFF_FLOAT, sizeof(RIFF_FLOAT),1,wavfp);
+			write_header(&RIFF_FLOAT, sizeof(RIFF_FLOAT));
 		}
 		else
 		{
 			long2littleendian(datalen,RIFF.WAVE.data.datalen,sizeof(RIFF.WAVE.data.datalen));
 			long2littleendian(datalen+sizeof(RIFF.WAVE),RIFF.WAVElen,sizeof(RIFF.WAVElen));
 			/* Always (over)writing the header here; also for stdout, when fseek worked, this overwrite works. */
-			fwrite(&RIFF, sizeof(RIFF),1,wavfp);
+			write_header(&RIFF, sizeof(RIFF));
 		}
 	}
 	else
@@ -414,8 +442,7 @@ int wav_close(void)
 
 int au_close(void)
 {
-   if(!wavfp)
-      return 0;
+	if(!wavfp) return -1;
 
 	/* flush before seeking to catch out-of-disk explicitly at least at the end */
 	if(fflush(wavfp))
@@ -427,7 +454,7 @@ int au_close(void)
    if(fseek(wavfp, 0L, SEEK_SET) >= 0) {
      long2bigendian(datalen,auhead.datalen,sizeof(auhead.datalen));
      /* Always (over)writing the header here; also for stdout, when fseek worked, this overwrite works. */
-     fwrite(&auhead, sizeof(auhead),1,wavfp); 
+     write_header(&auhead, sizeof(auhead));
    }
    else
    warning("Cannot rewind AU file. File-format isn't fully conform now.");
@@ -437,7 +464,7 @@ int au_close(void)
 
 int cdr_close(void)
 {
-	if(!wavfp) return 0;
+	if(!wavfp) return -1;
 
 	return close_file();
 }

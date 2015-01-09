@@ -3,7 +3,7 @@
 ## copyright by the mpg123 project - free software under the terms of the LGPL 2.1
 ## see COPYING and AUTHORS files in distribution or http://mpg123.org
 ## initially written by Nicholas J. Humfrey
-dist_man_MANS = man1/mpg123.1
+dist_man_MANS = man1/mpg123.1 man1/out123.1
 
 SUBDIRS = src doc
 DIST_SUBDIRS = src doc
@@ -96,5 +96,5 @@ EXTRA_DIST = \
 	ports/Xcode/mpg123.xcodeproj/project.pbxproj \
 	scripts/benchmark-cpu.pl \
 	scripts/tag_lyrics.py \
-	scripts/conplay
-
+	scripts/conplay \
+	scripts/mpg123info

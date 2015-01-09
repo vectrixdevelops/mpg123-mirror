@@ -14,6 +14,11 @@ case $build_type in
     strip=strip
     hostopt=
   ;;
+  x86-cross)
+    decoder=x86
+    strip=i686-w64-mingw32-strip
+    hostopt="--host=i686-w64-mingw32 --build=`./build/config.guess`"
+  ;;
   x86_64-cross)
     decoder=x86-64
     strip=x86_64-w64-mingw32-strip
@@ -98,6 +103,7 @@ mpg123_build()
 	rm -rf "$final/$name" &&
 	mkdir  "$final/$name" &&
 	cp -v "$tmp/bin/mpg123.exe" "$final/$name" &&
+	cp -v "$tmp/bin/out123.exe" "$final/$name" &&
 	if test "$debug" = y; then
 		echo "Not stripping the debug build..."
 	else
