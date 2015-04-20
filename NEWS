@@ -1,7 +1,34 @@
-1.21.2
-- Build fix: Avoid name clash on OSX SDK with "normal" being defined in an enum already.
+1.23.0
+---
+- Added mpg123 --no-infoframe.
+- Clip decode tables for large amplification with fixed-point decoders.
+  Without that, high-pitched distortion enters really quickly when
+  trying to increase volume even if output samples would not be clipped,
+  weren't it for fixed-point math.
+- Warning messages also start with a line break now to better fit in with
+  verbose playback.
+- Reporting of clipped samples also includes a line break now.
 
-1.21.1
+1.22.1
+---
+- Fix mpg123-id3dump when writing images with funny (manipulated) MIME type.
+  Stupid mistake in length computation of the fallback file extension caused
+  junk from memory being appended to the filename if the pointer size
+  is less than 64 bit. For 64 bit pointers (or longer) it was correct by
+  accident.
+- Fix pedantic build by cleaning up out123 source, also now really showing
+  the encoding list in --longhelp instead of possibly, again, writing junk
+  from memory in there.
+- Not linking libmpg123 against libltdl anymore (bug 215).
+- Update MSVC++ ports a bit to make them work again.
+
+1.22.0
+---
+- libmpg123 version 41
+- Build fix: Avoid name clash on OSX SDK with "normal" being defined in an enum already.
+- More resilience against folks who do not check errors and rather pass NULL pointers around (see NEWS.libmpg123).
+  This changes some return values to MPG123_BAD_HANDLE instead of MPG123_ERR (always check for != MPG123_OK).
+- Fix WAV writing to stdout on Windows (bug 214).
 - Rework Xing/Info/Lame tag parsing, also detecting short ones without the TOC now.
   In addition, the warning about file size being off is a _lot_ more accurate now.
 
@@ -26,6 +53,7 @@
 
 1.19.0
 ---
+- libmpg123 version 40
 - Support float and 32/24 bit integer output also with fixed-point decoders (conversion from 16 bit precision).
 - A-Law output encoding is actually implemented now (Michael introduced the encoding back in the old days without ever implementing theconversion table, apparently).
 - Added --with-cpu=arm_fpu as decoder choice for runtime switch between plain fpu code and NEON.
