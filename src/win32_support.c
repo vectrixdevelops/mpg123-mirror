@@ -51,6 +51,7 @@ void win32_cmdline_free(int argc, char **argv)
 }
 #endif /* WANT_WIN32_UNICODE */
 
+#ifdef _WIN32
 void win32_set_priority (const int arg)
 {
 	DWORD proc_result = 0;
@@ -74,6 +75,7 @@ void win32_set_priority (const int arg)
 		else fprintf(stderr,"GetCurrentProcess failed\n");
 	}
 }
+#endif
 
 #ifdef WANT_WIN32_FIFO
 static HANDLE fifohandle;
@@ -94,7 +96,6 @@ VOID CALLBACK ReadComplete(
 ssize_t win32_fifo_read(void *buf, size_t nbyte)
 {
 	int check;
-	DWORD re;
 	DWORD readbuff;
 	DWORD available;
 	debug1("Reading pipe handle %p", fifohandle);
@@ -128,7 +129,7 @@ DWORD win32_fifo_read_peek(struct timeval *tv)
 	if(!fifohandle) return 0;
 		PeekNamedPipe(fifohandle, NULL, 0, NULL, &ret, NULL);
 	err =  GetLastError();
-	debug1("Waiting %d msec for pipe to be ready", timer);
+	debug1("Waiting %ld msec for pipe to be ready", timer);
 	debug1("GetLastError was %ld", err);
 	if(err == ERROR_BROKEN_PIPE)
 	{
@@ -144,7 +145,7 @@ DWORD win32_fifo_read_peek(struct timeval *tv)
 		ConnectNamedPipe(fifohandle,&ov1);
 		WaitForSingleObjectEx(fifohandle,timer,TRUE);
 	}
-	debug2("peek %d bytes, error %d",ret, err);
+	debug2("peek %ld bytes, error %ld",ret, err);
 	return ret;
 }
 
