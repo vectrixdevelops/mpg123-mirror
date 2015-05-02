@@ -24,7 +24,9 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_CANONICAL_HOST
 
 dnl Version 1.7 of automake is recommended
-AM_INIT_AUTOMAKE(1.7)
+dnl Not sure what minimal version does not choke on sub directories.
+dnl Testing with 1.14.
+AM_INIT_AUTOMAKE([subdir-objects])
 AC_CONFIG_HEADERS([src/config.h])
 
 
@@ -173,6 +175,9 @@ else
 fi
 
 AM_CONDITIONAL( [HAVE_MODULES], [test "x$modules" = xenabled] )
+
+# Again: fake $(addprefix ) for non-recursive Make.
+MODULE_OBJ=`for i in $MODULE_OBJ; do echo src/libout123/$i; done | tr '\n' ' '`
 
 AC_SUBST(MODULE_OBJ)
 AC_SUBST(LT_LDFLAGS)
@@ -1057,6 +1062,8 @@ else
   AC_MSG_RESULT([no])
 fi
 
+# Again, prepend path for non-recursive make.
+LFS_LOBJ=`for i in $LFS_LOBJ; do echo src/libmpg123/$i; done | tr '\n' ' '`
 AC_SUBST(LFS_LOBJ)
 
 
@@ -1471,6 +1478,12 @@ do
   word_in_list "$i.\$(OBJEXT)" $DECODER_OBJ || DECODER_OBJ="$DECODER_OBJ $i.\$(OBJEXT)"
   word_in_list "$i.lo" $DECODER_LOBJ || DECODER_LOBJ="$DECODER_LOBJ $i.lo"
 done
+
+# Another preprocessing step: Append prefix for non-recursive make.
+# Just because $(addprefix ...) is a GNU extension.
+
+DECODER_OBJ=`for i in $DECODER_OBJ; do echo src/libmpg123/$i; done | tr '\n' ' '`
+DECODER_LOBJ=`for i in $DECODER_LOBJ; do echo src/libmpg123/$i; done | tr '\n' ' '`
 
 AC_SUBST(DECODER_OBJ)
 AC_SUBST(DECODER_LOBJ)
@@ -1965,7 +1978,7 @@ if test "x$modules" = xdisabled
 then
 	echo "Preparing static output $default_output_module"
 	OUTPUT_MOD="$default_output_module"
-	OUTPUT_OBJ="output/$default_output_module.\$(OBJEXT)"
+	OUTPUT_OBJ="output_$default_output_module.\$(OBJEXT)"
 	OUTPUT_CFLAGS=
 	OUTPUT_LIBS=
 	# That feels stupid... what about hashed arrays?
@@ -2109,6 +2122,7 @@ fi
 
 AC_DEFINE_UNQUOTED( DEFAULT_OUTPUT_MODULE, "$default_output_modules", [The default audio output module(s) to use] )
 
+OUTPUT_OBJ=`for i in $OUTPUT_OBJ; do echo src/libout123/modules/$i; done`
 
 AC_SUBST(OUTPUT_OBJ)
 AC_SUBST(OUTPUT_MOD)
@@ -2409,10 +2423,6 @@ AC_CONFIG_FILES([
 	Makefile
 	libmpg123.pc
 	mpg123.spec
-	doc/Makefile
-	src/Makefile
-	src/output/Makefile
-	src/libmpg123/Makefile
 	src/libmpg123/mpg123.h
 ])
 

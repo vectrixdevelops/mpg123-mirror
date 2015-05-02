@@ -10,5 +10,4 @@
 	worked so far.
 */
 
-#include "intsym.h"
 #include "compat/compat_impl.h"

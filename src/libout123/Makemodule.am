@@ -1,0 +1,10 @@
+# Module for non-recursive mpg123 build system.
+
+out123src = src/libout123/legacy_module.c src/libout123/module.c
+include src/libout123/modules/Makemodule.am
+
+# Nope: depending programs need EXTRA_program_SOURCES.
+#EXTRA_DIST += src/libout123/legacy_module.c src/libout123/module.c
+CLEANFILES += src/libout123/*.a
+
+# TODO: actually turn the stuff into a library.
