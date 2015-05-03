@@ -20,7 +20,7 @@ src_libmpg123_libmpg123_la_LDFLAGS = \
   -no-undefined \
   -version-info @LIBMPG123_VERSION@ \
   -export-symbols-regex '^mpg123_'
-src_libmpg123_libmpg123_la_LIBADD = @DECODER_LOBJ@ @LFS_LOBJ@ @LIBMPG123_LIBS@
+src_libmpg123_libmpg123_la_LIBADD = @DECODER_LOBJ@ @LFS_LOBJ@ @LIBS@
 src_libmpg123_libmpg123_la_DEPENDENCIES = @DECODER_LOBJ@ @LFS_LOBJ@
 
 src_libmpg123_libmpg123_la_SOURCES = \
