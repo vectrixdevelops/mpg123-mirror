@@ -19,7 +19,8 @@ src_mpg123_LDADD = $(LIBLTDL) \
 src_mpg123_LDFLAGS = @EXEC_LT_LDFLAGS@ $(output_ldflags)
 src_mpg123_DEPENDENCIES = \
   src/libmpg123/libmpg123.la \
-  src/libout123/libmodule.a
+  src/libout123/libmodule.a \
+  src/libout123/libdefaultmodule.a
 
 # The dependency on libmpg123 could/should vanish. Or not.
 # Does it matter much?
@@ -31,7 +32,8 @@ src_out123_LDADD = $(LIBLTDL) \
 src_out123_LDFLAGS = @EXEC_LT_LDFLAGS@ $(output_ldflags)
 src_out123_DEPENDENCIES =  \
   src/libmpg123/libmpg123.la \
-  src/libout123/libmodule.a
+  src/libout123/libmodule.a \
+  src/libout123/libdefaultmodule.a
 
 EXTRA_DIST += sfifo.c sfifo.h mpg123-with-modules out123-with-modules
 

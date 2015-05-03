@@ -36,12 +36,7 @@ out123src += \
 # Precursor to the proper libout123.
 # For now only wrapping the module loader or the legacy module.
 noinst_LIBRARIES += src/libout123/libmodule.a
-
-# Where should I define this frikkin' library?
-# automake complains at one certain entry of the following structurally
-# identical lot that there is not lib for tha canoncical name.
-# Why not complain on _all_ occurrences?
-
+# Optionally containing the one static module to use.
 noinst_LIBRARIES += src/libout123/libdefaultmodule.a
 
 # Do not include uneeded headers from mpg123app.h .
@@ -54,7 +49,6 @@ src_libout123_libmodule_a_SOURCES = src/libout123/module.c
 else
 
 src_libout123_libmodule_a_SOURCES = src/libout123/legacy_module.c
-src_libout123_libmodule_a_LIBADD = src/libout123/libdefaultmodule.a
 
 endif
 
