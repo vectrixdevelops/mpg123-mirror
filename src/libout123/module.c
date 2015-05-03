@@ -42,7 +42,9 @@ static char *get_module_dir()
 	/* Compiled-in default module dir or environment variable MPG123_MODDIR. */
 	defaultdir = getenv("MPG123_MODDIR");
 	if(defaultdir == NULL)
-	defaultdir=PKGLIBDIR;
+		defaultdir=PKGLIBDIR;
+	else if(param.verbose > 1)
+		fprintf(stderr, "Trying module directory from environment: %s\n", defaultdir);
 
 	dir = opendir(defaultdir);
 	if(dir != NULL)
@@ -231,7 +233,7 @@ void list_modules()
 
 	moddir = get_module_dir();
 	/* Open the module directory */
-	dir = opendir(moddir);
+	dir = moddir != NULL ? opendir(moddir) : NULL;
 	if (dir==NULL) {
 		error2("Failed to open the module directory (%s): %s\n", PKGLIBDIR, strerror(errno));
 		free(moddir);
@@ -284,7 +286,9 @@ void list_modules()
 				module_name[ strlen( module_name ) - strlen( MODULE_FILE_SUFFIX ) ] = '\0';
 				
 				/* Open the module */
+				chdir(workdir);
 				module = open_module( module_type, module_name );
+				chdir(moddir);
 				if (module) {
 					printf("%-15s%s  %s\n", module->name, module_type, module->description );
 				
