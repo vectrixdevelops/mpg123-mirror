@@ -1956,42 +1956,43 @@ fi
 default_output_modules=$default_output_module
 
 # Setup the static build.
-if test "x$modules" = xdisabled
-then
-  # Here's a script for that tedious list, perhaps to be outsourced together with the one in #src/output/Makefile.am
+# The conditionals always need to be defined by configure, even if
+# HAVE_MODULES is FALSE!
+# Here's a script for that tedious list, perhaps to be outsourced together with the one in #src/output/Makefile.am
 #for i in dummy tinyalsa alsa qsa coreaudio esd jack nas oss portaudio pulse sdl sndio sun win32 win32_wasapi aix alib arts hp os2 sgi mint openal
 #do echo $i; done |
 #perl -ne 'chomp; $big = uc($_); print <<EOT;
-#  AM_CONDITIONAL([BUILD_${big}], [ test "$_" = \$default_output_module ])
+#AM_CONDITIONAL([BUILD_${big}], [ test "$_" = \$default_output_module ])
 #EOT
 #'
 
-  AM_CONDITIONAL([BUILD_DUMMY], [ test "dummy" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_TINYALSA], [ test "tinyalsa" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_ALSA], [ test "alsa" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_QSA], [ test "qsa" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_COREAUDIO], [ test "coreaudio" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_ESD], [ test "esd" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_JACK], [ test "jack" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_NAS], [ test "nas" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_OSS], [ test "oss" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_PORTAUDIO], [ test "portaudio" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_PULSE], [ test "pulse" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_SDL], [ test "sdl" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_SNDIO], [ test "sndio" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_SUN], [ test "sun" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_WIN32], [ test "win32" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_WIN32_WASAPI], [ test "win32_wasapi" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_AIX], [ test "aix" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_ALIB], [ test "alib" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_ARTS], [ test "arts" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_HP], [ test "hp" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_OS2], [ test "os2" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_SGI], [ test "sgi" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_MINT], [ test "mint" = $default_output_module ])
-  AM_CONDITIONAL([BUILD_OPENAL], [ test "openal" = $default_output_module ])
+AM_CONDITIONAL([BUILD_DUMMY], [ test "dummy" = $default_output_module ])
+AM_CONDITIONAL([BUILD_TINYALSA], [ test "tinyalsa" = $default_output_module ])
+AM_CONDITIONAL([BUILD_ALSA], [ test "alsa" = $default_output_module ])
+AM_CONDITIONAL([BUILD_QSA], [ test "qsa" = $default_output_module ])
+AM_CONDITIONAL([BUILD_COREAUDIO], [ test "coreaudio" = $default_output_module ])
+AM_CONDITIONAL([BUILD_ESD], [ test "esd" = $default_output_module ])
+AM_CONDITIONAL([BUILD_JACK], [ test "jack" = $default_output_module ])
+AM_CONDITIONAL([BUILD_NAS], [ test "nas" = $default_output_module ])
+AM_CONDITIONAL([BUILD_OSS], [ test "oss" = $default_output_module ])
+AM_CONDITIONAL([BUILD_PORTAUDIO], [ test "portaudio" = $default_output_module ])
+AM_CONDITIONAL([BUILD_PULSE], [ test "pulse" = $default_output_module ])
+AM_CONDITIONAL([BUILD_SDL], [ test "sdl" = $default_output_module ])
+AM_CONDITIONAL([BUILD_SNDIO], [ test "sndio" = $default_output_module ])
+AM_CONDITIONAL([BUILD_SUN], [ test "sun" = $default_output_module ])
+AM_CONDITIONAL([BUILD_WIN32], [ test "win32" = $default_output_module ])
+AM_CONDITIONAL([BUILD_WIN32_WASAPI], [ test "win32_wasapi" = $default_output_module ])
+AM_CONDITIONAL([BUILD_AIX], [ test "aix" = $default_output_module ])
+AM_CONDITIONAL([BUILD_ALIB], [ test "alib" = $default_output_module ])
+AM_CONDITIONAL([BUILD_ARTS], [ test "arts" = $default_output_module ])
+AM_CONDITIONAL([BUILD_HP], [ test "hp" = $default_output_module ])
+AM_CONDITIONAL([BUILD_OS2], [ test "os2" = $default_output_module ])
+AM_CONDITIONAL([BUILD_SGI], [ test "sgi" = $default_output_module ])
+AM_CONDITIONAL([BUILD_MINT], [ test "mint" = $default_output_module ])
+AM_CONDITIONAL([BUILD_OPENAL], [ test "openal" = $default_output_module ])
 
-else
+if test "x$modules" = xenabled
+then
 
   # Now make a comma-separated list again... eliminating the possible duplicate and dummy.
   for i in $output_modules

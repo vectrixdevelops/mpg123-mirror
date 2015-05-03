@@ -17,6 +17,8 @@ libout123_mod_cppflags = -DBUILDING_OUTPUT_MODULES=1
 # These are not tested and _very_ likely need work: aix alib hp os2 sgi mint
 
 # Use that sh/perl script to generate the module entries:
+# Confused as to when to use _LIBADD and when _LDADD.
+# _LDADD gives errors from autotools.
 #echo "alsa coreaudio esd jack nas oss \
 #portaudio pulse sdl sndio sun win32 \
 #aix alib arts hp os2 sgi mint openal \
@@ -40,9 +42,9 @@ libout123_mod_cppflags = -DBUILDING_OUTPUT_MODULES=1
 #if BUILD_$big
 #src_libout123_modules_libdefaultmodule_la_SOURCES  = \\
 #  src/libout123/modules/$_.c
-#src_libout123_modules_libdefaultmodule_la_CFLAGS = \@${big}_CFLAGS\@
-#output_ldflags  += \@${big}_LDFLAGS\@
-#output_libs     += \@${big}_LIBS\@
+#src_libout123_modules_libdefaultmodule_la_CFLAGS   = \@${big}_CFLAGS\@
+#src_libout123_modules_libdefaultmodule_la_LDFLAGS  = \@${big}_LDFLAGS\@
+#src_libout123_modules_libdefaultmodule_la_LIBADD   = \@${big}_LIBS\@
 #src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \\
 #  \$(AM_CPPFLAGS) \\
 #  \$(libout123_mod_cppflags)
@@ -50,6 +52,7 @@ libout123_mod_cppflags = -DBUILDING_OUTPUT_MODULES=1
 #endif
 #EOT
 #'
+#
 
 
 if HAVE_MODULES
@@ -69,9 +72,9 @@ else
 if BUILD_ALSA
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/alsa.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @ALSA_CFLAGS@
-output_ldflags  += @ALSA_LDFLAGS@
-output_libs     += @ALSA_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @ALSA_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @ALSA_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @ALSA_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -95,9 +98,9 @@ else
 if BUILD_COREAUDIO
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/coreaudio.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @COREAUDIO_CFLAGS@
-output_ldflags  += @COREAUDIO_LDFLAGS@
-output_libs     += @COREAUDIO_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @COREAUDIO_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @COREAUDIO_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @COREAUDIO_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -121,9 +124,9 @@ else
 if BUILD_ESD
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/esd.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @ESD_CFLAGS@
-output_ldflags  += @ESD_LDFLAGS@
-output_libs     += @ESD_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @ESD_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @ESD_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @ESD_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -147,9 +150,9 @@ else
 if BUILD_JACK
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/jack.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @JACK_CFLAGS@
-output_ldflags  += @JACK_LDFLAGS@
-output_libs     += @JACK_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @JACK_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @JACK_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @JACK_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -173,9 +176,9 @@ else
 if BUILD_NAS
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/nas.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @NAS_CFLAGS@
-output_ldflags  += @NAS_LDFLAGS@
-output_libs     += @NAS_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @NAS_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @NAS_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @NAS_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -199,9 +202,9 @@ else
 if BUILD_OSS
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/oss.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @OSS_CFLAGS@
-output_ldflags  += @OSS_LDFLAGS@
-output_libs     += @OSS_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @OSS_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @OSS_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @OSS_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -225,9 +228,9 @@ else
 if BUILD_PORTAUDIO
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/portaudio.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @PORTAUDIO_CFLAGS@
-output_ldflags  += @PORTAUDIO_LDFLAGS@
-output_libs     += @PORTAUDIO_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @PORTAUDIO_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @PORTAUDIO_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @PORTAUDIO_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -251,9 +254,9 @@ else
 if BUILD_PULSE
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/pulse.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @PULSE_CFLAGS@
-output_ldflags  += @PULSE_LDFLAGS@
-output_libs     += @PULSE_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @PULSE_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @PULSE_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @PULSE_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -277,9 +280,9 @@ else
 if BUILD_SDL
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/sdl.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @SDL_CFLAGS@
-output_ldflags  += @SDL_LDFLAGS@
-output_libs     += @SDL_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @SDL_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @SDL_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @SDL_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -303,9 +306,9 @@ else
 if BUILD_SNDIO
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/sndio.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @SNDIO_CFLAGS@
-output_ldflags  += @SNDIO_LDFLAGS@
-output_libs     += @SNDIO_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @SNDIO_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @SNDIO_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @SNDIO_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -329,9 +332,9 @@ else
 if BUILD_SUN
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/sun.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @SUN_CFLAGS@
-output_ldflags  += @SUN_LDFLAGS@
-output_libs     += @SUN_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @SUN_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @SUN_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @SUN_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -355,9 +358,9 @@ else
 if BUILD_WIN32
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/win32.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @WIN32_CFLAGS@
-output_ldflags  += @WIN32_LDFLAGS@
-output_libs     += @WIN32_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @WIN32_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @WIN32_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @WIN32_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -381,9 +384,9 @@ else
 if BUILD_AIX
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/aix.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @AIX_CFLAGS@
-output_ldflags  += @AIX_LDFLAGS@
-output_libs     += @AIX_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @AIX_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @AIX_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @AIX_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -407,9 +410,9 @@ else
 if BUILD_ALIB
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/alib.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @ALIB_CFLAGS@
-output_ldflags  += @ALIB_LDFLAGS@
-output_libs     += @ALIB_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @ALIB_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @ALIB_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @ALIB_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -433,9 +436,9 @@ else
 if BUILD_ARTS
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/arts.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @ARTS_CFLAGS@
-output_ldflags  += @ARTS_LDFLAGS@
-output_libs     += @ARTS_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @ARTS_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @ARTS_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @ARTS_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -459,9 +462,9 @@ else
 if BUILD_HP
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/hp.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @HP_CFLAGS@
-output_ldflags  += @HP_LDFLAGS@
-output_libs     += @HP_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @HP_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @HP_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @HP_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -485,9 +488,9 @@ else
 if BUILD_OS2
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/os2.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @OS2_CFLAGS@
-output_ldflags  += @OS2_LDFLAGS@
-output_libs     += @OS2_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @OS2_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @OS2_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @OS2_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -511,9 +514,9 @@ else
 if BUILD_SGI
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/sgi.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @SGI_CFLAGS@
-output_ldflags  += @SGI_LDFLAGS@
-output_libs     += @SGI_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @SGI_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @SGI_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @SGI_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -537,9 +540,9 @@ else
 if BUILD_MINT
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/mint.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @MINT_CFLAGS@
-output_ldflags  += @MINT_LDFLAGS@
-output_libs     += @MINT_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @MINT_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @MINT_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @MINT_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -563,9 +566,9 @@ else
 if BUILD_OPENAL
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/openal.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @OPENAL_CFLAGS@
-output_ldflags  += @OPENAL_LDFLAGS@
-output_libs     += @OPENAL_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @OPENAL_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @OPENAL_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @OPENAL_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
@@ -589,9 +592,9 @@ else
 if BUILD_DUMMY
 src_libout123_modules_libdefaultmodule_la_SOURCES  = \
   src/libout123/modules/dummy.c
-src_libout123_modules_libdefaultmodule_la_CFLAGS = @DUMMY_CFLAGS@
-output_ldflags  += @DUMMY_LDFLAGS@
-output_libs     += @DUMMY_LIBS@
+src_libout123_modules_libdefaultmodule_la_CFLAGS   = @DUMMY_CFLAGS@
+src_libout123_modules_libdefaultmodule_la_LDFLAGS  = @DUMMY_LDFLAGS@
+src_libout123_modules_libdefaultmodule_la_LIBADD   = @DUMMY_LIBS@
 src_libout123_modules_libdefaultmodule_la_CPPFLAGS = \
   $(AM_CPPFLAGS) \
   $(libout123_mod_cppflags)
