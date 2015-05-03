@@ -15,6 +15,7 @@ src_libout123_libout123_la_LIBADD = \
 if HAVE_MODULES
 
 src_libout123_libmodule_la_SOURCES = src/libout123/module.c
+src_libout123_libmodule_la_LIBADD = -lltdl
 
 else
 
