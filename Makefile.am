@@ -13,6 +13,7 @@ LIBS =
 EXTRA_DIST =
 pkglib_LTLIBRARIES =
 lib_LTLIBRARIES =
+noinst_LIBRARIES =
 nodist_include_HEADERS =
 dist_man_MANS =
 CLEANFILES =

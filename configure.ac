@@ -166,20 +166,8 @@ dnl Configure libtool
 AC_LIBTOOL_WIN32_DLL
 AM_PROG_LIBTOOL
 
-if test x"$modules" = xdisabled
-then
-	echo "Modules still disabled..."
-	MODULE_OBJ="legacy_module.\$(OBJEXT)"
-else
-	MODULE_OBJ="module.\$(OBJEXT)"
-fi
-
 AM_CONDITIONAL( [HAVE_MODULES], [test "x$modules" = xenabled] )
 
-# Again: fake $(addprefix ) for non-recursive Make.
-MODULE_OBJ=`for i in $MODULE_OBJ; do echo src/libout123/$i; done | tr '\n' ' '`
-
-AC_SUBST(MODULE_OBJ)
 AC_SUBST(LT_LDFLAGS)
 AC_SUBST(EXEC_LT_LDFLAGS)
 
@@ -1967,7 +1955,6 @@ fi
 # That's (beginning of) the list for mpg123's internal default.
 default_output_modules=$default_output_module
 
-OUTPUT_OBJ=
 OUTPUT_MOD=
 OUTPUT_CFLAGS=
 OUTPUT_LIBS=
@@ -1978,7 +1965,6 @@ if test "x$modules" = xdisabled
 then
 	echo "Preparing static output $default_output_module"
 	OUTPUT_MOD="$default_output_module"
-	OUTPUT_OBJ="output_$default_output_module.\$(OBJEXT)"
 	OUTPUT_CFLAGS=
 	OUTPUT_LIBS=
 	# That feels stupid... what about hashed arrays?
@@ -2122,9 +2108,9 @@ fi
 
 AC_DEFINE_UNQUOTED( DEFAULT_OUTPUT_MODULE, "$default_output_modules", [The default audio output module(s) to use] )
 
-OUTPUT_OBJ=`for i in $OUTPUT_OBJ; do echo src/libout123/modules/$i; done`
+OUTPUT_SRC=`for i in $OUTPUT_SRC; do echo src/libout123/modules/$i; done`
 
-AC_SUBST(OUTPUT_OBJ)
+AC_SUBST(OUTPUT_SRC)
 AC_SUBST(OUTPUT_MOD)
 AC_SUBST(OUTPUT_CFLAGS)
 AC_SUBST(OUTPUT_LIBS)
