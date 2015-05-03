@@ -13,38 +13,28 @@ bin_PROGRAMS += \
 
 src_mpg123_LDADD = $(LIBLTDL) \
   src/libmpg123/libmpg123.la \
-  src/libout123/libmodule.a \
-  src/libout123/libdefaultmodule.a \
+  src/libout123/libout123.la \
   $(output_libs)
 
 src_mpg123_LDFLAGS = @EXEC_LT_LDFLAGS@ $(output_ldflags)
-src_mpg123_DEPENDENCIES = \
-  src/libmpg123/libmpg123.la \
-  src/libout123/libmodule.a \
-  src/libout123/libdefaultmodule.a
 
 # The dependency on libmpg123 could/should vanish. Or not.
 # Does it matter much?
 src_out123_LDADD = $(LIBLTDL) \
   src/libmpg123/libmpg123.la \
-  src/libout123/libmodule.a \
-  src/libout123/libdefaultmodule.a \
+  src/libout123/libout123.la \
   $(output_libs)
 
 src_out123_LDFLAGS = @EXEC_LT_LDFLAGS@ $(output_ldflags)
-src_out123_DEPENDENCIES =  \
-  src/libmpg123/libmpg123.la \
-  src/libout123/libmodule.a \
-  src/libout123/libdefaultmodule.a
 
+# The sfifo situation needs to be cleared up.
+# It's used from places.
 EXTRA_DIST += sfifo.c sfifo.h mpg123-with-modules out123-with-modules
 
 CLEANFILES += src/*.a
 
-src_mpg123_id3dump_DEPENDENCIES = src/libmpg123/libmpg123.la
 src_mpg123_id3dump_LDADD = src/libmpg123/libmpg123.la
 
-src_mpg123_strip_DEPENDENCIES = src/libmpg123/libmpg123.la
 src_mpg123_strip_LDADD = src/libmpg123/libmpg123.la
 
 EXTRA_PROGRAMS += \
@@ -95,8 +85,6 @@ src_mpg123_SOURCES = \
 # Does that finally work to build/link the correct object file?
 src_mpg123_SOURCES += 
 
-EXTRA_src_mpg123_SOURCES = $(out123src)
-
 # Replace common.h by sysutil.h!
 src_out123_SOURCES = \
   src/audio.c \
@@ -119,8 +107,6 @@ src_out123_SOURCES = \
   src/wavhead.h \
   src/xfermem.c \
   src/xfermem.h
-
-EXTRA_src_out123_SOURCES = $(out123src)
 
 src_mpg123_id3dump_SOURCES = \
   src/mpg123-id3dump.c \
