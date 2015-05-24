@@ -1,7 +1,7 @@
 /*
 	buffer.h: output buffer
 
-	copyright 1999-2006 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 1999-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Daniel Kobras / Oliver Fromme
 */
@@ -17,6 +17,14 @@
 #define _MPG123_BUFFER_H_
 
 #ifndef NOXFERMEM
+
+#include "compat.h"
+#include "audio.h"
+/* TODO: Wrap xfermem usage into buffer API calls. */
+#include "xfermem.h"
+
+extern txfermem *buffermem;
+void buffer_loop(audio_output_t *ao,sigset_t *oldsigset);
 void real_buffer_ignore_lowmem(void);
 void real_buffer_end(int rude);
 void real_buffer_resync(void);

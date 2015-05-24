@@ -1,7 +1,7 @@
 /*
 	term: terminal control
 
-	copyright ?-2008 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright ?-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Michael Hipp
 */
@@ -187,7 +187,7 @@ debug1("control for frame: %li", (long)mpg123_tellframe(fr));
 			pause_recycle(fr);
 			if(param.usebuffer)
 			{
-				while(paused && xfermem_get_usedspace(buffermem))
+				while(paused && audio_buffered_bytes(ao))
 				{
 					buffer_ignore_lowmem();
 					term_handle_input(fr, ao, TRUE);
@@ -203,7 +203,7 @@ debug1("control for frame: %li", (long)mpg123_tellframe(fr));
 		term_handle_input(fr, ao, stopped|seeking);
 		if((offset < 0) && (-offset > framenum)) offset = - framenum;
 		if(param.verbose && offset != 0)
-		print_stat(fr,offset,0);
+		print_stat(fr,offset,ao);
 	} while (stopped);
 
 	/* Make the seeking experience with buffer less annoying.
@@ -412,7 +412,7 @@ static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 		fprintf(stderr, "\n");
 	break;
 	case MPG123_MPEG_KEY:
-		if(param.verbose) print_stat(fr,0,0); /* Make sure that we are talking about the correct frame. */
+		if(param.verbose) print_stat(fr,0,ao); /* Make sure that we are talking about the correct frame. */
 		fprintf(stderr, "\n");
 		print_header(fr);
 		fprintf(stderr, "\n");

@@ -1,7 +1,7 @@
 /*
 	mpg123: main code of the program (not of the decoder...)
 
-	copyright 1995-2009 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 1995-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Michael Hipp
 
@@ -17,7 +17,6 @@
 #include "compat.h"
 /* import DLL symbols on windows */
 
-#include "xfermem.h"
 #include "httpget.h"
 #if WIN32
 #include "win32_support.h"
@@ -126,14 +125,6 @@ enum mpg123app_flags
 extern char *equalfile;
 extern off_t framenum;
 extern struct httpdata htd;
-
-extern int buffer_fd[2];
-extern txfermem *buffermem;
-extern int buffer_pid;
-
-#ifndef NOXFERMEM
-extern void buffer_loop(audio_output_t *ao,sigset_t *oldsigset);
-#endif
 
 extern int OutputDescriptor;
 

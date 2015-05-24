@@ -120,7 +120,6 @@ mpg123_handle *mh = NULL;
 off_t framenum;
 off_t frames_left;
 audio_output_t *ao = NULL;
-txfermem *buffermem = NULL;
 char *prgName = NULL;
 /* ThOr: pointers are not TRUE or FALSE */
 char *equalfile = NULL;
@@ -129,11 +128,9 @@ int fresh = TRUE;
 int have_output = FALSE; /* If we are past the output init step. */
 FILE* aux_out = NULL; /* Output for interesting information, normally on stdout to be parseable. */
 
-int buffer_fd[2];
-int buffer_pid;
 size_t bufferblock = 0;
 
-static int intflag = FALSE;
+int intflag = FALSE;
 static int skip_tracks = 0;
 int OutputDescriptor;
 
@@ -208,6 +205,11 @@ void safe_exit(int code)
 	split_dir_file("", &dummy, &dammy);
 	if(fullprogname) free(fullprogname);
 	exit(code);
+}
+
+void check_fatal(int code)
+{
+	if(code) safe_exit(code);
 }
 
 /* returns 1 if reset_audio needed instead */
@@ -505,54 +507,6 @@ topt opts[] = {
 	{0, 0, 0, 0, 0, 0}
 };
 
-/*
- *   Change the playback sample rate.
- *   Consider that changing it after starting playback is not covered by gapless code!
- */
-static void reset_audio(long rate, int channels, int format)
-{
-#ifndef NOXFERMEM
-	if (param.usebuffer) {
-		/* wait until the buffer is empty,
-		 * then tell the buffer process to
-		 * change the sample rate.   [OF]
-		 */
-		while (xfermem_get_usedspace(buffermem)	> 0)
-			if (xfermem_block(XF_WRITER, buffermem) == XF_CMD_TERMINATE) {
-				intflag = TRUE;
-				break;
-			}
-		buffermem->freeindex = -1;
-		buffermem->readindex = 0; /* I know what I'm doing! ;-) */
-		buffermem->freeindex = 0;
-		if (intflag)
-			return;
-		buffermem->rate     = pitch_rate(rate); 
-		buffermem->channels = channels; 
-		buffermem->format   = format;
-		buffer_reset();
-	}
-	else 
-	{
-#endif
-		if(ao == NULL)
-		{
-			error("Audio handle should not be NULL here!");
-			safe_exit(98);
-		}
-		ao->rate     = pitch_rate(rate); 
-		ao->channels = channels; 
-		ao->format   = format;
-		if(reset_output(ao) < 0)
-		{
-			error1("failed to reset audio device: %s", strerror(errno));
-			safe_exit(1);
-		}
-#ifndef NOXFERMEM
-	}
-#endif
-}
-
 static int open_track_fd (void)
 {
 	/* Let reader handle invalid filept */
@@ -709,7 +663,7 @@ int play_frame(void)
 			if(param.verbose > 2) fprintf(stderr, "\nNote: New output format %liHz %ich, format %i\n", rate, channels, format);
 
 			new_header = 1;
-			reset_audio(rate, channels, format);
+			check_fatal(audio_reset(ao, rate, channels, format));
 		}
 	}
 	if(new_header && !param.quiet)
@@ -719,24 +673,6 @@ int play_frame(void)
 		else print_header_compact(mh);
 	}
 	return 1;
-}
-
-void buffer_drain(void)
-{
-#ifndef NOXFERMEM
-	int s;
-	while ((s = xfermem_get_usedspace(buffermem)))
-	{
-		struct timeval wait170 = {0, 170000};
-		if(intflag) break;
-		buffer_ignore_lowmem();
-		if(param.verbose) print_stat(mh,0,s);
-	#ifdef HAVE_TERMIOS
-		if(param.term_ctrl) term_control(mh, ao);
-	#endif
-		select(0, NULL, NULL, NULL, &wait170);
-	}
-#endif
 }
 
 /* Return TRUE if we should continue (second interrupt happens quickly), skipping tracks, or FALSE if we should die. */
@@ -1191,12 +1127,7 @@ int main(int sys_argc, char ** sys_argv)
 			}
 			if(!fresh && param.verbose)
 			{
-#ifndef NOXFERMEM
-				if (param.verbose > 1 || !(framenum & 0x7))
-					print_stat(mh,0,xfermem_get_usedspace(buffermem)); 
-#else
-				if(param.verbose > 1 || !(framenum & 0x7))	print_stat(mh,0,0);
-#endif
+				if(param.verbose > 1 || !(framenum & 0x7)) print_stat(mh,0,ao);
 			}
 #ifdef HAVE_TERMIOS
 			if(!param.term_ctrl) continue;
@@ -1205,7 +1136,7 @@ int main(int sys_argc, char ** sys_argv)
 		}
 
 	if(!param.smooth && param.usebuffer) buffer_drain();
-	if(param.verbose) print_stat(mh,0,xfermem_get_usedspace(buffermem)); 
+	if(param.verbose) print_stat(mh,0,ao); 
 
 	if(!param.quiet)
 	{

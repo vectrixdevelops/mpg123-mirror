@@ -134,18 +134,15 @@ struct parameter param = {
 };
 
 audio_output_t *ao = NULL;
-txfermem *buffermem = NULL;
 char *prgName = NULL;
 /* ThOr: pointers are not TRUE or FALSE */
 char *equalfile = NULL;
 int fresh = TRUE;
 int have_output = FALSE; /* If we are past the output init step. */
 
-int buffer_fd[2];
-int buffer_pid;
 size_t bufferblock = 4096;
 
-static int intflag = FALSE;
+int intflag = FALSE;
 int OutputDescriptor;
 
 char *fullprogname = NULL; /* Copy of argv[0]. */
@@ -170,6 +167,11 @@ void safe_exit(int code)
 	if(fullprogname) free(fullprogname);
 	if(audio) free(audio);
 	exit(code);
+}
+
+void check_fatal(int code)
+{
+	if(code) safe_exit(code);
 }
 
 /* returns 1 if reset_audio needed instead */
@@ -382,54 +384,6 @@ topt opts[] = {
 	{0, 0, 0, 0, 0, 0}
 };
 
-/*
- *   Change the playback sample rate.
- *   Consider that changing it after starting playback is not covered by gapless code!
- */
-static void reset_audio(long rate, int channels, int format)
-{
-#ifndef NOXFERMEM
-	if (param.usebuffer) {
-		/* wait until the buffer is empty,
-		 * then tell the buffer process to
-		 * change the sample rate.   [OF]
-		 */
-		while (xfermem_get_usedspace(buffermem)	> 0)
-			if (xfermem_block(XF_WRITER, buffermem) == XF_CMD_TERMINATE) {
-				intflag = TRUE;
-				break;
-			}
-		buffermem->freeindex = -1;
-		buffermem->readindex = 0; /* I know what I'm doing! ;-) */
-		buffermem->freeindex = 0;
-		if (intflag)
-			return;
-		buffermem->rate     = pitch_rate(rate); 
-		buffermem->channels = channels; 
-		buffermem->format   = format;
-		buffer_reset();
-	}
-	else 
-	{
-#endif
-		if(ao == NULL)
-		{
-			error("Audio handle should not be NULL here!");
-			safe_exit(98);
-		}
-		ao->rate     = pitch_rate(rate); 
-		ao->channels = channels; 
-		ao->format   = format;
-		if(reset_output(ao) < 0)
-		{
-			error1("failed to reset audio device: %s", strerror(errno));
-			safe_exit(1);
-		}
-#ifndef NOXFERMEM
-	}
-#endif
-}
-
 /* return 1 on success, 0 on failure */
 int play_frame(void)
 {
@@ -447,21 +401,6 @@ int play_frame(void)
 		return 1;
 	}
 	else return 0;
-}
-
-void buffer_drain(void)
-{
-#ifndef NOXFERMEM
-	int s;
-	while ((s = xfermem_get_usedspace(buffermem)))
-	{
-		struct timeval wait170 = {0, 170000};
-		if(intflag) break;
-		buffer_ignore_lowmem();
-/*		if(param.verbose) print_stat(mh,0,s); */
-		select(0, NULL, NULL, NULL, &wait170);
-	}
-#endif
 }
 
 /* Hack: A hidden function in audio.c just for me. */
@@ -583,16 +522,10 @@ int main(int sys_argc, char ** sys_argv)
 		remodel the interface for that, as we're not thinking about fixed MPEG
 		rates.
 	*/
-#ifndef NOXFERMEM
-	/* Buffer loop shall start normal operation now. */
-	if(param.usebuffer)
-	{
-		xfermem_putcmd(buffermem->fd[XF_WRITER], XF_CMD_WAKEUP);
-		xfermem_getcmd(buffermem->fd[XF_WRITER], TRUE);
-	}
-#endif
+	/* TODO: Remove the enforced config mode! Just add another cmd. */
+	audio_fixme_wake_buffer(ao);
 
-	reset_audio(param.force_rate, channels, encoding);
+	check_fatal(audio_reset(ao, param.force_rate, channels, encoding));
 
 	input = stdin;
 	while(play_frame())

@@ -1,7 +1,7 @@
 /*
 	audio: audio output interface
 
-	copyright ?-2008 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright ?-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Michael Hipp
 */
@@ -16,6 +16,12 @@
 #endif
 
 #include "debug.h"
+
+static int buffer_fd[2];
+int buffer_pid;
+
+/* TODO: clean that up */
+extern int intflag;
 
 static int file_write(struct audio_output_struct* ao, unsigned char *bytes, int count)
 {
@@ -736,3 +742,91 @@ int set_pitch(mpg123_handle *fr, audio_output_t *ao, double new_pitch)
 	return ret;
 }
 
+
+/*
+ *   Change the playback sample rate.
+ *   Consider that changing it after starting playback is not covered by gapless code!
+ */
+int audio_reset(audio_output_t *ao, long rate, int channels, int format)
+{
+#ifndef NOXFERMEM
+	if (param.usebuffer) {
+		/* wait until the buffer is empty,
+		 * then tell the buffer process to
+		 * change the sample rate.   [OF]
+		 */
+		while (xfermem_get_usedspace(buffermem)	> 0)
+			if (xfermem_block(XF_WRITER, buffermem) == XF_CMD_TERMINATE) {
+				intflag = TRUE;
+				break;
+			}
+		buffermem->freeindex = -1;
+		buffermem->readindex = 0; /* I know what I'm doing! ;-) */
+		buffermem->freeindex = 0;
+		if (intflag)
+			return 0;
+		buffermem->rate     = pitch_rate(rate); 
+		buffermem->channels = channels; 
+		buffermem->format   = format;
+		buffer_reset();
+	}
+	else 
+	{
+#endif
+		if(ao == NULL)
+		{
+			error("Audio handle should not be NULL here!");
+			return 98; /* historic argument to safe_exit() */
+		}
+		ao->rate     = pitch_rate(rate); 
+		ao->channels = channels; 
+		ao->format   = format;
+		if(reset_output(ao) < 0)
+		{
+			error1("failed to reset audio device: %s", strerror(errno));
+			return 1; /* historic argument to safe_exit() */
+		}
+#ifndef NOXFERMEM
+	}
+#endif
+	return 0;
+}
+
+void buffer_drain(void)
+{
+#ifndef NOXFERMEM
+	int s;
+	while ((s = xfermem_get_usedspace(buffermem)))
+	{
+		struct timeval wait170 = {0, 170000};
+		if(intflag) break;
+		buffer_ignore_lowmem();
+/*		if(param.verbose) print_stat(mh,0,s); */
+		select(0, NULL, NULL, NULL, &wait170);
+	}
+#endif
+}
+
+/* The ao parameter is for the future when buffermem will be part of it. */
+long audio_buffered_bytes(audio_output_t *ao)
+{
+#ifndef NOXFERMEM
+	return xfermem_get_usedspace(buffermem);
+#else
+	return 0;
+#endif
+}
+
+/* TODO: Fix buffer loop to start right away and just wait for correct
+   commands. */
+void audio_fixme_wake_buffer(audio_output_t *ao)
+{
+#ifndef NOXFERMEM
+	/* Buffer loop shall start normal operation now. */
+	if(param.usebuffer)
+	{
+		xfermem_putcmd(buffermem->fd[XF_WRITER], XF_CMD_WAKEUP);
+		xfermem_getcmd(buffermem->fd[XF_WRITER], TRUE);
+	}
+#endif
+}

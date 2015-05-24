@@ -20,6 +20,8 @@
 #ifndef _XFERMEM_H_
 #define _XFERMEM_H_
 
+#include "compat.h"
+
 #ifndef TRUE
 #define FALSE 0
 #define TRUE  1

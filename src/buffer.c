@@ -1,7 +1,7 @@
 /*
 	buffer.c: output buffer
 
-	copyright 1997-2009 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 1997-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Oliver Fromme
 
@@ -10,14 +10,14 @@
 	- dammed night coders;-)
 */
 
-#include "mpg123app.h"
-
 #ifndef NOXFERMEM
 
+#include "buffer.h"
 #include "common.h"
 #include <errno.h>
 #include "debug.h"
 
+txfermem *buffermem = NULL;
 int outburst = 32768;
 
 static int intflag = FALSE;

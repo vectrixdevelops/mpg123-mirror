@@ -9,10 +9,12 @@
 	See xfermem.h for documentation/description.
 */
 
+/* TODO: Remove the NOXFERMEM part, properly wrap things so that
+   the buffer code is not called if not built in. */
 
 #ifndef NOXFERMEM
 
-#include "mpg123app.h"
+#include "xfermem.h"
 #include <string.h>
 #include <errno.h>
 #include <sys/uio.h>

@@ -1,7 +1,7 @@
 /*
 	audio: audio output interface
 
-	copyright ?-2006 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright ?-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Michael Hipp
 */
@@ -101,6 +101,11 @@ void audio_enclist(char** list); /* Make a string of encoding names. */
 	Returns 1 if pitch setting succeeded, 0 otherwise.
 */
 int set_pitch(mpg123_handle *fr, audio_output_t *ao, double new_pitch);
+
+int audio_reset(audio_output_t *ao, long rate, int channels, int format);
+void buffer_drain(void);
+long audio_buffered_bytes(audio_output_t *ao);
+void audio_fixme_wake_buffer(audio_output_t *ao);
 
 #endif
 
