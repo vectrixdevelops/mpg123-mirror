@@ -35,7 +35,7 @@ static void catch_usr1 (void)
 
 /* Interfaces to writer process */
 
-extern void buffer_sig(int signal, int block);
+static void buffer_sig(int signal, int block);
 
 void real_buffer_ignore_lowmem(void)
 {
@@ -91,7 +91,7 @@ void real_buffer_stop()
 
 extern int buffer_pid;
 
-void buffer_sig(int signal, int block)
+static void buffer_sig(int signal, int block)
 {
 	if (!buffermem) return;
 
