@@ -1,0 +1,132 @@
+    ________________________________________________________________________
+   /                                                                        \
+  |   Let's analyze how the buffer stuff works to put it into proper form    |
+  |   for libout123!                                                         |
+   \________________________________________________________________________/
+
+1. How does the buffer communication work?
+==========================================
+
+There are these API calls:
+
+- buffer_start()
+	if(buffermem->justwait)
+	xfermem_putcmd(buffermem->fd[XF_WRITER], XF_CMD_WAKEUP);
+
+- buffer_stop()
+	buffermem->justwait = TRUE;
+	buffer_sig(SIGINT, TRUE);
+
+- buffer_reset()
+	buffer_sig(SIGUSR1, TRUE);
+
+- buffer_resync()
+	if(buffermem->justwait)
+	{
+		buffermem->wakeme[XF_WRITER] = TRUE;
+		xfermem_putcmd(buffermem->fd[XF_WRITER], XF_CMD_RESYNC);
+		xfermem_getcmd(buffermem->fd[XF_WRITER], TRUE);
+	}
+	else buffer_sig(SIGINT, TRUE);
+
+- plain_buffer_resync()
+	buffer_sig(SIGINT, FALSE);
+
+- buffer_end()
+	xfermem_putcmd(buffermem->fd[XF_WRITER], rude ? XF_CMD_ABORT : XF_CMD_TERMINATE);
+
+Also, there is direct use of the xfermem API:
+
+- xfermem_write(buffermem, bytes, count)
+  to push data to buffer
+
+- xfermem_get_usedspace(buffermem)
+  to get bytes still in buffer (not written to audio output)
+
+- xfermem_block(XF_WRITER, buffermem)
+  for synchronization / messaging to writer (buffer client)
+
+- xfermem_putcmd(buffermem->fd[XF_WRITER], cmd)
+  to give comands to buffer
+
+- xfermem_getcmd(buffermem->fd[XF_WRITER], TRUE (FALSE?))
+  to get commands/response from buffer?
+
+I probably should clear that up first.
+
+1.1 xfermem
+-----------
+
+Quoting Oliver:
+
+	This is a stand-alone module which implements a unidirectional,
+	fast pipe using mmap().  Its primary use is to transfer large
+	amounts of data from a parent process to its child process,
+	with a buffer in between which decouples blocking conditions
+	on both sides.  Control information is transferred between the
+	processes through a socketpair.
+
+The actual shared memory is implemented using anonymous mmap(),
+mmap() of /dev/zero, or via traditional System V memory. This reminds
+me that there are some code paths that are not excercised often.
+I should introduce (runtime?) switch to be able to test each variant.
+On the other hand, the sysVshm API is not that rapidly changing.
+
+Anyhow, the point is that we have xfermem structure and buffer memory
+shared between main and buffer process, by whatever means. Commands
+are exchanged via the socket pair xfermem->fd[XF_WRITER] and
+xfermem->fd[XF_READER].
+
+- xfermem_init(xf, bufsize, msize, skipbuf)
+  to intialize the pipe, msize and skipbuf equal to zero for mpg123 use
+
+- xfermem_done(xf)
+  to free the shared memory, not bothering with cleaning up the sockets
+  Should I change that? The reader process exists before clearing the
+  data structure, but the writer process keeps the socket open ...
+  I think I should introduce xfermem_exit_writer() and xfermem_exit_reader(),
+
+- xfermem_init_writer() / xfermem_init_reader()
+  to close the respective other end of the socket pair
+
+- xfermem_get_freespace()
+  to return space available for writing
+
+- xfermem_get_usedspace()
+  to return space filled with data, waiting to be consumed
+
+- xfermem_getcmd(fd, block)
+  to ... well wait for a one-byte command code on the given file descriptor,
+  blocking or non-blocking.
+
+- xfermem_putcmd(fd, cmd)
+  to send a command to the other end with the fd on this side
+
+- xfermem_block(rw, xf)
+  to synchronize ... needs some thought
+  The value of rw is XF_READER or XF_WRITER, xf->wakeme[rw] is set, if the
+  other end has set xf->wakeme[1-rw], it gets a wakeup call
+  (xfermem_putcmd(xf->fd[rw], XF_CMD_WAKEUP)) and this end waits for a sign
+  (xfermem_getcmd(xf->fd[rw], TRUE)), clearing cf->wakeme[rw] after that.
+  Classic synchronization.
+
+- xfermem_sigblock(rw, xf, pid, sig)
+  to signal the other process by given pid and wait for a wakeup call as
+  response
+  I added that to fix bug 2796802 in the year 2009. Hm. Well, it is
+  necessary to interrupt the buffer process if it is not currently
+  waiting for a command.
+
+- xfermem_write(xf, buffer, bytes)
+  to wait until enough space is free, then copy over the bytes
+  A bonus is to wakeup the reader process if it has xf->wakeme set.
+
+That's it. It's a shared ringbuffer with some synchronization and
+messaging.
+
+1.2 buffer API explained
+------------------------
+
+Now it's time to decipher what the buffer API calls do.
+
+- buffer_start()
