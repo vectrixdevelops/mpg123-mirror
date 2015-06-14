@@ -1,7 +1,7 @@
     ________________________________________________________________________
    /                                                                        \
   |   Let's analyze how the buffer stuff works to put it into proper form    |
-  |   for libout123!                                                         |
+  |   for libout123! (ThOr, 2015-06-13)                                      |
    \________________________________________________________________________/
 
 1. How does the buffer communication work?
@@ -32,6 +32,10 @@ There are these API calls:
 - plain_buffer_resync()
 	buffer_sig(SIGINT, FALSE);
 
+- buffer_ignore_lowmem()
+	if(buffermem->wakeme[XF_READER])
+		xfermem_putcmd(buffermem->fd[XF_WRITER], XF_CMD_WAKEUP);
+
 - buffer_end()
 	xfermem_putcmd(buffermem->fd[XF_WRITER], rude ? XF_CMD_ABORT : XF_CMD_TERMINATE);
 
@@ -53,6 +57,7 @@ Also, there is direct use of the xfermem API:
   to get commands/response from buffer?
 
 I probably should clear that up first.
+
 
 1.1 xfermem
 -----------
@@ -124,6 +129,7 @@ xfermem->fd[XF_READER].
 That's it. It's a shared ringbuffer with some synchronization and
 messaging.
 
+
 1.2 buffer API explained
 ------------------------
 
@@ -160,6 +166,19 @@ using xf as before.
   to signal a resync (SIGINT) to the buffer without waiting for the result
   This disregards the case 
 
+- buffer_ignore_lowmem()
+  to wake the buffer process
+  Yes, this just sends XF_CMD_WAKEUP to the buffer, if it is waiting for it.
+  Why the funny name for the function?
+  Well, it is designed for the situation where the buffer is waiting for
+  more data to start playback again. Normal writing of data gives
+  XF_CMD_WAKEUP_INFO, which only triggers playback if there is enough data
+  buffered. XF_CMD_WAKEUP triggers playback right away (if there is any data).
+  There is a catch: This routine only does a wakeup call if the buffer already
+  blocks waiting for a command, but there is a possible race condition where
+  the buffer is about to enter xfermem_block() but didn't yet. Then, there is
+  no effect of buffer_ignore_lowmem()!
+
 - buffer_end()
   to either send XF_CMD_ABORT (end processing right away) or XF_CMD_TERMINATE
   In either case, the buffer only gets this as normal command, not per signal,
@@ -173,6 +192,7 @@ using xf as before.
   being interrupted. It is already checking for SIGINT / SIGUSR1, but
   I uttered something about SIGSTOP / SIGCONT. I need to revisit that
   behaviour. Does SIGSTOP really cause audio output writes to return early?
+
 
 1.3 Analysis
 ------------
@@ -256,3 +276,62 @@ given does not have to mean that an error occured. It could be
 SIGSTOP+SIGCONT. And since the EINTR is handled inside the audio outputs,
 the details are hidden and the buffer just has to assume that if the
 number of written bytes is >= 0, that everything is OK so far.
+
+
+1.4 Specific use of buffer API in terminal mode
+-----------------------------------------------
+
+The client part that does care about buffer operation is the interactive
+terminal control mode. I need to understand where it needs what buffer
+calls and how they should be abstracted in a generic audio output API.
+
+First, there's buffer_ignore_lowmem() while paused to force playback in the
+loop. The usage of the buffer with the pause/looping mode is not encouraged
+anyway.
+
+
+1.5 Synchronization issues
+--------------------------
+
+It occurs to me that, although the buffer logic at the core is rather old
+and tried, there are race conditions. A common idiom is this:
+
+	if (xf->wakeme[XF_X]) xfermem_putcmd(xf->fd[XF_Y], XF_CMD_WAKEUP);
+
+Now, this works if we are sure that xf->wakeme[XF_X] has been set by the other
+end before the code above was triggered. Even without digging into shared
+memory semantics and questions of atomicity (I hereby declare int-sized writes
+as atomic, which generally works nowadays. Also, I could make the data type
+smaller, as it's just about zero or one. How can the effective setting of
+a single bit not be atomic?), this can only be considered safe if the
+code is triggered in response to an action from the other side, after the
+other side has set xf->wakeme[XF_X].
+
+This works when the buffer is currently blocking, waiting for a command inside
+xfermem_block(), and the writer does a xfermem_block or xfermem_sigblock on
+its own.
+
+Let's focus on buffer_ignore_lowmem(). This works to unleash the buffer if
+it is currently stuck in xfermem_block() because of not having enough data.
+What if it just entered the branch for that but did not call xfermem_block()
+yet? then, xf->wakeme[XF_READER] won't be set yet and buffer_ignore_lowmem()
+will not trigger anything. The buffer will block although we wanted it to
+continue!
+
+This is a very small time window, but it is possible. This is a definition of
+unreliable code.
+
+In this specific case, we don't actually want to tell the buffer all the time
+that it should ignore small buffer fill. We want it to ignore the low buffer
+fill from now on until told otherwise. We want to set some permanent flag.
+
+Also, in this specific case, things work out since buffer_ignore_lowmem() is
+called in a loop anyway. It will catch the buffer blocking some later time.
+Is this now as intended? Is it buggy?
+
+The crux with buffer_ignore_lowmem() is that it assumes state on the side of
+the buffer and gives a command the meaning of which depends on this state.
+But, well it's really non-fatal in this case. I have to wonder how I can
+make it robust for general use. I guess the sending of the commands needs
+to be unconditional and the buffer needs to look for commands on each loop
+cycle, without blocking.
