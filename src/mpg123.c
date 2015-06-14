@@ -1000,6 +1000,10 @@ int main(int sys_argc, char ** sys_argv)
 		{
 			/* One should enable terminal control during that sleeping phase! */
 			if(param.verbose > 2) fprintf(stderr, "Note: pausing %i seconds before next track.\n", param.delay);
+			/* TODO: This is wrong here, I need closing/reopening the device, or a wrapper
+			   like audio_stop() and audio_start() that make sure current stuff is played
+			   and then operation halted. The calls audio_pause() and audio_unpause() should
+			   be for most immediate interruption and continuation. */
 			output_pause(ao);
 #ifdef WIN32
 			Sleep(param.delay*1000);

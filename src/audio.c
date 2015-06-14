@@ -589,6 +589,20 @@ void exit_output(audio_output_t *ao, int rude)
 	close_output_module(ao);
 }
 
+/*
+	TODO: This should not flush data away, I need ad->drain(), together
+	with proper ao->pause() or actually closing/reopening things again.
+	Yes, close/reopen is it. I need to change usage in mpg123.c and introduce
+	the proper calls here.
+	Heck! No! We don't want to close the audio output. In case of something like
+	JACK, the user might have connected the outputs manually after opening.
+	We cannot just reopen things. We need to play silence in this case!
+	At least the case of
+	output_pause()
+	sleep(10)
+	output_unpause()
+	should be covered by playing silence instead.
+*/
 void output_pause(audio_output_t *ao)
 {
 	if(param.usebuffer) buffer_stop();
@@ -817,6 +831,12 @@ long audio_buffered_bytes(audio_output_t *ao)
 #else
 	return 0;
 #endif
+}
+
+/* Continue playback, especially while buffer would rather wait for more data. */
+void audio_continue(audio_output_t *ao)
+{
+	buffer_ignore_lowmem();
 }
 
 /* TODO: Fix buffer loop to start right away and just wait for correct

@@ -189,7 +189,7 @@ debug1("control for frame: %li", (long)mpg123_tellframe(fr));
 			{
 				while(paused && audio_buffered_bytes(ao))
 				{
-					buffer_ignore_lowmem();
+					audio_continue(ao);
 					term_handle_input(fr, ao, TRUE);
 				}
 				/* Undo the cycling offset if we are done with cycling. */

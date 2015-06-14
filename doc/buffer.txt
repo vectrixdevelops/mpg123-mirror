@@ -335,3 +335,18 @@ But, well it's really non-fatal in this case. I have to wonder how I can
 make it robust for general use. I guess the sending of the commands needs
 to be unconditional and the buffer needs to look for commands on each loop
 cycle, without blocking.
+
+Uh, apart from the messed up semantics of output_pause(), I now come back
+to the races with seekmode() of term.c . It uses buffer_stop, but it also
+should do buffer_resync right away. The call to that follows later, after
+we have put the buffer into justwait mode. And it actually works that way.
+But it is still not the right way to do this!
+
+The interactive seeking really is an interesting place for audio buffering.
+As long as I do not want to seek around inside the actual buffer, the
+buffered data needs to be thrown away. This should happen in seekmode()
+directly. Also, the playback needs to be paused with the buffer as long as it does
+not really tie in with the seeking. They're mutually exclusive.
+
+If not using the buffer, playback can stay active to give audible feedback
+during seeking. How do I abstract that?
