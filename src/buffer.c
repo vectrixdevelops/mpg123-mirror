@@ -17,9 +17,12 @@
 #include <errno.h>
 #include "debug.h"
 
+/* TODO: Dynamically allocate that to allow multiple instances. */
 txfermem *buffermem = NULL;
 int outburst = 32768;
 
+/* Those are static and global for the forked buffer process.
+   Another forked buffer process will have its on flags. */
 static int intflag = FALSE;
 static int usr1flag = FALSE;
 
