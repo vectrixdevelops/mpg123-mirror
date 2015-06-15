@@ -345,8 +345,15 @@ But it is still not the right way to do this!
 The interactive seeking really is an interesting place for audio buffering.
 As long as I do not want to seek around inside the actual buffer, the
 buffered data needs to be thrown away. This should happen in seekmode()
-directly. Also, the playback needs to be paused with the buffer as long as it does
-not really tie in with the seeking. They're mutually exclusive.
+directly. Also, the playback needs to be paused with the buffer as long
+as it does not really tie in with the seeking. They're mutually exclusive.
 
 If not using the buffer, playback can stay active to give audible feedback
-during seeking. How do I abstract that?
+during seeking. How do I abstract that? I guess there need to be
+audio_buffer_disable/enable() calls. A bonus could even be to really just
+disable the buffer and do playback directly while seeking, but I don't want
+to close/reopen the audio device unnecessarily (think JACK again).
+
+There could be a pass-through mode for the buffer, giving lower latency.
+But what am I doing here? I want to extract the audio code into a library.
+I can do the funky improvements later.
