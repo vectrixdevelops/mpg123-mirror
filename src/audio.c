@@ -833,10 +833,36 @@ long audio_buffered_bytes(audio_output_t *ao)
 #endif
 }
 
+/* TODO: start/stop directly accessed outputs, too. */
+void audio_start(audio_output_t *ao)
+{
+	if(param.usebuffer) buffer_start();
+}
+
+void audio_stop(audio_output_t *ao)
+{
+	if(param.usebuffer) buffer_stop();
+}
+
+void audio_drop(audio_output_t *ao)
+{
+	if(param.usebuffer) buffer_resync();
+	else ao->flush(ao);
+}
+
+
 /* Continue playback, especially while buffer would rather wait for more data. */
 void audio_continue(audio_output_t *ao)
 {
-	buffer_ignore_lowmem();
+	if(param.usebuffer) buffer_ignore_lowmem();
+}
+
+/* Drop current buffer contents.
+   A more complete audio_drop() would resync buffer
+   and also flush/drop underlying audio device output */
+void audio_buffer_drop(audio_output_t *ao)
+{
+	buffer_resync();
 }
 
 /* TODO: Fix buffer loop to start right away and just wait for correct
