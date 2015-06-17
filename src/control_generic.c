@@ -18,14 +18,12 @@
 #include <string.h>
 
 #include "common.h"
-#include "buffer.h"
 #include "genre.h"
 #include "playlist.h"
 #define MODE_STOPPED 0
 #define MODE_PLAYING 1
 #define MODE_PAUSED 2
 
-extern int buffer_pid;
 extern audio_output_t *ao;
 
 #ifdef FIFO
@@ -215,8 +213,8 @@ static void generic_load(mpg123_handle *fr, char *arg, int state)
 {
 	if(param.usebuffer)
 	{
-		buffer_resync();
-		if(mode == MODE_PAUSED && state != MODE_PAUSED) buffer_start();
+		audio_drop(ao);
+		if(mode == MODE_PAUSED && state != MODE_PAUSED) audio_start(ao);
 	}
 	if(mode != MODE_STOPPED)
 	{
@@ -359,7 +357,7 @@ int control_generic (mpg123_handle *fr)
 					{
 						mode = MODE_PAUSED;
 						/* Hm, buffer should be stopped already, shouldn't it? */
-						if(param.usebuffer) buffer_stop();
+						if(param.usebuffer) audio_stop(ao);
 						generic_sendmsg("P 1");
 					}
 					else
@@ -469,11 +467,11 @@ int control_generic (mpg123_handle *fr)
 					{	
 						if (mode == MODE_PLAYING) {
 							mode = MODE_PAUSED;
-							if(param.usebuffer) buffer_stop();
+							if(param.usebuffer) audio_stop(ao);
 							generic_sendmsg("P 1");
 						} else {
 							mode = MODE_PLAYING;
-							if(param.usebuffer) buffer_start();
+							if(param.usebuffer) audio_start(ao);
 							generic_sendmsg("P 2");
 						}
 					} else generic_sendmsg("P 0");
@@ -485,8 +483,8 @@ int control_generic (mpg123_handle *fr)
 					if (mode != MODE_STOPPED) {
 						if(param.usebuffer)
 						{
-							buffer_stop();
-							buffer_resync();
+							audio_stop(ao);
+							audio_drop(ao);
 						}
 						close_track();
 						mode = MODE_STOPPED;
@@ -694,7 +692,7 @@ int control_generic (mpg123_handle *fr)
 							generic_sendmsg("E Error while seeking: %s", mpg123_strerror(fr));
 							mpg123_seek(fr, 0, SEEK_SET);
 						}
-						if(param.usebuffer) buffer_resync();
+						if(param.usebuffer) audio_drop(ao);
 
 						newpos = mpg123_tell(fr);
 						if(newpos <= oldpos) mpg123_meta_free(fr);
@@ -728,7 +726,7 @@ int control_generic (mpg123_handle *fr)
 							generic_sendmsg("E Error while seeking");
 							mpg123_seek_frame(fr, 0, SEEK_SET);
 						}
-						if(param.usebuffer)	buffer_resync();
+						if(param.usebuffer) audio_drop(ao);
 
 						if(framenum <= oldpos) mpg123_meta_free(fr);
 						generic_sendmsg("J %d", framenum);
