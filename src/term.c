@@ -13,14 +13,12 @@
 #include <termios.h>
 #include <ctype.h>
 
-#include "buffer.h"
 #include "term.h"
 #include "common.h"
 #include "playlist.h"
 #include "metaprint.h"
 #include "debug.h"
 
-extern int buffer_pid;
 extern audio_output_t *ao;
 
 static int term_enable = 0;
