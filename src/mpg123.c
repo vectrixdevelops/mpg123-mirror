@@ -1174,7 +1174,7 @@ int main(int sys_argc, char ** sys_argv)
 	if(param.smooth && param.usebuffer)
 	{
 		audio_drain(ao);
-		audio_drop(ao); /* Braindead here; where was there a buffer_resync()? */
+		audio_drop(ao); /* Braindead here; why was there a buffer_resync()? */
 	}
 
 	if(APPFLAG(MPG123APP_CONTINUE))
