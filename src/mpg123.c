@@ -33,7 +33,6 @@
 
 #include "common.h"
 #include "getlopt.h"
-#include "buffer.h"
 #include "term.h"
 #include "playlist.h"
 #include "httpget.h"
@@ -1139,7 +1138,7 @@ int main(int sys_argc, char ** sys_argv)
 #endif
 		}
 
-	if(!param.smooth && param.usebuffer) buffer_drain();
+	if(!param.smooth && param.usebuffer) audio_drain(ao);
 	if(param.verbose) print_stat(mh,0,ao); 
 
 	if(!param.quiet)
@@ -1164,7 +1163,7 @@ int main(int sys_argc, char ** sys_argv)
         intflag = FALSE;
 
 #ifndef NOXFERMEM
-        if(!param.smooth && param.usebuffer) buffer_resync();
+        if(!param.smooth && param.usebuffer) audio_drop(ao);
 #endif
 	}
 
@@ -1174,8 +1173,8 @@ int main(int sys_argc, char ** sys_argv)
 	/* Ensure we played everything. */
 	if(param.smooth && param.usebuffer)
 	{
-		buffer_drain();
-		buffer_resync();
+		audio_drain(ao);
+		audio_drop(ao); /* Braindead here; where was there a buffer_resync()? */
 	}
 
 	if(APPFLAG(MPG123APP_CONTINUE))

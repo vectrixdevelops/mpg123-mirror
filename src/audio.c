@@ -808,6 +808,13 @@ int audio_reset(audio_output_t *ao, long rate, int channels, int format)
 	return 0;
 }
 
+/* TODO: include actual device draining, too (also in buffer). */
+void audio_drain(audio_output_t *ao)
+{
+	if(param.usebuffer) buffer_drain();
+	/* else ao->drain(ao); */
+}
+
 void buffer_drain(void)
 {
 #ifndef NOXFERMEM
