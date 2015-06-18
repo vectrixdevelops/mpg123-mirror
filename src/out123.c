@@ -49,7 +49,6 @@
 
 #include "common.h"
 #include "getlopt.h"
-#include "buffer.h"
 
 #include "debug.h"
 
@@ -535,8 +534,8 @@ int main(int sys_argc, char ** sys_argv)
 	/* Ensure we played everything. */
 	if(param.usebuffer)
 	{
-		buffer_drain();
-		buffer_resync();
+		audio_drain(ao);
+		audio_drop(ao); /* Braindead. Remove that in future. */
 	}
 
 	safe_exit(0); /* That closes output and restores terminal, too. */
