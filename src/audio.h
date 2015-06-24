@@ -105,7 +105,6 @@ int set_pitch(mpg123_handle *fr, audio_output_t *ao, double new_pitch);
 
 int audio_reset(audio_output_t *ao, long rate, int channels, int format);
 void audio_drain(audio_output_t *ao);
-void buffer_drain(void);
 long audio_buffered_bytes(audio_output_t *ao);
 void audio_start(audio_output_t *ao);
 void audio_stop(audio_output_t *ao);
