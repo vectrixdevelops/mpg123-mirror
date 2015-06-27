@@ -38,9 +38,6 @@ enum {
 
 typedef struct audio_output_struct
 {
-	int version; /* Idea: Protect against use of incompatible modules by having
-	                them check that the version field contains a expected value.
-	                Then, I have freedom to modify the struct at will. */
 	int fn;			/* filenumber */
 	void *userptr;	/* driver specific pointer */
 	
