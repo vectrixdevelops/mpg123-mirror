@@ -25,7 +25,11 @@ src_out123_LDFLAGS = @EXEC_LT_LDFLAGS@ $(output_ldflags)
 
 # The sfifo situation needs to be cleared up.
 # It's used from places.
-EXTRA_DIST += sfifo.c sfifo.h mpg123-with-modules out123-with-modules
+EXTRA_DIST += \
+  src/sfifo.c \
+  src/sfifo.h \
+  src/mpg123-with-modules \
+  src/out123-with-modules
 
 CLEANFILES += src/*.a
 
@@ -59,7 +63,6 @@ src_mpg123_SOURCES = \
   src/resolver.h \
   src/genre.h \
   src/genre.c \
-  src/module.h \
   src/mpg123.c \
   src/mpg123app.h \
   src/metaprint.c \
@@ -95,7 +98,6 @@ src_out123_SOURCES = \
   src/compat/compat_impl.h \
   src/getlopt.c \
   src/getlopt.h \
-  src/module.h \
   src/out123.c \
   src/mpg123app.h \
   src/wav.c \

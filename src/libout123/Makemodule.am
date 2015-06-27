@@ -12,14 +12,16 @@ src_libout123_libout123_la_LIBADD = \
   src/libout123/libmodule.la \
   src/libout123/modules/libdefaultmodule.la
 
+src_libout123_libmodule_la_SOURCES = src/libout123/module.h
+ 
 if HAVE_MODULES
 
-src_libout123_libmodule_la_SOURCES = src/libout123/module.c
+src_libout123_libmodule_la_SOURCES += src/libout123/module.c
 src_libout123_libmodule_la_LIBADD = -lltdl
 
 else
 
-src_libout123_libmodule_la_SOURCES = src/libout123/legacy_module.c
+src_libout123_libmodule_la_SOURCES += src/libout123/legacy_module.c
 
 endif
 
