@@ -8,7 +8,7 @@
 
 /* First the common header, including config.h
    ...this is important for stuff like _FILE_OFFSET_BITS */
-#include "mpg123app.h"
+#include "outmod_def.h"
 
 #include <esd.h>
 #include <errno.h>

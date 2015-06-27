@@ -8,7 +8,7 @@
 	rewrite of basic functionality for callback-less and properly ringbuffered operation by ravenexp
 */
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 #include <windows.h>
 #include "debug.h"
 

@@ -9,7 +9,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 
 #ifdef HAVE_LINUX_SOUNDCARD_H
 #include <linux/soundcard.h>

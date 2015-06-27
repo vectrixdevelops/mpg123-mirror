@@ -6,7 +6,7 @@
 	initially written by Martin Denn
 */
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 #include <fcntl.h>
 #include <audio/audiolib.h>
 #include <audio/soundlib.h>

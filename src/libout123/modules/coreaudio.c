@@ -9,7 +9,7 @@
 */
 
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 
 #include <CoreServices/CoreServices.h>
 #include <AudioUnit/AudioUnit.h>

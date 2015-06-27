@@ -6,7 +6,7 @@
 	initially written by Michael Hipp
 */
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 #include <fcntl.h>
 #include <sys/audio.h>
 #include "debug.h"

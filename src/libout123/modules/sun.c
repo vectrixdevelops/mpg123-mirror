@@ -6,7 +6,7 @@
 	initially written by Michael Hipp
 */
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>

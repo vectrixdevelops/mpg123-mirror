@@ -11,7 +11,7 @@
 /* #include <audio.h> */
 #include <dmedia/audio.h>
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 #include "debug.h"
 
 

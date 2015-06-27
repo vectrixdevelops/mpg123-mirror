@@ -8,7 +8,7 @@
 
 /* derived from LINUX, VOXWARE and SUN for MiNT Audio Device by Petr Stehlik */
 #include <fcntl.h>
-#include "mpg123app.h"
+#include "outmod_def.h"
 #include <ioctl.h>
 #include <audios.h>
 #include "debug.h"

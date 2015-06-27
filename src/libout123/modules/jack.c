@@ -12,7 +12,7 @@
 #include <jack/ringbuffer.h>
 #include <sys/errno.h>
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 #include "debug.h"
 
 #define MAX_CHANNELS	(2)

@@ -13,7 +13,7 @@
  * This file comes under GPL license, version 2. 
  */
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 
 #include <ctype.h>
 #include <sys/asoundlib.h>

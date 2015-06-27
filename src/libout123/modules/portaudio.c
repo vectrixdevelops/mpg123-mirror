@@ -11,7 +11,7 @@
 #include <portaudio.h>
 
 #include "audio.h"
-#include "mpg123app.h"
+#include "outmod_def.h"
 
 #ifdef WIN32
 #include <windows.h>

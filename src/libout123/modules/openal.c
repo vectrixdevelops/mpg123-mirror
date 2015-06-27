@@ -7,7 +7,7 @@
 */
 
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 
 #ifdef OPENAL_SUBDIR_OPENAL
 	#include <OpenAL/al.h>

@@ -5,7 +5,7 @@
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 */
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 #include "debug.h"
 
 static int open_dummy(audio_output_t *ao)

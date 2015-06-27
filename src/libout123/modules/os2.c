@@ -17,7 +17,7 @@
 
 /* I guess this #ifndef could be removed now... */
 #ifndef MPG123_INCLUDED
-#include "mpg123app.h"
+#include "outmod_def.h"
 #endif
 #include "debug.h"
 

@@ -10,7 +10,7 @@
 #include <math.h>
 #include <ao/ao.h>
 
-#include "mpg123app.h"
+#include "outmod_def.h"
 #include "debug.h"
 
 

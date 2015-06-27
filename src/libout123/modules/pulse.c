@@ -14,7 +14,7 @@
 #include <pulse/error.h>
 
 #include "config.h"
-#include "mpg123app.h"
+#include "outmod_def.h"
 #include "audio.h"
 #include "module.h"
 #include "debug.h"
