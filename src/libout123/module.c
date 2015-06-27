@@ -167,11 +167,8 @@ open_module( const char* type, const char* name )
 	}
 	
 	/* Check the API version */
-	if (MPG123_MODULE_API_VERSION > module->api_version) {
-		error( "API version of module is too old" );
-		goto om_latebad;
-	} else if (MPG123_MODULE_API_VERSION > module->api_version) {
-		error( "API version of module is too new" );
+	if (MPG123_MODULE_API_VERSION != module->api_version) {
+		error( "module API version mismatch" );
 		goto om_latebad;
 	}
 
