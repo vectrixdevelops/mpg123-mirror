@@ -345,6 +345,8 @@ static void capline(mpg123_handle *mh, long rate)
 	fprintf(stderr, "\n");
 }
 
+
+
 void print_capabilities(audio_output_t *ao, mpg123_handle *mh)
 {
 	int r,e;
@@ -373,6 +375,33 @@ void print_capabilities(audio_output_t *ao, mpg123_handle *mh)
 	if(param.force_rate) capline(mh, param.force_rate);
 
 	fprintf(stderr,"\n");
+}
+
+/* TODO: Introduce mode to ask buffer about formats any time.
+   Generally, this function assumes you call it only before playback started!
+   It currently modifies state of output module (rate, channels).
+   TODO: Fix that!
+*/
+int audio_format_support(audio_output_t *ao, long rate, int channels)
+{
+#ifndef NOXFERMEM
+	if(param.usebuffer)
+	{ /* Ask the buffer process. It is waiting for this. */
+		buffermem->rate     = rate; 
+		buffermem->channels = channels;
+		buffermem->format   = 0; /* Just have it initialized safely. */
+		debug2("asking for formats for %liHz/%ich", rate, channels);
+		xfermem_putcmd(buffermem->fd[XF_WRITER], XF_CMD_AUDIOCAP);
+		xfermem_getcmd(buffermem->fd[XF_WRITER], TRUE);
+		return buffermem->format;
+	}
+	else
+#endif
+	{ /* Check myself. */
+		ao->rate     = rate;
+		ao->channels = channels;
+		return ao->get_formats(ao);
+	}
 }
 
 /* This uses the currently opened audio device, queries its caps.
@@ -416,24 +445,9 @@ void audio_capabilities(audio_output_t *ao, mpg123_handle *mh)
 		decode_rate = ri < num_rates ? rates[ri] : param.force_rate;
 		rate = pitch_rate(decode_rate);
 		if(param.verbose > 2) fprintf(stderr, "Note: checking support for %liHz/%ich.\n", rate, channels);
-#ifndef NOXFERMEM
-		if(param.usebuffer)
-		{ /* Ask the buffer process. It is waiting for this. */
-			buffermem->rate     = rate; 
-			buffermem->channels = channels;
-			buffermem->format   = 0; /* Just have it initialized safely. */
-			debug2("asking for formats for %liHz/%ich", rate, channels);
-			xfermem_putcmd(buffermem->fd[XF_WRITER], XF_CMD_AUDIOCAP);
-			xfermem_getcmd(buffermem->fd[XF_WRITER], TRUE);
-			fmts = buffermem->format;
-		}
-		else
-#endif
-		{ /* Check myself. */
-			ao->rate     = rate;
-			ao->channels = channels;
-			fmts = ao->get_formats(ao);
-		}
+
+		fmts = audio_format_support(ao, rate, channels);
+
 		if(param.verbose > 2) fprintf(stderr, "Note: result 0x%x\n", fmts);
 		if(force_fmt)
 		{ /* Filter for forced encoding. */
