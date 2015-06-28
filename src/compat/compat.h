@@ -132,6 +132,7 @@ typedef long ssize_p;
  * @return file descriptor (>=0) or error code.
  */
 int compat_open(const char *filename, int flags);
+FILE* compat_fopen(const char *filename, const char *mode);
 
 /**
  * Closing a file handle can be platform specific.
@@ -140,6 +141,7 @@ int compat_open(const char *filename, int flags);
  * @return 0 if the file was successfully closed. A return value of -1 indicates an error.
  */
 int compat_close(int infd);
+int compat_fclose(FILE* stream);
 
 /* Those do make sense in a separate file, but I chose to include them in compat.c because that's the one source whose object is shared between mpg123 and libmpg123 -- and both need the functionality internally. */
 

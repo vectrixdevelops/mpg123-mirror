@@ -14,6 +14,8 @@
 
 #ifndef NOXFERMEM
 
+#include "config.h"
+#include "out123_intsym.h"
 #include "xfermem.h"
 #include <string.h>
 #include <errno.h>

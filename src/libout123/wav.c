@@ -20,6 +20,7 @@
 */
 
 #include "out123_int.h"
+
 #include <errno.h>
 #include "debug.h"
 
@@ -132,18 +133,7 @@ static int open_file(char *filename)
       return 0;
    }
    else {
-#ifdef WANT_WIN32_UNICODE
-     wchar_t *filenamew = NULL;
-     win32_utf8_wide(filename, &filenamew, NULL);
-     if(filenamew == NULL) {
-       wavfp = NULL;
-     } else {
-       wavfp = _wfopen(filenamew,L"wb");
-       free(filenamew);
-     }
-#else
-     wavfp = fopen(filename,"wb");
-#endif
+     wavfp = compat_fopen(filename, "wb");
      if(!wavfp)
         return -1;
      else
@@ -156,7 +146,7 @@ static int close_file()
 {
 	if(wavfp != NULL && wavfp != stdout)
 	{
-		if(fclose(wavfp))
+		if(compat_fclose(wavfp))
 		{
 			error1("problem closing the audio file, probably because of flushing to disk: %s\n", strerror(errno));
 			return -1;
@@ -415,7 +405,7 @@ int wav_close(void)
 	if(fflush(wavfp))
 	{
 		error1("cannot flush WAV stream: %s", strerror(errno));
-		fclose(wavfp);
+		compat_fclose(wavfp);
 		return -1;
 	}
 	if(fseek(wavfp, 0L, SEEK_SET) >= 0)
@@ -451,7 +441,7 @@ int au_close(void)
 	if(fflush(wavfp))
 	{
 		error1("cannot flush WAV stream: %s", strerror(errno));
-		fclose(wavfp);
+		compat_fclose(wavfp);
 		return -1;
 	}
    if(fseek(wavfp, 0L, SEEK_SET) >= 0) {

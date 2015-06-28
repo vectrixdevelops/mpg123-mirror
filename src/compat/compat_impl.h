@@ -63,12 +63,13 @@ int compat_open(const char *filename, int flags)
 	wchar_t *frag = NULL;
 
 	ret = win32_utf8_wide(filename, &frag, NULL);
-	if ((frag == NULL) || (ret == 0)) goto fallback; /* Fallback to plain open when ucs-2 conversion fails */
+	if ((frag == NULL) || (ret == 0))
+		goto open_fallback; /* Fallback to plain open when ucs-2 conversion fails */
 
 	ret = _wopen(frag, flags); /*Try _wopen */
 	if (ret != -1 ) goto open_ok; /* msdn says -1 means failure */
 
-fallback:
+open_fallback:
 #endif
 
 #if (defined(WIN32) && !defined (__CYGWIN__)) /* MSDN says POSIX function is deprecated beginning in Visual C++ 2005 */
@@ -86,12 +87,57 @@ open_ok:
 	return ret;
 }
 
+/* Moved over from wav.c, logic with fallbacks added from the
+   example of compat_open(). */
+FILE* compat_fopen(const char *filename, const char *mode)
+{
+	FILE* stream = NULL;
+#ifdef WANT_WIN32_UNICODE
+	int cnt = 0;
+	wchar_t *wname = NULL;
+	wchat_t *wmode = NULL;
+
+	cnt = win32_utf8_wide(filename, &wname, NULL);
+	if( (filenamew == NULL) || (cnt == 0))
+		goto fopen_fallback;
+	cnt = win32_utf8_wide(mode, &wmode, NULL);
+	if( (wmode == NULL) || (cnt == 0))
+		goto fopen_fallback;
+
+	stream = _wfopen(filenamew, wmode);
+	if(stream) goto fopen_ok;
+
+fopen_fallback:
+#endif
+#if (defined(WIN32) && !defined (__CYGWIN__))
+	stream = _fopen(filename, mode);
+#else
+	stream = fopen(filename, mode);
+#endif
+#ifdef WANT_WIN32_UNICODE
+
+fopen_ok:
+	free(wmode);
+	free(wname);
+#endif
+	return stream;
+}
+
 int compat_close(int infd)
 {
 #if (defined(WIN32) && !defined (__CYGWIN__)) /* MSDN says POSIX function is deprecated beginning in Visual C++ 2005 */
 	return _close(infd);
 #else
 	return close(infd);
+#endif
+}
+
+int compat_fclose(FILE *stream)
+{
+#if (defined(WIN32) && !defined (__CYGWIN__))
+	return _fclose(stream);
+#else
+	return fclose(stream);
 #endif
 }
 

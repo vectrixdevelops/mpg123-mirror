@@ -231,7 +231,7 @@ static char *get_the_cwd()
 	return buf;
 }
 
-void list_modules()
+void audio_list_modules()
 {
 	DIR* dir = NULL;
 	struct dirent *dp = NULL;

@@ -10,4 +10,6 @@
 	worked so far.
 */
 
+#include "config.h"
+#include "out123_intsym.h"
 #include "compat/compat_impl.h"

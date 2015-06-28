@@ -43,6 +43,9 @@ typedef struct mpg123_module_struct {
 
 mpg123_module_t* open_module( const char* type, const char* name );
 void close_module( mpg123_module_t* module );
-void list_modules();
+/* TODO: resolve this name hack; settle if the module code really is
+   meant for more than output. I don't really think a future *123
+   player will use input modules, or playlist modules. */
+void audio_list_modules();
 
 #endif
