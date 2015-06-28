@@ -734,6 +734,15 @@ int reset_output(audio_output_t *ao)
 	else return 0;
 }
 
+/* Just set the format parameters that would be used on next opening. */
+void audio_prepare_format(audio_output_t *ao, int rate, int channels, int encoding)
+{
+	if(!ao) return;
+	ao->rate     = rate;
+	ao->channels = channels;
+	ao->format   = encoding;
+}
+
 int set_pitch(mpg123_handle *fr, audio_output_t *ao, double new_pitch)
 {
 	int ret = 1;
@@ -775,9 +784,7 @@ int set_pitch(mpg123_handle *fr, audio_output_t *ao, double new_pitch)
 		audio_capabilities(ao, fr);
 		ret = 0;
 	}
-	ao->format   = format;
-	ao->channels = channels;
-	ao->rate     = pitch_rate(rate);
+	audio_prepare_format(ao, pitch_rate(rate), channels, format);
 	reset_output(ao);
 	output_unpause(ao);
 	return ret;
