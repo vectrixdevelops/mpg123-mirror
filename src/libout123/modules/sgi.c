@@ -11,7 +11,7 @@
 /* #include <audio.h> */
 #include <dmedia/audio.h>
 
-#include "outmod_def.h"
+#include "out123_int.h"
 #include "debug.h"
 
 

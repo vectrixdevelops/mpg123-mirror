@@ -6,7 +6,7 @@
 	initially written by Michael Hipp
 */
 
-#include "outmod_def.h"
+#include "out123_int.h"
 
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>

@@ -11,7 +11,7 @@
 #include <SDL.h>
 
 #include "audio.h"
-#include "outmod_def.h"
+#include "out123_int.h"
 #ifdef WIN32
 #include <windows.h>
 #endif

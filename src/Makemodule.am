@@ -46,8 +46,6 @@ EXTRA_PROGRAMS += \
 src_mpg123_SOURCES = \
   src/audio.c \
   src/audio.h \
-  src/buffer.c \
-  src/buffer.h \
   src/common.c \
   src/common.h \
   src/compat.c \
@@ -75,21 +73,13 @@ src_mpg123_SOURCES = \
   src/streamdump.c \
   src/term.c \
   src/term.h \
-  src/wav.c \
-  src/win32_support.h \
-  src/wavhead.h \
-  src/xfermem.c \
-  src/xfermem.h
+  src/win32_support.h
 
 # Does that finally work to build/link the correct object file?
 src_mpg123_SOURCES += 
 
 # Replace common.h by sysutil.h!
 src_out123_SOURCES = \
-  src/audio.c \
-  src/audio.h \
-  src/buffer.c \
-  src/buffer.h \
   src/sysutil.c \
   src/sysutil.h \
   src/common.h \
@@ -100,11 +90,7 @@ src_out123_SOURCES = \
   src/getlopt.h \
   src/out123.c \
   src/mpg123app.h \
-  src/wav.c \
-  src/win32_support.h \
-  src/wavhead.h \
-  src/xfermem.c \
-  src/xfermem.h
+  src/win32_support.h
 
 src_mpg123_id3dump_SOURCES = \
   src/mpg123-id3dump.c \

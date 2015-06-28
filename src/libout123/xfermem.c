@@ -274,7 +274,7 @@ int xfermem_write(txfermem *xf, byte *buffer, size_t bytes)
 
 #else /* stubs for generic / win32 */
 
-#include "mpg123app.h"
+#include "out123_int.h"
 #include "xfermem.h"
 
 void xfermem_init (txfermem **xf, size_t bufsize, size_t msize, size_t skipbuf)

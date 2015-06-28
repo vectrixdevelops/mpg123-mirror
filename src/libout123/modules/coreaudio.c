@@ -9,7 +9,7 @@
 */
 
 
-#include "outmod_def.h"
+#include "out123_int.h"
 
 #include <CoreServices/CoreServices.h>
 #include <AudioUnit/AudioUnit.h>

@@ -6,7 +6,7 @@
 	initially written by Michael Hipp
 */
 
-#include "outmod_def.h"
+#include "out123_int.h"
 #include <fcntl.h>
 #include <sys/audio.h>
 #include "debug.h"

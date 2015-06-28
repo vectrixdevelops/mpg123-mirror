@@ -13,7 +13,8 @@
 #ifndef NOXFERMEM
 
 #include "buffer.h"
-#include "common.h"
+#include "out123_int.h"
+#include "mpg123app.h" /* for param struct */
 #include <errno.h>
 #include "debug.h"
 

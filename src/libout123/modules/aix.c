@@ -19,7 +19,7 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 
-#include "outmod_def.h"
+#include "out123_int.h"
 #include "debug.h"
 
 /* use AUDIO_BSIZE to set the msec for audio buffering in Ultimedia library

@@ -139,15 +139,6 @@ extern int play_frame(void);
 
 extern int control_generic(mpg123_handle *fr);
 
-/* Eh... I see duplicated definitions. Clean up after merge! */
-extern int cdr_open(audio_output_t *);
-extern int au_open(audio_output_t *);
-extern int wav_open(audio_output_t *);
-extern int wav_write(unsigned char *buf,int len);
-extern int cdr_close(void);
-extern int au_close(void);
-extern int wav_close(void);
-
 extern struct parameter param;
 
 /* avoid the SIGINT in terminal control */

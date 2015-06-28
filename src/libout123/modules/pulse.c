@@ -14,7 +14,7 @@
 #include <pulse/error.h>
 
 #include "config.h"
-#include "outmod_def.h"
+#include "out123_int.h"
 #include "audio.h"
 #include "module.h"
 #include "debug.h"

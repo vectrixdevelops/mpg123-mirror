@@ -7,7 +7,7 @@
 	initially written by Clemens Ladisch <clemens@ladisch.de>
 */
 
-#include "outmod_def.h"
+#include "out123_int.h"
 #include "audio.h"
 #include "module.h"
 #include <errno.h>

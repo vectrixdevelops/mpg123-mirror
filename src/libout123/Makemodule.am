@@ -7,7 +7,19 @@ include src/libout123/modules/Makemodule.am
 noinst_LTLIBRARIES += src/libout123/libmodule.la
 
 lib_LTLIBRARIES += src/libout123/libout123.la
-src_libout123_libout123_la_SOURCES =
+src_libout123_libout123_la_SOURCES = \
+  src/libout123/libout123.c \
+  src/libout123/out123.h \
+  src/libout123/out123_int.h \
+  src/libout123/out123_intsym.h \
+  src/libout123/compat.c \
+  src/libout123/wav.c \
+  src/libout123/wavhead.h \
+  src/libout123/buffer.c \
+  src/libout123/buffer.h \
+  src/libout123/xfermem.c \
+  src/libout123/xfermem.h
+
 src_libout123_libout123_la_LIBADD = \
   src/libout123/libmodule.la \
   src/libout123/modules/libdefaultmodule.la

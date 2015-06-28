@@ -12,7 +12,7 @@
 #include <jack/ringbuffer.h>
 #include <sys/errno.h>
 
-#include "outmod_def.h"
+#include "out123_int.h"
 #include "debug.h"
 
 #define MAX_CHANNELS	(2)

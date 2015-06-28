@@ -13,7 +13,7 @@
  * This file comes under GPL license, version 2. 
  */
 
-#include "outmod_def.h"
+#include "out123_int.h"
 
 #include <ctype.h>
 #include <sys/asoundlib.h>

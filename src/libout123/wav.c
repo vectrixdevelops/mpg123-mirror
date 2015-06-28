@@ -19,7 +19,7 @@
 	TODO: convert fully to tab indent
 */
 
-#include "mpg123app.h"
+#include "out123_int.h"
 #include <errno.h>
 #include "debug.h"
 

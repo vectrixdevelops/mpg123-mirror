@@ -13,7 +13,8 @@
 #include <ctype.h>
 #include <ltdl.h>
 
-#include "mpg123app.h"
+#include "out123_int.h"
+#include "mpg123app.h" /* for param struct */
 #include "debug.h"
 
 #ifndef HAVE_LTDL
