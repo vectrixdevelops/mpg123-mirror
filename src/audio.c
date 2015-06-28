@@ -345,7 +345,21 @@ static void capline(mpg123_handle *mh, long rate)
 	fprintf(stderr, "\n");
 }
 
-
+/* TODO: fix for buffer use, try to minimize number of these small functions */
+const char* audio_module_name(audio_output_t *ao)
+{
+	if(param.usebuffer)
+		return "<buffer>";
+	else
+		return ao->module ? ao->module->name : "file/raw/test";
+}
+const char* audio_device_name(audio_output_t *ao)
+{
+	if(param.usebuffer)
+		return "<none>";
+	else
+		return ao->device ? ao->device : "<none>";
+}
 
 void print_capabilities(audio_output_t *ao, mpg123_handle *mh)
 {
@@ -354,13 +368,10 @@ void print_capabilities(audio_output_t *ao, mpg123_handle *mh)
 	size_t      num_rates;
 	const int  *encs;
 	size_t      num_encs;
-	const char *name = "<buffer>";
-	const char *dev  = "<none>";
-	if(!param.usebuffer)
-	{
-		name = ao->module ? ao->module->name : "file/raw/test";
-		if(ao->device != NULL) dev = ao->device;
-	}
+	const char *name;
+	const char *dev;
+	name = audio_module_name(ao);
+	dev  = audio_device_name(ao);
 	mpg123_rates(&rates, &num_rates);
 	mpg123_encodings(&encs, &num_encs);
 	fprintf(stderr,"\nAudio driver: %s\nAudio device: %s\nAudio capabilities:\n(matrix of [S]tereo or [M]ono support for sample format and rate in Hz)\n       |", name, dev);

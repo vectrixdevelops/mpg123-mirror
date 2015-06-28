@@ -104,6 +104,8 @@ void audio_enclist(char** list); /* Make a string of encoding names. */
 int set_pitch(mpg123_handle *fr, audio_output_t *ao, double new_pitch);
 
 int audio_format_support(audio_output_t *ao, long rate, int channels);
+const char* audio_module_name(audio_output_t *ao);
+const char* audio_device_name(audio_output_t *ao);
 
 int audio_reset(audio_output_t *ao, long rate, int channels, int format);
 void audio_drain(audio_output_t *ao);
