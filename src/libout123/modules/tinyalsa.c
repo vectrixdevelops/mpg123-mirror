@@ -7,7 +7,7 @@
 	initially written by Jarno Lehtinen <lehtinen@sci.fi>
 */
 
-#include "mpg123app.h"
+#include "out123_int.h"
 #include "audio.h"
 #include "module.h"
 #include <errno.h>

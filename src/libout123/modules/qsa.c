@@ -7,7 +7,7 @@
     written by Mike Gorchak <mike.gorchak.qnx@gmail.com>
 */
 
-#include "mpg123app.h"
+#include "out123_int.h"
 #include "audio.h"
 #include "module.h"
 #include <errno.h>
