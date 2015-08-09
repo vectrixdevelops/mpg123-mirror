@@ -1,7 +1,7 @@
     ________________________________________________________________________
    /                                                                        \
   |   Let's analyze how the buffer stuff works to put it into proper form    |
-  |   for libout123! (ThOr, 2015-06-13)                                      |
+  |   for libout123! (ThOr, 2015-06-13 and ongoing)                          |
    \________________________________________________________________________/
 
 1. How does the buffer communication work?
@@ -357,3 +357,28 @@ to close/reopen the audio device unnecessarily (think JACK again).
 There could be a pass-through mode for the buffer, giving lower latency.
 But what am I doing here? I want to extract the audio code into a library.
 I can do the funky improvements later.
+
+
+2. What would I like to change?
+===============================
+
+I want to have operation with and without buffer more symmetric. I do not
+want only a one-shot time window to query audio caps, I want to be able to
+do that anytime (preferrably not while an audio device is open). I want
+more communication with the buffer. I need to exchange strings (module
+name, error response) and numbers (various parameters).
+
+There are established ways already. I can repoen the audio device with
+differing settings. I can query caps. One just needs some generic
+(or not so generic) fields in the xfermem structure. The only new thing
+is that I can reserve some space for moderate error strings, too. Or:
+If no audio data is pending, I'd have lots of space to point into for
+message strings. But, well, it should be enough to communicate a specific
+error code and the value of errno, if that may help. Verbose printing
+can hapen to stderr.
+
+While at that, I'll make the communication safer by adhering to a stricter
+protocol: Keep requests and responses together. Acknowledge actions on the
+buffer side. The only fire-and-forget performance critical part is about
+feeding audio data. Everhthing else should be rather synchronous, thank
+you very much.
