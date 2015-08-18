@@ -15,12 +15,44 @@
 #include "out123.h"
 #include "module.h"
 
-
 /* 3% rate tolerance */
 #define AUDIO_RATE_TOLERANCE	  3
 
+/* Keep those internally? To the outside, it's just a selection of
+   driver modules. */
+enum {
+	DECODE_TEST,  /* "test" */
+	DECODE_AUDIO, /* gone */
+	DECODE_FILE,  /* "raw" */
+	DECODE_BUFFER, /* internal use only, if at all */
+	DECODE_WAV,    /* wav */
+	DECODE_AU,     /* au */
+	DECODE_CDR,    /* cdr */
+	DECODE_AUDIOFILE /* internal use only, if at all */
+};
+
+/* Playback states mostly for the buffer process.
+   Maybe also used in main program. */
+enum playstate
+{
+	play_dead = 0 /* nothing playing, nothing loaded */
+,	play_stopped  /* driver present, but no device configured/opened */
+,	play_open     /* ... device opened for querying formats .. makes sense?! check old code again */
+,	play_paused   /* paused, ready to continue, device still active */
+,	play_live     /* playing right now */
+};
+
 typedef struct audio_output_struct
 {
+	enum out123_errors errcode;
+#ifndef NOXFERMEM
+	/* If buffer_pid >= 0, there is a separate buffer process actually
+	   handling everything, this instance here is then only a proxy. */
+	int buffer_pid;
+	static int buffer_fd[2];
+	txfermem *buffermem
+#endif
+
 	int fn;			/* filenumber */
 	void *userptr;	/* driver specific pointer */
 	
@@ -32,22 +64,27 @@ typedef struct audio_output_struct
 	int (*close)(struct audio_output_struct *);
 	int (*deinit)(struct audio_output_struct *);
 	
-	/* the module this belongs to */
+	/* the loaded that has set the above */
 	mpg123_module_t *module;
-	
+
+	char *driver;	/* driver (module) name */
 	char *device;	/* device name */
 	int   flags;	/* some bits; namely headphone/speaker/line */
 	long rate;		/* sample rate */
 	long gain;		/* output gain */
 	int channels;	/* number of channels */
-	int format;		/* format flags */
+	int format;		/* encoding (TODO: rename this to "encoding"!) */
 	int framesize;	/* Output needs data in chunks of framesize bytes. */
-	int is_open;	/* something opened? */
-	int auxflags; /* For now just one: quiet mode (for probing). */
+	enum playstate state; /* ... */
+	int auxflags;	/* For now just one: quiet mode (for probing). */
+	double preload;	/* buffer fraction to preload before play */
+	int verbose;	/* verbosity to stderr */
+/* TODO int intflag;   ... is it really useful/necessary from the outside? */
 } audio_output_t;
 
 /* Lazy. */
-#define AOQUIET (ao->auxflags & MPG123_OUT_QUIET)
+#define AOQUIET ((ao->auxflags | ao->flags) & OUT123_QUIET)
+#define AOVERBOSE(v) (!AOQUIET && ao->verbose >= (v))
 
 struct audio_format_name {
 	int  val;

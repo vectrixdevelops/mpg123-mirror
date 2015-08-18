@@ -387,6 +387,7 @@ topt opts[] = {
 	{'k', "skip",        GLO_ARG | GLO_LONG, 0, &param.start_frame, 0},
 	{'2', "2to1",        GLO_INT,  0, &param.down_sample, 1},
 	{'4', "4to1",        GLO_INT,  0, &param.down_sample, 2},
+DECODE_TEST: handle that here, not in audio output!
 	{'t', "test",        GLO_INT,  0, &param.outmode, DECODE_TEST},
 	{'s', "stdout",      GLO_INT,  set_out_stdout, &param.outmode, DECODE_FILE},
 	{'S', "STDOUT",      GLO_INT,  set_out_stdout1, &param.outmode,DECODE_AUDIOFILE},

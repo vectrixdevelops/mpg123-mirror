@@ -36,10 +36,6 @@ typedef struct {
 	byte *metadata;
 	size_t size;
 	size_t metasize;
-	long rate;
-	int  channels;
-	int  format;
-	int justwait;
 } txfermem;
 /*
  *   [W] -- May be written to by the writing process only!
@@ -53,18 +49,36 @@ void xfermem_init_reader (txfermem *xf);
 
 size_t xfermem_get_freespace (txfermem *xf);
 size_t xfermem_get_usedspace (txfermem *xf);
-#define XF_CMD_WAKEUP_INFO  0x04
-#define XF_CMD_WAKEUP    0x02
-#define XF_CMD_TERMINATE 0x03
-#define XF_CMD_AUDIOCAP  0x05
-#define XF_CMD_RESYNC    0x06
-#define XF_CMD_ABORT     0x07
+
+/* Unless otherwise noted, each command demands a reponse if issued from the
+   writer. The reader does not expect responses, only orders. */
+enum xf_cmd_code
+{
+	XF_CMD_PING = 1  /**< Wake up and give a response, not changing any state. */
+,	XF_CMD_PONG      /**< The response to a ping. */
+,	XF_CMD_DATA      /**< Re-check the amount of data available without response. */
+,	XF_CMD_TERMINATE /**< Stop operation. */
+,	XF_CMD_FLUSH     /**< Drop current buffer contents. */
+,	XF_CMD_DRAIN     /**< Consume current buffer contents now. */
+,	XF_CMD_PAUSE     /**< Pause operation, wait for next command. */
+,	XF_CMD_CONTINUE  /**< Continue operation. */
+,	XF_CMD_IGNLOW    /**< Ignore situation with low buffer fill. */
+,	XF_CMD_OK        /**< Response from reader: Operation succeeded. */
+,	XF_CMD_ERROR     /**< Response from reader: Operation failed. */
+,	XF_CMD_CUSTOM1   /**< Some custom command to be filled with meaning. */
+,	XF_CMD_CUSTOM2   /**< Some custom command to be filled with meaning. */
+,	XF_CMD_CUSTOM3   /**< Some custom command to be filled with meaning. */
+,	XF_CMD_CUSTOM4   /**< Some custom command to be filled with meaning. */
+,	XF_CMD_CUSTOM5   /**< Some custom command to be filled with meaning. */
+,	XF_CMD_CUSTOM6   /**< Some custom command to be filled with meaning. */
+,	XF_CMD_CUSTOM7   /**< Some custom command to be filled with meaning. */
+}
+
 #define XF_WRITER 0
 #define XF_READER 1
-int xfermem_getcmd (int fd, int block);
-int xfermem_putcmd (int fd, byte cmd);
-int xfermem_block (int fd, txfermem *xf);
-int xfermem_sigblock (int fd, txfermem *xf, int pid, int signal);
+int xfermem_getcmd(int fd, int block);
+int xfermem_putcmd(int fd, byte cmd);
+int xfermem_writer_block(int fd, txfermem *xf);
 /* returns TRUE for being interrupted */
 int xfermem_write(txfermem *xf, byte *buffer, size_t bytes);
 

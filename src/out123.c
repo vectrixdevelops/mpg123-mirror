@@ -156,6 +156,7 @@ void safe_exit(int code)
 {
 	char *dummy, *dammy;
 
+	
 	if(have_output) exit_output(ao, intflag);
 
 #ifdef WANT_WIN32_UNICODE
@@ -460,6 +461,23 @@ int main(int sys_argc, char ** sys_argv)
 				prgName, loptarg);
 			usage(1);
 	}
+
+	ao = out123_new();
+	if(!ao){ error("Failed to allocate output."); exit(1); }
+
+	if
+	( 0
+	||	out123_param(ao, OUT123_FLAGS, param.output_flags, 0.)
+	|| out123_param(ao, OUT123_BUFFER, param.usebuffer, 0.)
+	|| out123_param(ao, OUT123_PRELOAD, 0, param.preload)
+	|| out123_param(ao, OUT123_GAIN, param.gain, 0.)
+	|| out123_param(ao, OUT123_VERBOSE, param.verbose, 0.)
+	)
+	{
+		error("Error setting output parameters. Do you need a usage reminder?");
+		usage(1);
+	}
+	
 
 #ifdef HAVE_SETPRIORITY
 	if(param.aggressive) { /* tst */

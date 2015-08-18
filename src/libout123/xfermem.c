@@ -1,7 +1,7 @@
 /*
 	xfermem: unidirectional fast pipe
 
-	copyright ?-2008 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright ?-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Oliver Fromme
 	old timestamp: Sun Apr  6 02:26:26 MET DST 1997
@@ -9,13 +9,9 @@
 	See xfermem.h for documentation/description.
 */
 
-/* TODO: Remove the NOXFERMEM part, properly wrap things so that
-   the buffer code is not called if not built in. */
-
-#ifndef NOXFERMEM
-
 #include "config.h"
 #include "out123_intsym.h"
+#include "compat.h"
 #include "xfermem.h"
 #include <string.h>
 #include <errno.h>
@@ -109,12 +105,14 @@ void xfermem_init_writer (txfermem *xf)
 {
 	if(xf)
 		close (xf->fd[XF_READER]);
+	debug1("xfermem writer fd=%i", xf->fd[XF_WRITER]);
 }
 
 void xfermem_init_reader (txfermem *xf)
 {
 	if(xf)
 		close (xf->fd[XF_WRITER]);
+	debug1("xfermem reader fd=%i", xf->fd[XF_READER]);
 }
 
 size_t xfermem_get_freespace (txfermem *xf)
@@ -149,7 +147,7 @@ size_t xfermem_get_usedspace (txfermem *xf)
 		return (xf->size - (readindex - freeindex));
 }
 
-int xfermem_getcmd (int fd, int block)
+static int xfermem_getcmd_raw (int fd, int block)
 {
 	fd_set selfds;
 	byte cmd;
@@ -160,10 +158,11 @@ int xfermem_getcmd (int fd, int block)
 		FD_ZERO (&selfds);
 		FD_SET (fd, &selfds);
 #ifdef HPUX
-		switch (select(FD_SETSIZE, (int *) &selfds, NULL, NULL, block ? NULL : &selto)) {
+		switch (select(FD_SETSIZE, (int *) &selfds, NULL, NULL, block ? NULL : &selto))
 #else
-		switch (select(FD_SETSIZE, &selfds, NULL, NULL, block ? NULL : &selto)) {
+		switch (select(FD_SETSIZE, &selfds, NULL, NULL, block ? NULL : &selto))
 #endif
+		{
 			case 0:
 				if (!block)
 					return (0);
@@ -194,63 +193,81 @@ int xfermem_getcmd (int fd, int block)
 	}
 }
 
+/* Verbose variant for debugging communication. */
+int xfermem_getcmd(int fd, int block)
+{
+	int res = xfermem_getcmd_raw(fd, block);
+	debug3("xfermem_getcmd(%i, %i) = %i", fd, block, res);
+	return res;
+}
+
 int xfermem_putcmd (int fd, byte cmd)
 {
 	for (;;) {
 		switch (write(fd, &cmd, 1)) {
 			case 1:
+				debug2("xfermem_putcmd(%i, %i) = 1");
 				return (1);
 			case -1:
 				if (errno != EINTR)
+				{
+					debug2("xfermem_putcmd(%i, %i) = -1 (%s)", strerror(errno));
 					return (-1);
+				}
 		}
 	}
 }
 
-int xfermem_block (int readwrite, txfermem *xf)
+/*
+	There is a basic assumetry between reader and writer:
+	The reader does work in periodic pieces and can be relied upon to
+	eventually answer a call. It is important that it does not block
+	for a significant duration unless it has really nothing to do.
+
+	The writer is more undefined in its behaviour, it is controlled by
+	external agents. You cannot rely on it answering synchronization
+	requests in a timely manner. But on the other hand, it can be left
+	hanging for a while. The critical side is that of the reader.
+
+	Because of that, it is only sensible to provide a voluntary
+	xfermem_writer_block() here. The reader does not need such a function.
+	Only if it has nothing else to do, it will simply block on
+	xfermem_getcmd(), and the writer promises to xfermem_putcmd() when
+	something happens.
+
+	The writer always sends a wakeup command to the reader since the latter
+	could be in the process of putting itself to sleep right now, without
+	a flag indicating so being set yet.
+
+	The reader periodically reads from its file descriptor so that it does
+	not get clogged up with pending messages. It will only (and always) send
+	a wakeup call in response to a received command.
+*/
+
+/* Wait a bit to get a sign of life from the reader.
+   Returns -1 if even that did not work. */
+int xfermem_writer_block(txfermem *xf)
 {
-	int myfd = xf->fd[readwrite];
+	int myfd = xf->fd[XF_WRITER];
 	int result;
 
-	xf->wakeme[readwrite] = TRUE;
-	if (xf->wakeme[1 - readwrite])
-		xfermem_putcmd (myfd, XF_CMD_WAKEUP);
+	xfermem_putcmd(myfd, XF_CMD_PING);
 	result = xfermem_getcmd(myfd, TRUE);
-	xf->wakeme[readwrite] = FALSE;
-	return ((result <= 0) ? -1 : result);
-}
-
-/* Parallel-safe code to signal a process and wait for it to respond. */
-int xfermem_sigblock(int readwrite, txfermem *xf, int pid, int signal)
-{
-	int myfd = xf->fd[readwrite];
-	int result;
-
-	xf->wakeme[readwrite] = TRUE;
-	kill(pid, signal);
-
-	/* not sure about that block... here */
-	if (xf->wakeme[1 - readwrite])
-		xfermem_putcmd (myfd, XF_CMD_WAKEUP);
-
-	result = xfermem_getcmd(myfd, TRUE);
-	xf->wakeme[readwrite] = FALSE;
-
 	return ((result <= 0) ? -1 : result);
 }
 
 int xfermem_write(txfermem *xf, byte *buffer, size_t bytes)
 {
-	if(buffer == NULL || bytes < 1) return FALSE;
+	if(buffer == NULL || bytes < 1) return 0;
 
-	/* You weren't so braindead to have not allocated enough space at all, right? */
+	/* You weren't so braindead not allocating enough space at all, right? */
 	while (xfermem_get_freespace(xf) < bytes)
 	{
-		int cmd =  xfermem_block(XF_WRITER, xf);
+		int cmd =  xfermem_writer_block(xf);
 		if (cmd == XF_CMD_TERMINATE || cmd < 0)
 		{
 			error("failed to wait for free space");
-			return TRUE; /* Failure. */
+			return -1; /* Failure. */
 		}
 	}
 	/* Now we have enough space. copy the memory, possibly with the wrap. */
@@ -266,60 +283,9 @@ int xfermem_write(txfermem *xf, byte *buffer, size_t bytes)
 	}
 	/* Advance the free space pointer, including the wrap. */
 	xf->freeindex = (xf->freeindex + bytes) % xf->size;
-	/* Wake up the buffer process if necessary. */
+	/* Always notify the buffer process. */
 	debug("write waking");
-	if(xf->wakeme[XF_READER])
-	return xfermem_putcmd(xf->fd[XF_WRITER], XF_CMD_WAKEUP_INFO) < 0 ? TRUE : FALSE;
-
-	return FALSE;
+	return xfermem_putcmd(xf->fd[XF_WRITER], XF_CMD_DATA) < 0
+	?	-1
+	:	0;
 }
-
-#else /* stubs for generic / win32 */
-
-#include "out123_int.h"
-#include "xfermem.h"
-
-void xfermem_init (txfermem **xf, size_t bufsize, size_t msize, size_t skipbuf)
-{
-}
-void xfermem_done (txfermem *xf)
-{
-}
-void xfermem_init_writer (txfermem *xf)
-{
-}
-void xfermem_init_reader (txfermem *xf)
-{
-}
-size_t xfermem_get_freespace (txfermem *xf)
-{
-  return 0;
-}
-size_t xfermem_get_usedspace (txfermem *xf)
-{
-  return 0;
-}
-int xfermem_write(txfermem *xf, byte *buffer, size_t bytes)
-{
-	return FALSE;
-}
-int xfermem_getcmd (int fd, int block)
-{
-  return 0;
-}
-int xfermem_putcmd (int fd, byte cmd)
-{
-  return 0;
-}
-int xfermem_block (int readwrite, txfermem *xf)
-{
-  return 0;
-}
-int xfermem_sigblock (int readwrite, txfermem *xf, int pid, int signal)
-{
-  return 0;
-}
-#endif
-
-/* eof */
-

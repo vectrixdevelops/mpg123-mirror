@@ -10,16 +10,32 @@
 	- dammed night coders;-)
 */
 
-#ifndef NOXFERMEM
+/*
+	Communication to the buffer is normally via xfermem_putcmd() and blocking
+	on a response, relying in the buffer process periodically checking for
+	pending commands.
+
+	For more immediate concerns, you can send SIGINT. The only result is that this
+	interrupts a current device writing operation and causes the buffer to wait
+	for a following command.
+*/
 
 #include "buffer.h"
 #include "out123_int.h"
-#include "mpg123app.h" /* for param struct */
+#include "xfermem.h"
 #include <errno.h>
 #include "debug.h"
+#ifdef HAVE_SYS_WAIT_H
+#include <sys/wait.h>
+#endif
+
+#define BUF_CMD_OPEN     XF_CMD_CUSTOM1
+#define BUF_CMD_CLOSE    XF_CMD_CUSTOM2
+#define BUF_CMD_START    XF_CMD_CUSTOM3
+#define BUF_CMD_STOP     XF_CMD_CUSTOM4
+#define BUF_CMD_AUDIOCAP XF_CMD_CUSTOM5
 
 /* TODO: Dynamically allocate that to allow multiple instances. */
-txfermem *buffermem = NULL;
 int outburst = 32768;
 
 /* Those are static and global for the forked buffer process.
@@ -32,96 +48,276 @@ static void catch_interrupt (void)
 	intflag = TRUE;
 }
 
-static void catch_usr1 (void)
+/*
+	Interfaces to writer process
+	Remember: The ao struct here is the writer's instance.
+*/
+
+static int buffer_cmd_finish(audio_output_t *ao)
 {
-	usr1flag = TRUE;
-}
-
-/* Interfaces to writer process */
-
-static void buffer_sig(int signal, int block);
-
-void real_buffer_ignore_lowmem(void)
-{
-	if (!buffermem)
-		return;
-	if(buffermem->wakeme[XF_READER])
-		xfermem_putcmd(buffermem->fd[XF_WRITER], XF_CMD_WAKEUP);
-}
-
-void real_buffer_end(int rude)
-{
-	if (!buffermem)
-		return;
-	xfermem_putcmd(buffermem->fd[XF_WRITER], rude ? XF_CMD_ABORT : XF_CMD_TERMINATE);
-}
-
-void real_buffer_resync(void)
-{
-	if(buffermem->justwait)
+	/* Only if buffer returns XF_CMD_OK we got lucky. Otherwise, we expect
+	   the buffer to deliver a reason right after XF_CMD_ERROR. */
+	switch(xfermem_getcmd(ao->buffermem->fd[XF_WRITER], TRUE))
 	{
-		buffermem->wakeme[XF_WRITER] = TRUE;
-		xfermem_putcmd(buffermem->fd[XF_WRITER], XF_CMD_RESYNC);
-		xfermem_getcmd(buffermem->fd[XF_WRITER], TRUE);
+		case XF_CMD_OK: return 0;
+		case XF_CMD_ERROR:
+			if(    unintr_read(writerfd, &ao->errcode, sizeof(ao->errcode))
+			    != sizeof(ao->errcode) )
+				ao->errcode = OUT123_BUFFER_ERROR;
+			return -1;
+		break;
+		default:
+			ao->errcode = OUT123_BUFFER_ERROR;
+			return -1;
 	}
-	else buffer_sig(SIGINT, TRUE);
 }
 
-void real_plain_buffer_resync(void)
+int buffer_open_driver(audio_output_t *ao)
 {
-	buffer_sig(SIGINT, FALSE);
-}
+	int writerfd = ao->buffermem->fd[XF_WRITER];
+	size_t drvlen;
+	size_t devlen;
 
-void real_buffer_reset(void)
-{
-	buffer_sig(SIGUSR1, TRUE);
-}
-
-void real_buffer_start(void)
-{
-	if(buffermem->justwait)
+	if(xfermem_putcmd(writerfd, BUF_CMD_OPEN) != 1)
 	{
-		debug("ending buffer's waiting");
-		buffermem->justwait = FALSE;
-		xfermem_putcmd(buffermem->fd[XF_WRITER], XF_CMD_WAKEUP);
+		ao->errcode = OUT123_BUFFER_ERROR;
+		return -1;
 	}
-}
-
-void real_buffer_stop()
-{
-	buffermem->justwait = TRUE;
-	buffer_sig(SIGINT, TRUE);
-}
-
-extern int buffer_pid;
-
-static void buffer_sig(int signal, int block)
-{
-	if (!buffermem) return;
-
-	if (!block)
-	{ /* Just signal, do not wait for anything. */
-		kill(buffer_pid, signal);
-		return;
+	/* Passing over driver and device name. */
+	drvlen = ao->driver ? (strlen(ao->driver) + 1) : 0;
+	devlen = ao->device ? (strlen(ao->device) + 1) : 0;
+	if(
+	/* Size of string in memory, then string itself. */
+		unintr_write(writerfd, &drvlen, sizeof(drvlen))
+		!= sizeof(namelen)
+	|| unintr_write(writerfd, ao->driver, drvlen)
+		!= drvlen
+	|| unintr_write(writerfd, &devlen, sizeof(devlen))
+		!= sizeof(namelen)
+	|| unintr_write(writerfd, ao->device, devlen)
+		!= devlen
+	)
+	{
+		ao->errocde = OUT123_BUFFER_ERROR;
+		return -1;
 	}
 
-	/* kill() and the waiting needs to be taken care of properly for parallel execution.
-	  Nobody reported issues so far, but I want to be sure. */
-	if(xfermem_sigblock(XF_WRITER, buffermem, buffer_pid, signal) != XF_CMD_WAKEUP) 
-		perror("Could not resync/reset buffers");
-	return;
+	return buffer_cmd_finish(ao);
+}
+
+int buffer_get_encodings(audio_output_t *ao)
+{
+	int writerfd = ao->buffermem->fd[XF_WRITER];
+
+	if(xfermem_putcmd(writerfd, BUF_CMD_AUDIOCAP) != 1)
+	{
+		ao->errcode = OUT123_BUFFER_ERROR;
+		return -1;
+	}
+	/* Now shoving over the parameters for opening the device. */
+	if(
+		unintr_write(writerfd, &ao->encoding, sizeof(ao->encoding))
+		!= sizeof(ao->encoding)
+	||	unintr_write(writerfd, &ao->channels, sizeof(ao->channels))
+		!= sizeof(ao->channels)
+	||	unintr_write(writerfd, &ao->rate, sizeof(ao->rate))
+		!= sizeof(ao->rate)
+	)
+	{
+		ao->errocde = OUT123_BUFFER_ERROR;
+		return -1;
+	}
+
+	if(buffer_cmd_finish(ao) == 0)
+	{
+		int encodings;
+		/* If all good, the answer can be read how. */
+		if(    unintr_read(writerfd, &encodings, sizeof(encodings))
+			 != sizeof(encodings) )
+		{
+			ao->errcode = OUT123_BUFFER_ERROR;
+			return -1;
+		}
+		else return encodings;
+	}
+	else return -1;
+}
+
+int buffer_start(audio_output_t *ao)
+{
+	int writerfd = ao->buffermem->fd[XF_WRITER];
+	size_t namelen;
+	if(xfermem_putcmd(writerfd, BUF_CMD_START) != 1)
+	{
+		ao->errcode = OUT123_BUFFER_ERROR;
+		return -1;
+	}
+	/* Now shoving over the parameters for opening the device. */
+	if(
+		unintr_write(writerfd, &ao->encoding, sizeof(ao->encoding))
+		!= sizeof(ao->encoding)
+	||	unintr_write(writerfd, &ao->channels, sizeof(ao->channels))
+		!= sizeof(ao->channels)
+	||	unintr_write(writerfd, &ao->rate, sizeof(ao->rate))
+		!= sizeof(ao->rate)
+	)
+	{
+		ao->errocde = OUT123_BUFFER_ERROR;
+		return -1;
+	}
+
+	return buffer_cmd_finish(ao);
+}
+
+#define BUFFER_SIMPLE_CONTROL(name, cmd) \
+void name(audio_output_t *ao) \
+{ \
+	xfermem_putcmd(ao->buffermem->fd[XF_WRITER], cmd); \
+	xfermem_getcmd(ao->buffermem->fd_XF_WRITER], TRUE); \
+}
+
+BUFFER_SIMPLE_CONTROL(buffer_stop,  BUF_CMD_STOP)
+BUFFER_SIMPLE_CONTROL(buffer_continue, XF_CMD_CONTINUE)
+BUFFER_SIMPLE_CONTROL(buffer_ignore_lowmem, XF_CMD_IGNLOW)
+BUFFER_SIMPLE_CONTROL(buffer_drain, XF_CMD_DRAIN)
+BUFFER_SIMPLE_CONTROL(buffer_end, XF_CMD_TERMINATE)
+
+#define BUFFER_SIGNAL_CONTROL(name, cmd) \
+void name(audio_output_t *ao) \
+{ \
+	kill(ao->buffer_pid, SIGINT); \
+	xfermem_putcmd(ao->buffermem->fd[XF_WRITER], cmd); \
+	xfermem_getcmd(ao->buffermem->fd_XF_WRITER], TRUE); \
+}
+
+BUFFER_SIGNAL_CONTROL(buffer_pause, XF_CMD_PAUSE)
+BUFFER_SIGNAL_CONTROL(buffer_flush, XF_CMD_FLUSH)
+
+size_t buffer_write(audio_outout_t *ao, unsigned char const * bytes, size_t count)
+{
+	/*
+		Writing the whole buffer in one piece is no good as that means
+		waiting for the buffer being empty. That is called a buffer underrun.
+		We want to refill the buffer before that happens. So, what is sane?
+	*/
+	size_t written = 0;
+	size_t max_piece = ao->buffermem->size / 2;
+	while(count)
+	{
+		size_t count_piece = count > max_piece
+		?	max_piece
+		:	count;
+		if(xfermem_write(buffermem, bytes+written, count_piece) != 0)
+		{
+			debug("writing to buffer memory failed");
+			ao->errcode = OUT123_BUFFER_ERROR;
+			return 0;
+		}
+		count   -= count_piece;
+		written += count_piece;
+	}
+	return written;
+}
+
+/*
+	Code for the buffer process itself.
+*/
+
+/*
+
+buffer loop:
+
+{
+	1. normal operation: get data, feed to audio device
+	   (if device open and alive, if data there, if no other command pending)
+	2. command response: pause/unpause, open module/device, query caps
+
+	One command at a time, synchronized ... writer process blocks, waiting for
+	response.
+}
+
+*/
+
+/*
+	Fill buffer to that value when starting playback from stopped state or after
+	experiencing a serious underrun.
+	One might also define intermediate preload to recover from underruns. Earlier
+	code used 1/8 of the buffer.
+*/
+static size_t initial_preload(audio_output_t *ao)
+{
+	size_t preload = 0;
+	txfermem *xf = ao->buffermem;
+	/* Fill configured part of buffer on first run before starting to play.
+	 * Live mp3 streams constantly approach buffer underrun otherwise. [dk]
+	 */
+	if(ao->preload > 0.)   preload = (size_t)(ao->preload*xf->size);
+	if(preload > xf->size) preload = xf->size;
+
+	return preload;
+}
+
+void buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
+{
+	int on_air = TRUE;
+	size_t preload;
+	txfermem *xf = ao->buffermem;
+	int my_fd = xf->fd[XF_READER];
+	int preloading = TRUE;
+
+	/* Be prepared to use SIGINT and SIGUSR1 for communication. */
+	catchsignal (SIGINT, catch_interrupt);
+	sigprocmask (SIG_SETMASK, oldsigset, NULL);
+	/* Say hello to the writer. */
+	xfermem_putcmd(my_fd, XF_CMD_WAKEUP);
+
+	preload = initial_preload(ao);
+	while(on_air)
+	{
+		/* If a device is opened and playing, it is our first duty to keep it playing. */
+		if(ao->state == play_live)
+		{
+			size_t bytes = xfermem_get_usedspace(xf);
+			if(preloading)
+			{
+				if(!(preloading = (bytes < preload)))
+					out123_continue(ao);
+			}
+			if(!preloading)
+			{
+				if(bytes < outburst)
+				{
+					/* underrun */
+					out123_pause(ao);
+					preloading = TRUE;
+				}
+				else
+				{
+					if (bytes > xf->size - xf->readindex)
+						bytes = xf->size - xf->readindex;
+					if (bytes > outburst)
+						bytes = outburst;
+					/* The output can only take multiples of framesize. */
+					bytes -= bytes % ao->framesize;
+Just ao->write(), possible interrupted by signal, or the old logic of flush_output, which
+actually loops to avoid signal interruption?
+
+				}
+			}
+		}
+		/* */
+	}
 }
 
 void buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
 {
 	int bytes, outbytes;
-	int my_fd = buffermem->fd[XF_READER];
-	txfermem *xf = buffermem;
+	txfermem *xf = ao->buffermem;
+	int my_fd = xf->fd[XF_READER];
 	int done = FALSE;
 	int preload;
 
 	catchsignal (SIGINT, catch_interrupt);
-	catchsignal (SIGUSR1, catch_usr1);
 	sigprocmask (SIG_SETMASK, oldsigset, NULL);
 
 	xfermem_putcmd(my_fd, XF_CMD_WAKEUP);
@@ -154,12 +350,8 @@ void buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
 		}
 	}
 
-	/* Fill complete buffer on first run before starting to play.
-	 * Live mp3 streams constantly approach buffer underrun otherwise. [dk]
-	 */
-	preload = (int)(param.preload*xf->size);
-	if(preload > xf->size) preload = xf->size;
-	if(preload < 0) preload = 0;
+
+int flag, usr1flag ... which one for generic communication?
 
 	for (;;) {
 		if (intflag) {
@@ -314,6 +506,68 @@ void buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
 	}
 }
 
-#endif
+static void catch_child(void)
+{
+  while (waitpid(-1, NULL, WNOHANG) > 0);
+}
 
-/* EOF */
+/* Called from the controlling process. */
+
+int buffer_init(audio_output_t *ao, size_t bytes)
+{
+	sigset_t newsigset, oldsigset;
+
+	buffer_exit(ao);
+	if(bytes < outburst) bytes = 2*outburst;
+
+	xfermem_init (&ao->buffermem, bytes, 0, 0);
+	catchsignal (SIGCHLD, catch_child);
+	switch((ao->buffer_pid = fork()))
+	{
+		case -1: /* error */
+			error("cannot fork!");
+			goto buffer_init_bad;
+		case 0: /* child */
+		{
+			/*
+				Ensure the normal default value for buffer_pid to be able
+				to call normal out123 routines from the buffer proess.
+				One could keep it at zero and even use this for detecting the
+				buffer process and do special stuff for that. But the point
+				is that there shouldn't be special stuff.
+			*/
+			ao->buffer_pid = -1;
+			/* Not preparing audio output anymore, that comes later. */
+			xfermem_init_reader(ao->buffermem);
+			buffer_loop(ao, &oldsigset); /* Here the work happens. */
+			xfermem_done_reader(ao->buffermem);
+			xfermem_done(ao->buffermem);
+			exit(0);
+		}
+		default: /* parent */
+			xfermem_init_writer(buffermem);
+	}
+
+	return 0;
+buffer_init_bad:
+	if(ao->buffermem)
+	{
+		xfermem_done(ao->buffermem);
+		ao->buffermem = NULL;
+	}
+	return -1;
+}
+
+void buffer_exit(audio_output_t *ao)
+{
+	if(ao->buffer_pid == -1) return
+
+	debug("ending buffer");
+	buffer_stop(ao); /* Puts buffer into waiting-for-command mode. */
+	buffer_end(ao, 1);  /* Gives command to end operation. */
+	xfermem_done_writer(ao->buffermem);
+	waitpid(ao->buffer_pid, NULL, 0);
+	xfermem_done(ao->buffermem);
+	ao->buffer_pid = -1;
+	/* TODO: I sense that close(xf->fd[XF_WRITER]) is missing. */
+}

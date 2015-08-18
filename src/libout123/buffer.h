@@ -16,38 +16,25 @@
 #ifndef _MPG123_BUFFER_H_
 #define _MPG123_BUFFER_H_
 
-#ifndef NOXFERMEM
-
 #include "compat.h"
 #include "audio.h"
 /* TODO: Wrap xfermem usage into buffer API calls. */
 #include "xfermem.h"
+#include "out123_int.h"
 
-extern txfermem *buffermem;
-void buffer_loop(audio_output_t *ao,sigset_t *oldsigset);
-void real_buffer_ignore_lowmem(void);
-void real_buffer_end(int rude);
-void real_buffer_resync(void);
-void real_plain_buffer_resync(void);
-void real_buffer_reset(void);
-void real_buffer_start(void);
-void real_buffer_stop(void);
-/* Hm, that's funny preprocessor weirdness. */
-#define buffer_start()         (param.usebuffer ? real_buffer_start(),0         : 0)
-#define buffer_stop()          (param.usebuffer ? real_buffer_stop(),0          : 0)
-#define buffer_reset()         (param.usebuffer ? real_buffer_reset(),0         : 0)
-#define buffer_resync()        (param.usebuffer ? real_buffer_resync(),0        : 0)
-#define plain_buffer_resync()  (param.usebuffer ? real_plain_buffer_resync(),0  : 0)
-#define buffer_end(a)          (param.usebuffer ? real_buffer_end(a),0           : 0)
-#define buffer_ignore_lowmem() (param.usebuffer ? real_buffer_ignore_lowmem(),0 : 0)
-#else
-#define buffer_start()
-#define buffer_stop()
-#define buffer_reset()
-#define buffer_resync()
-#define plain_buffer_resync()
-#define buffer_end()
-#define buffer_ignore_lowmem()
-#endif
+void buffer_ignore_lowmem(audio_output_t *ao);
+void buffer_end(audio_output_t *ao, int rude);
+void buffer_resync(audio_output_t *ao);
+void plain_buffer_resync(audio_output_t *ao);
+void buffer_reset(audio_output_t *ao);
+void buffer_start(audio_output_t *ao);
+void buffer_stop(audio_output_t *ao);
+
+/* To be reworked.
+	Start and end buffer process without delay.
+	This also handles the xfermem structure.
+*/
+int  buffer_init(audio_output_t *ao, size_t bytes);
+void buffer_exit(audio_output_t *ao);
 
 #endif
