@@ -155,6 +155,9 @@ enum out123_error
 {
 ,	OUT123_ERR = -1 /**< generic alias for verbosity, always == -1 */
 ,	OUT123_OK  = 0  /**< just a name for zero, not going to change */
+,	OUT123_DOOM /**< dazzled, out of memory */
+,	OUT123_BAD_DRIVER_NAME /**< bad driver name given */
+,	OUT123_BAD_DRIVER /**< unspecified issue loading a driver */
 ,	OUT123_NO_DRIVER /**< no driver loaded */
 ,	OUT123_NOT_LIVE /**< no active audio device */
 ,	OUT123_DEV_PLAY /**< some device playback error */

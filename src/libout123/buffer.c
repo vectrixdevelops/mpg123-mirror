@@ -72,7 +72,7 @@ static int buffer_cmd_finish(audio_output_t *ao)
 	}
 }
 
-int buffer_open_driver(audio_output_t *ao)
+int buffer_open(audio_output_t *ao)
 {
 	int writerfd = ao->buffermem->fd[XF_WRITER];
 	size_t drvlen;

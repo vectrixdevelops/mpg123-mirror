@@ -22,6 +22,21 @@ static int have_buffer(audio_output_t *ao)
 /* TODO: clean that up */
 extern int intflag;
 
+void out123_clear_module(audio_output_t *ao)
+{
+	ao->open = NULL;
+	ao->get_formats = NULL;
+	ao->write = NULL;
+	ao->flush = NULL;
+	ao->close = NULL;
+	ao->deinit = NULL;
+
+	ao->module = NULL;
+
+	ao->driver = NULL;
+	ao->device = NULL;
+}
+
 audio_output_t* out123_new(void)
 {
 	audio_output_t* ao = malloc( sizeof( audio_output_t ) );
@@ -39,16 +54,8 @@ audio_output_t* out123_new(void)
 		ao->fn = -1;
 		ao->userptr = NULL;
 
-		ao->open = NULL;
-		ao->get_formats = NULL;
-		ao->write = NULL;
-		ao->flush = NULL;
-		ao->close = NULL;
-		ao->deinit = NULL;
+		out123_clear_module(ao);
 
-		ao->module = NULL;
-
-		ao->device = NULL;
 		ao->flags = 0;
 		ao->rate = -1;
 		ao->gain = -1;
@@ -231,16 +238,92 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 	ao->rate = -1
 	ao->channels = -1
 	ao->format = -1;
-	/* We just quickly check if the device can be accessed at all,
-	   same as out123_get_encodings! */
-TODO: open module
-TODO: open/close device
 
-On device access error, the module is closed, too, state is play_dead!
-Subsequent code assumes that play_stopped means that the device can be opened.
+#ifndef NOXFERMEM
+	if(have_buffer(ao)
+		return buffer_open(ao, driver, device);
+	else
+#endif
+	{
+		/* We just quickly check if the device can be accessed at all,
+		   same as out123_get_encodings! */
 
+		int result = 0;
+		char *nextname, *modnames;
+		const char *names = driver ? driver : DEFAULT_OUTPUT_MODULE;
+
+		if(!names) return out123_seterr(ao, OUT123_BAD_DRIVER_NAME);
+
+		/* It is ridiculous how these error messages are larger than the pieces
+		   of memory they are about! */
+		if(device && !(ao->device = strdup(device)))
+		{
+			if(!AOQUIET) error("OOM device name copy");
+			return out123_seterr(ao, OUT123_DOOM);
+		}
+
+		if(!(modnames = strdup(names)))
+		{
+			out123_close(ao); /* Frees ao->device, too. */
+			if(!AOQUIET) error("OOM driver names");
+			return out123_seterr(ao, OUT123_DOOM);
+		}
+
+		/* Now loop over the list of possible modules to find one that works. */
+		nextname = strtok(modnames, ",");
+		while(!ao->open && nextname);
+		{
+			char *curname = nextname;
+			nextname = strtok(NULL, ",");
+			check_output_module(ao, curname, device, !nextname);
+			if(ao->open)
+			{
+				/* A bit redundant, but useful when it's a fake module. */
+				if(!(ao->driver = strdup(curname)))
+				{
+					out123_close(ao);
+					if(!AOQUIET(ao)) error("OOM driver name");
+					return out123_seterr(ao, OUT123_DOOM);
+				}
+			}
+		}
+
+		free(modnames);
+
+		if(!ao->open) /* At least an open() routine must be present. */
+		{
+			if(!AOQUIET)
+				error1("Found no driver out of [%s] working with device %s."
+				,	names, device ? device : "<default>")
+			/* Proper more detailed error code could be set already. */
+			if(ao->errcode == OUT123_OK)
+				ao->errcode = OUT123_BAD_DRIVER;
+			return OUT123_ERR;
+		}
+
+		/* Got something. */
+		ao->state = play_stopped;
+		return OUT123_OK;
+	}
 }
 
+/* Be resilient, always do cleanup work regardless of state. */
+void out123_close(audio_output_t *ao)
+{
+	if(ao->close)
+		ao->close(ao);
+	if(ao->deinit)
+		ao->deinit(ao);
+	if(ao->module)
+		close_module(ao->module);
+
+	if(ao->driver) free(ao->driver);
+	if(ao->device) free(ao->device);
+	/* Nulls everything related to output module/driver. */
+	out123_clear_module(ao);
+
+	ao->state = play_dead;
+}
 
 TODO: finish
 int out123_start( audio_output_t *ao
@@ -269,8 +352,6 @@ int out123_start( audio_output_t *ao
 	else
 #endif
 	{
-		if(!ao->module)
-			return out123_seterr(ao, OUT123_NO_DRIVER);
 		if(ao->open(ao) < 0)
 			return out123_seterr(ao, OUT123_DEV_OPEN);
 	}
@@ -304,8 +385,7 @@ void out123_continue(audio_output_t *ao)
 
 void out123_stop(audio_output_t *ao)
 {
-	if(!ao || !ao->module
-	       || !(ao->state == play_paused || ao->state == play_live))
+	if(!ao || !(ao->state == play_paused || ao->state == play_live))
 		return;
 #ifndef NOXFERMEM
 	if(have_buffer(ao))
@@ -399,128 +479,108 @@ static int builtin_close(struct audio_output_struct *ao)
 static int  builtin_nothingint(struct audio_output_struct *ao){ return 0; }
 static void builtin_nothing(struct audio_output_struct *ao){}
 
-audio_output_t* open_fake_module(void)
+static 
+
+/* Open one of our builtin driver modules. */
+int open_fake_module(audio_output_t *ao, const char *driver)
 {
-	audio_output_t *ao = NULL;
-	ao = alloc_audio_output();
-	if(ao == NULL)
+	if(!strcmp("raw", driver))
 	{
-		error("Cannot allocate memory for audio output data.");
-		return NULL;
+		ao->open  = builtin_nothingint;
+		ao->fn    = OutputDescriptor; /* TODO: communicate that one, or open here. */
+		ao->write = file_write;
 	}
+	else
+	if(!strcmp("wav", driver))
+	{
+		ao->open  = wav_open;
+		ao->write = wave_write;
+	}
+	else
+	if(!strcmp("cdr", driver))
+	{
+		ao->open  = cdr_open;
+		ao->write = wave_write;
+	}
+	else
+	if(strcmp("au", driver))
+	{
+		ao->open  = au_open;
+		ao->write = wave_write;
+	}
+	else return OUT123_ERR;
+
+	/* Only set of one of the above matched. */
 	ao->module = NULL;
-	ao->open   = builtin_nothingint;
 	ao->flush  = builtin_nothing;
 	ao->get_formats = builtin_get_formats;
-	ao->write  = wave_write;
 	ao->close  = builtin_close;
-	ao->device = param.filename;
-	switch(param.outmode)
-	{
-		case DECODE_FILE:
-			ao->fn    = OutputDescriptor;
-			ao->write = file_write;
-		break;
-		case DECODE_WAV:
-			ao->open  = wav_open;
-		break;
-		case DECODE_CDR:
-			ao->open  = cdr_open;
-		break;
-		case DECODE_AU:
-			ao->open  = au_open;
-		break;
-		case DECODE_TEST:
-		break;
-	}
+set ao->init_output to make module loader code happy
 
-	return ao;
+
+	return OUT123_OK;
 }
 
-/* Open an audio output module, trying modules in list (comma-separated). */
-audio_output_t* open_output_module( const char* names )
+/* Check if given output module is loadable and has a working device.
+   final flag triggers printing and storing of errors. */
+void check_output_module( audio_output_t *ao
+,	const char *name, const char *device, int final )
 {
-	mpg123_module_t *module = NULL;
-	audio_output_t *ao = NULL;
-	int result = 0;
-	char *curname, *modnames;
-
-	if(param.usebuffer || names==NULL) return NULL;
 
 	/* Use internal code. */
-	if(param.outmode != DECODE_AUDIO) return open_fake_module();
-
-	modnames = strdup(names);
-	if(modnames == NULL)
+	if(open_fake_module(ao, name) == OUT123_OK)
 	{
-		error("Error allocating memory for module names.");
-		return NULL;
-	}
-	/* Now loop over the list of possible modules to find one that works. */
-	curname = strtok(modnames, ",");
-	while(curname != NULL)
-	{
-		char* name = curname;
-		curname = strtok(NULL, ",");
-		if(param.verbose > 1) fprintf(stderr, "Trying output module %s.\n", name);
-		/* Open the module, initial check for availability+libraries. */
-		module = open_module( "output", name );
-		if(module == NULL) continue;
-		/* Check if module supports output */
-		if(module->init_output == NULL)
-		{
-			error1("Module '%s' does not support audio output.", name);
-			close_module(module);
-			continue; /* Try next one. */
-		}
-		/* Allocation+initialization of memory for audio output type. */
-		ao = alloc_audio_output();
-		if(ao==NULL)
-		{
-			error("Failed to allocate audio output structure.");
-			close_module(module);
-			break; /* This is fatal. */
-		}
 
-		/* Call the init function */
-		ao->device = param.output_device;
-		ao->flags  = param.output_flags;
-		/* Should I do funny stuff with stderr file descriptor instead? */
-		if(curname == NULL)
-		{
-			if(AOVERBOSE(2))
-			fprintf(stderr, "Note: %s is the last output option... showing you any error messages now.\n", name);
-		}
-		else ao->auxflags |= OUT123_QUIET; /* Probing, so don't spill stderr with errors. */
-		ao->is_open = FALSE;
-		ao->module = module; /* Need that to close module later. */
-		result = module->init_output(ao);
-		if(result == 0)
-		{ /* Try to open the device. I'm only interested in actually working modules. */
-			result = open_output(ao);
-			close_output(ao);
-		}
-		else if(!AOQUIET) error2("Module '%s' init failed: %i", name, result);
-
-		if(result!=0)
-		{ /* Try next one... */
-			close_module(module);
-			free(ao);
-			ao = NULL;
-		}
-		else 
-		{ /* All good, leave the loop. */
-			if(AOVERBOSE(2)) fprintf(stderr, "Output module '%s' chosen.\n", name);
-
-			ao->auxflags &= ~OUT123_QUIET;
-			break;
-		}
+		... record that driver ... else continue searching
 	}
 
-	free(modnames);
-	if(ao==NULL) error1("Unable to find a working output module in this list: %s", names);
 
-	return ao;
+	if(param.verbose > 1) fprintf(stderr, "Trying output module %s.\n", name);
+
+	/* Open the module, initial check for availability+libraries. */
+	module = open_module( "output", name );
+	if(module == NULL) continue;
+	/* Check if module supports output */
+	if(module->init_output == NULL)
+	{
+		error1("Module '%s' does not support audio output.", name);
+		close_module(module);
+		continue; /* Try next one. */
+	}
+
+	/* Call the init function */
+	ao->device = param.output_device;
+	/* Should I do funny stuff with stderr file descriptor instead? */
+	if(curname == NULL)
+	{
+		if(AOVERBOSE(2))
+		fprintf(stderr, "Note: %s is the last output option... showing you any error messages now.\n", name);
+	}
+	else ao->auxflags |= OUT123_QUIET; /* Probing, so don't spill stderr with errors. */
+	ao->is_open = FALSE;
+	ao->module = module; /* Need that to close module later. */
+	result = module->init_output(ao);
+	if(result == 0)
+	{ /* Try to open the device. I'm only interested in actually working modules. */
+		result = open_output(ao);
+		close_output(ao);
+	}
+	else if(!AOQUIET) error2("Module '%s' init failed: %i", name, result);
+
+	if(result!=0)
+	{ /* Try next one... */
+		close_module(module);
+		free(ao);
+		ao = NULL;
+	}
+	else 
+	{ /* All good, leave the loop. */
+		if(AOVERBOSE(2))
+			fprintf(stderr, "Output module '%s' chosen.\n", name);
+
+		ao->auxflags &= ~OUT123_QUIET;
+		break;
+	}
 }
 
 
@@ -544,37 +604,6 @@ void close_output_module( audio_output_t* ao )
 	free( ao );
 }
 
-
-
-/* TODO: delete allocate and initialise memory */
-static audio_output_t* alloc_audio_output(void)
-{
-	audio_output_t* ao = malloc( sizeof( audio_output_t ) );
-	if (ao==NULL) error( "Failed to allocate memory for audio_output_t." );
-
-	/* Initialise variables */
-	ao->fn = -1;
-	ao->rate = -1;
-	ao->gain = param.gain;
-	ao->userptr = NULL;
-	ao->device = NULL;
-	ao->channels = -1;
-	ao->format = -1;
-	ao->flags = 0;
-	ao->auxflags = 0;
-
-	/*ao->module = NULL;*/
-
-	/* Set the callbacks to NULL */
-	ao->open = NULL;
-	ao->get_formats = NULL;
-	ao->write = NULL;
-	ao->flush = NULL;
-	ao->close = NULL;
-	ao->deinit = NULL;
-	
-	return ao;
-}
 
 /*
 static void audio_output_dump(audio_output_t *ao)
