@@ -64,7 +64,7 @@ enum xf_cmd_code
 ,	XF_CMD_CONTINUE  /**< Continue operation. */
 ,	XF_CMD_IGNLOW    /**< Ignore situation with low buffer fill. */
 ,	XF_CMD_OK        /**< Response from reader: Operation succeeded. */
-,	XF_CMD_ERROR     /**< Response from reader: Operation failed. */
+,	XF_CMD_ERROR     /**< Response from reader: Operation failed.  */
 ,	XF_CMD_CUSTOM1   /**< Some custom command to be filled with meaning. */
 ,	XF_CMD_CUSTOM2   /**< Some custom command to be filled with meaning. */
 ,	XF_CMD_CUSTOM3   /**< Some custom command to be filled with meaning. */

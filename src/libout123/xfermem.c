@@ -253,9 +253,14 @@ int xfermem_writer_block(txfermem *xf)
 
 	xfermem_putcmd(myfd, XF_CMD_PING);
 	result = xfermem_getcmd(myfd, TRUE);
-	return ((result <= 0) ? -1 : result);
+	/* Only a pong to my ping is the expected good answer.
+	   Everything else is a problem to be communicated. */
+	return (result == XF_CMD_PONG) ? 0 : result;
 }
 
+/* Return: 0 on success, -1 on communication error, > 0 for
+   error on buffer side, some special return code from buffer to be
+   evaluated. */
 int xfermem_write(txfermem *xf, byte *buffer, size_t bytes)
 {
 	if(buffer == NULL || bytes < 1) return 0;
@@ -263,12 +268,9 @@ int xfermem_write(txfermem *xf, byte *buffer, size_t bytes)
 	/* You weren't so braindead not allocating enough space at all, right? */
 	while (xfermem_get_freespace(xf) < bytes)
 	{
-		int cmd =  xfermem_writer_block(xf);
-		if (cmd == XF_CMD_TERMINATE || cmd < 0)
-		{
-			error("failed to wait for free space");
-			return -1; /* Failure. */
-		}
+		int cmd = xfermem_writer_block(xf);
+		if(cmd) /* Non-successful wait. */
+			return cmd;
 	}
 	/* Now we have enough space. copy the memory, possibly with the wrap. */
 	if(xf->size - xf->freeindex >= bytes)

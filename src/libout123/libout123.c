@@ -32,9 +32,6 @@ void out123_clear_module(audio_output_t *ao)
 	ao->deinit = NULL;
 
 	ao->module = NULL;
-
-	ao->driver = NULL;
-	ao->device = NULL;
 }
 
 audio_output_t* out123_new(void)
@@ -55,6 +52,8 @@ audio_output_t* out123_new(void)
 		ao->userptr = NULL;
 
 		out123_clear_module(ao);
+		ao->driver = NULL;
+		ao->device = NULL;
 
 		ao->flags = 0;
 		ao->rate = -1;
@@ -120,8 +119,8 @@ const char* out123_plain_strerror(int errcode)
 
 static int out123_seterr(audio_output_t *ao, enum out123_error errcode)
 {
-	if(!ao) return OUT123_ERR;
-
+	if(!ao)
+		return OUT123_ERR;
 	ao->errcode = errcode;
 	return errcode == OUT123_OK ? OUT123_OK : OUT123_ERR;
 }
@@ -130,6 +129,9 @@ static int out123_seterr(audio_output_t *ao, enum out123_error errcode)
 
 int out123_set_buffer(audio_output_t *ao, size_t buffer_bytes)
 {
+	if(!ao)
+		return OUT123_ERR;
+	ao->errcode = 0;
 	/* Close any audio output module if present, also kill of buffer if present,
 	   then start new buffer process with newly allocated storage if given
 	   size is non-zero. */
@@ -147,7 +149,9 @@ int out123_param( audio_output_t *ao, enum out123_parms code
 {
 	int ret = 0;
 
-	if(!ao) return -1;
+	if(!ao)
+		return OUT123_ERR;
+	ao->errcode = 0;
 
 	switch(code)
 	{
@@ -170,6 +174,13 @@ int out123_param( audio_output_t *ao, enum out123_parms code
 			error1("bad parameter code %i", (int)code);
 			ret = -1;
 	}
+#ifndef NOXFERMEM
+	/* If there is a buffer, it needs to update its copy of parameters. */
+	if(have_buffer(ao))
+		/* No error check; if that fails, buffer is dead and we will notice
+		   soon enough. */
+		buffer_sync_param(ao);
+#endif
 	return ret;
 }
 
@@ -180,7 +191,9 @@ int *out123_getparam( audio_output_t *ao, enum out123_parms code
 	long value = 0;
 	double fvalue = 0.;
 
-	if(!ao) return -1;
+	if(!ao)
+		return OUT123_ERR;
+	ao->errcode = 0;
 
 	switch(code)
 	{
@@ -201,7 +214,7 @@ int *out123_getparam( audio_output_t *ao, enum out123_parms code
 		break;
 		default:
 			error1("bad parameter code %i", (int)code);
-			ret = -1;
+			ret = OUT123_ERR;
 	}
 	if(!ret)
 	{
@@ -211,25 +224,55 @@ int *out123_getparam( audio_output_t *ao, enum out123_parms code
 	return ret;
 }
 
-
 int audio_output_t *out123_param_from(audio_output_t *ao, audio_output_t* from_ao)
 {
 	if(!ao || !from_ao) return -1;
 
 	ao->flags     = from_ao->flags;
-	ao->usebuffer = from_ao->usebuffer;
 	ao->preload   = from_ao->preload;
 	ao->gain      = from_ao->gain;
+	ao->device_buffer = from_ao->device_buffer;
 	ao->verbose   = from_ao->verbose;
 
 	return 0;
 }
 
-/*
-*/
+/* Serialization of tunable parameters to communicate them between
+   main process and buffer. Make sure these two stay in sync ... */
+
+int out123_write_parameters(audio_output_t *ao, int fd)
+{
+	if(
+		GOOD_WRITEVAL(fd, ao->flags)
+	&&	GOOD_WRITEVAL(fd, ao->preload)
+	&&	GOOD_WRITEVAL(fd, ao->gain)
+	&&	GOOD_WRITEVAL(fd, ao->device_buffer)
+	&&	GOOD_WRITEVAL(fd, ao->verbose)
+	)
+		return 0;
+	else
+		return -1;
+}
+
+int out123_read_parameters(audio_output_t *ao, int fd)
+{
+	if(
+		GOOD_READVAL(fd, ao->flags)
+	&&	GOOD_READVAL(fd, ao->preload)
+	&&	GOOD_READVAL(fd, ao->gain)
+	&&	GOOD_READVAL(fd, ao->device_buffer)
+	&&	GOOD_READVAL(fd, ao->verbose)
+	)
+		return 0;
+	else
+		return -1;
+}
+
 int out123_open(audio_output_t *ao, const char* driver, const char* device)
 {
-	if(!ao) return OUT123_ERR;
+	if(!ao)
+		return OUT123_ERR;
+	ao->errcode = 0;
 
 	out123_close(ao);
 
@@ -278,6 +321,8 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 			check_output_module(ao, curname, device, !nextname);
 			if(ao->open)
 			{
+				if(AOVERBOSE(2))
+					fprintf(stderr, "Output module '%s' chosen.\n", curname);
 				/* A bit redundant, but useful when it's a fake module. */
 				if(!(ao->driver = strdup(curname)))
 				{
@@ -310,6 +355,10 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 /* Be resilient, always do cleanup work regardless of state. */
 void out123_close(audio_output_t *ao)
 {
+	if(!ao)
+		return;
+	ao->errcode = 0;
+
 	if(ao->close)
 		ao->close(ao);
 	if(ao->deinit)
@@ -317,19 +366,24 @@ void out123_close(audio_output_t *ao)
 	if(ao->module)
 		close_module(ao->module);
 
-	if(ao->driver) free(ao->driver);
-	if(ao->device) free(ao->device);
-	/* Nulls everything related to output module/driver. */
+	if(ao->driver)
+		free(ao->driver);
+	ao->driver = NULL;
+	if(ao->device)	
+		free(ao->device);
+	ao->device = NULL;
+	/* Null module methods and pointer. */
 	out123_clear_module(ao);
 
 	ao->state = play_dead;
 }
 
-TODO: finish
 int out123_start( audio_output_t *ao
 ,                  int encoding, int channels, long rate )
 {
-	if(!ao) return OUT123_ERR;
+	if(!ao)
+		return OUT123_ERR;
+	ao->errcode = 0;
 
 	out123_stop(ao);
 	if(ao->state != play_stopped)
@@ -345,18 +399,22 @@ int out123_start( audio_output_t *ao
 #ifndef NOXFERMEM
 	if(have_buffer(ao))
 	{
-		/* send message to buffer, wait for success */
-		if(buffer_open_device(ao))
-			return out123_seterr(ao, OUT123_DEV_OPEN);
+		if(!buffer_start(ao))
+		{
+			ao->state = play_live;
+			return OUT123_OK;
+		}
+		else
+			return OUT123_ERR;
 	}
 	else
 #endif
 	{
 		if(ao->open(ao) < 0)
 			return out123_seterr(ao, OUT123_DEV_OPEN);
+		ao->state = play_live;
+		return OUT123_OK;
 	}
-	ao->state = play_live;
-	return OUT123_OK;
 }
 
 void out123_pause(audio_output_t *ao)
@@ -385,11 +443,14 @@ void out123_continue(audio_output_t *ao)
 
 void out123_stop(audio_output_t *ao)
 {
-	if(!ao || !(ao->state == play_paused || ao->state == play_live))
+	if(!ao)
+		return;
+	ao->errcode = 0;
+	if(!(ao->state == play_paused || ao->state == play_live))
 		return;
 #ifndef NOXFERMEM
 	if(have_buffer(ao))
-		buffer_close_device(ao);
+		buffer_stop(ao);
 	else
 #endif
 	if(ao->close)
@@ -404,6 +465,7 @@ size_t out123_play(audio_output_t *ao, unsigned char *bytes, size_t count)
 
 	if(!ao)
 		return 0;
+	ao->errcode = 0;
 	if(ao->state != play_live)
 	{
 		ao->errcode = OUT123_NOT_LIVE;
@@ -435,9 +497,41 @@ size_t out123_play(audio_output_t *ao, unsigned char *bytes, size_t count)
 	return sum;
 }
 
+/* Drop means to flush it down. Quickly. */
+void out123_drop(audio_output_t *ao)
+{
+	if(!ao)
+		return;
+	ao->errcode = 0;
+#ifndef NO_XFERMEM
+	if(have_buffer(ao))
+		buffer_flush(ao);
+	else
+#endif
+	if(ao->state == play_live)
+	{
+		if(ao->flush) ao->flush(ao);
+	}
+}
 
-
-static audio_output_t* alloc_audio_output(void);
+void out123_drain(audio_output_t *ao)
+{
+	if(!ao)
+		return;
+	ao->errcode = 0;
+#ifndef NO_XFERMEM
+	if(have_buffer(ao))
+		buffer_drain(ao);
+	else
+#endif
+	if(ao->state == play_live)
+	{
+		debug("TODO: drain hardware");
+		/* TODO: Do proper draining. Thought about closing/opening devices.
+		   That would work unless we have a fake module at hand that writes a
+		   file. Do not want to accidentally truncate! */
+	}
+}
 
 static int file_write(struct audio_output_struct* ao, unsigned char *bytes, int count)
 {
@@ -479,10 +573,8 @@ static int builtin_close(struct audio_output_struct *ao)
 static int  builtin_nothingint(struct audio_output_struct *ao){ return 0; }
 static void builtin_nothing(struct audio_output_struct *ao){}
 
-static 
-
 /* Open one of our builtin driver modules. */
-int open_fake_module(audio_output_t *ao, const char *driver)
+static int open_fake_module(audio_output_t *ao, const char *driver)
 {
 	if(!strcmp("raw", driver))
 	{
@@ -526,40 +618,34 @@ set ao->init_output to make module loader code happy
 void check_output_module( audio_output_t *ao
 ,	const char *name, const char *device, int final )
 {
+	if(AOVERBOSE(1)) fprintf(stderr, "Trying output module %s.\n", name);
 
 	/* Use internal code. */
 	if(open_fake_module(ao, name) == OUT123_OK)
-	{
-
-		... record that driver ... else continue searching
-	}
-
-
-	if(param.verbose > 1) fprintf(stderr, "Trying output module %s.\n", name);
+		return;
 
 	/* Open the module, initial check for availability+libraries. */
-	module = open_module( "output", name );
-	if(module == NULL) continue;
+	ao->module = open_module( "output", name );
+	if(!ao->module)
+		return;
 	/* Check if module supports output */
-	if(module->init_output == NULL)
+	if(!ao->module->init_output)
 	{
-		error1("Module '%s' does not support audio output.", name);
-		close_module(module);
-		continue; /* Try next one. */
+		if(final)
+			error1("Module '%s' does not support audio output.", name);
+		goto check_output_module_cleanup;
 	}
 
-	/* Call the init function */
-	ao->device = param.output_device;
 	/* Should I do funny stuff with stderr file descriptor instead? */
-	if(curname == NULL)
+	if(final)
 	{
 		if(AOVERBOSE(2))
-		fprintf(stderr, "Note: %s is the last output option... showing you any error messages now.\n", name);
+			fprintf(stderr
+			,	"Note: %s is the last output option... showing you any error messages now.\n"
+			,	name);
 	}
 	else ao->auxflags |= OUT123_QUIET; /* Probing, so don't spill stderr with errors. */
-	ao->is_open = FALSE;
-	ao->module = module; /* Need that to close module later. */
-	result = module->init_output(ao);
+	result = ao->module->init_output(ao);
 	if(result == 0)
 	{ /* Try to open the device. I'm only interested in actually working modules. */
 		result = open_output(ao);
@@ -567,43 +653,17 @@ void check_output_module( audio_output_t *ao
 	}
 	else if(!AOQUIET) error2("Module '%s' init failed: %i", name, result);
 
-	if(result!=0)
-	{ /* Try next one... */
-		close_module(module);
-		free(ao);
-		ao = NULL;
-	}
-	else 
-	{ /* All good, leave the loop. */
-		if(AOVERBOSE(2))
-			fprintf(stderr, "Output module '%s' chosen.\n", name);
+	ao->auxflags &= ~OUT123_QUIET;
 
-		ao->auxflags &= ~OUT123_QUIET;
-		break;
-	}
+	if(!result)
+		return;
+
+check_output_module_cleanup:
+	/* Only if module did not check out we get to clean up here. */
+	close_module(ao->module);
+	out123_clear_module(ao);
+	return;
 }
-
-
-
-/* Close the audio output and close the module */
-void close_output_module( audio_output_t* ao ) 
-{
-	if (!ao) return; /* That covers buffer mode, too (ao == NULL there). */
-	
-	debug("closing output module");
-	/* Close the audio output */
-	if(ao->is_open && ao->close != NULL) ao->close(ao);
-
-	/* Deinitialise the audio output */
-	if (ao->deinit) ao->deinit( ao );
-	
-	/* Unload the module */
-	if (ao->module) close_module( ao->module );
-
-	/* Free up memory */
-	free( ao );
-}
-
 
 /*
 static void audio_output_dump(audio_output_t *ao)
@@ -706,13 +766,19 @@ const char* audio_device_name(audio_output_t *ao)
 }
 
 
-int out123_get_encodings(audio_output_t *ao, long rate, int channels)
+int out123_get_encodings(audio_output_t *ao, int channels, long rate)
 {
+	if(!ao)
+		return OUT123_ERR;
+	ao->errocde = OUT123_OK;
+
 	out123_stop(ao); /* That brings the buffer into waiting state, too. */
 
 	if(ao->state != play_stopped)
 		return out123_seterr(ao, OUT123_NO_DRIVER);
 
+	ao->channels = channels;
+	ao->rate     = rate;
 #ifndef NOXFERMEM
 	if(ao->buffer_pid != -1)
 		return buffer_get_encodings(ao);
@@ -722,8 +788,6 @@ int out123_get_encodings(audio_output_t *ao, long rate, int channels)
 		int enc = 0;
 		if(ao->) return 0;
 		ao->format   = -1;
-		ao->rate     = rate;
-		ao->channels = channels;
 		if(ao->open(ao) >= 0)
 		{
 			enc = ao->get_formats(ao);
@@ -956,63 +1020,16 @@ int audio_reset(audio_output_t *ao, long rate, int channels, int format)
 	return 0;
 }
 
-void audio_drain(audio_output_t *ao)
+long out123_buffered(audio_output_t *ao)
 {
-   /* TODO: include actual device draining, too (also in buffer). */
-	if(!param.usebuffer) return;
+	if(!ao)
+		return OUT123_ERR;
+	ao->errcode = 0;
 #ifndef NOXFERMEM
-	int s;
-	while ((s = xfermem_get_usedspace(buffermem)))
-	{
-		struct timeval wait170 = {0, 170000};
-		if(intflag) break;
-		buffer_ignore_lowmem();
-/*		if(param.verbose) print_stat(mh,0,s); */
-		select(0, NULL, NULL, NULL, &wait170);
-	}
-#endif
-}
-
-/* The ao parameter is for the future when buffermem will be part of it. */
-long audio_buffered_bytes(audio_output_t *ao)
-{
-#ifndef NOXFERMEM
-	return xfermem_get_usedspace(buffermem);
+	if(have_buffer(ao)
+		return buffer_fill(ao);
+	else
 #else
 	return 0;
-#endif
-}
-
-
-void audio_stop(audio_output_t *ao)
-{
-	if(param.usebuffer) buffer_stop();
-}
-
-void audio_drop(audio_output_t *ao)
-{
-	if(param.usebuffer) buffer_resync();
-	else ao->flush(ao);
-}
-
-/* Drop current buffer contents.
-   A more complete audio_drop() would resync buffer
-   and also flush/drop underlying audio device output */
-void audio_buffer_drop(audio_output_t *ao)
-{
-	buffer_resync();
-}
-
-/* TODO: Fix buffer loop to start right away and just wait for correct
-   commands. */
-void audio_fixme_wake_buffer(audio_output_t *ao)
-{
-#ifndef NOXFERMEM
-	/* Buffer loop shall start normal operation now. */
-	if(param.usebuffer)
-	{
-		xfermem_putcmd(buffermem->fd[XF_WRITER], XF_CMD_WAKEUP);
-		xfermem_getcmd(buffermem->fd[XF_WRITER], TRUE);
-	}
 #endif
 }

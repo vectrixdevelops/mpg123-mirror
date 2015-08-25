@@ -37,7 +37,6 @@ enum playstate
 {
 	play_dead = 0 /* nothing playing, nothing loaded */
 ,	play_stopped  /* driver present, but no device configured/opened */
-,	play_open     /* ... device opened for querying formats .. makes sense?! check old code again */
 ,	play_paused   /* paused, ready to continue, device still active */
 ,	play_live     /* playing right now */
 };
@@ -85,6 +84,10 @@ typedef struct audio_output_struct
 /* Lazy. */
 #define AOQUIET ((ao->auxflags | ao->flags) & OUT123_QUIET)
 #define AOVERBOSE(v) (!AOQUIET && ao->verbose >= (v))
+#define GOOD_WRITEVAL(fd, val)     (unintr_write(fd, &(val), sizeof((val))) == sizeof((val)))
+#define GOOD_WRITEBUF(fd, addr, n) (unintr_write(fd, (addr), (n)) == (n))
+#define GOOD_READVAL(fd, val)      (unintr_read(fd, &(val), sizeof((val))) == sizeof((val)))
+#define GOOD_READBUF(fd, addr, n)  (unintr_read(fd, (addr), (n)) == (n))
 
 struct audio_format_name {
 	int  val;

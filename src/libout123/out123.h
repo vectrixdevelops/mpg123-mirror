@@ -232,7 +232,7 @@ int out123_param( audio_output_t *ao, enum out123_parms code
  * \param code parameter code
  * \param value output address for integer parameters
  * \param fvalue output address for floating point parameters
- * \return 0 on success, MPG123_ERR on error.
+ * \return 0 on success, MPG123_ERR on error (bad parameter name or bad handle).
  */
 audio_output_t *out123_getparam( audio_output_t *ao, enum out123_parms code
 ,                                long *ret_value, double *ret_fvalue );
@@ -287,7 +287,7 @@ void out123_close(audio_output_t *ao);
  * \return supported encodings combined with bitwise or, to be checked
  *         against your favourite bitmask, -1 on error
  */
-int out123_get_encodings(audio_output_t *ao, long rate, int channels);
+int out123_get_encodings(audio_output_t *ao, int channels, long rate);
 
 /** Get size of one PCM sample with given encoding.
  *  This is a macro that might belong into a header file separate from
@@ -377,11 +377,14 @@ size_t out123_play( audio_output_t *ao
  */
 void out123_drop(audio_output_t *ao);
 
-/** Drain the output, waiting until all data went to the hardware. */
+/** Drain the output, waiting until all data went to the hardware.
+  * This does not imply out123_stop(). You might continue handing in
+  * new data after that (after you enforced a buffer underrun ...).
+  */
 void out123_drain(audio_output_t *ao);
 
 /** Get an indication of how many bytes reside in the optional buffer.
- * \return number of bytes in out123 library buffer
+ * \return number of bytes in out123 library buffer, -1 on error.
  */
 long out123_buffered(audio_output_t *ao);
 
