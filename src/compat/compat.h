@@ -177,8 +177,8 @@ int win32_utf8_wide(const char *const mbptr, wchar_t **wptr, size_t *buflen);
 /* Blocking write/read of data with signal resilience.
    Both continue after being interrupted by signals and always return the
    amount of processed data (shortage indicating actual problem or EOF). */
-size_t unintr_write(int fd, byte* buffer, size_t bytes);
-size_t unintr_read (int fd, byte* buffer, size_t bytes);
+size_t unintr_write(int fd, void *buffer, size_t bytes);
+size_t unintr_read (int fd, void *buffer, size_t bytes);
 
 /* That one comes from Tellie on OS/2, needed in resolver. */
 #ifdef __KLIBC__
