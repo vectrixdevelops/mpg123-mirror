@@ -1,4 +1,4 @@
-/*
+b/*
 	audio: audio output interface
 
 	copyright ?-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
@@ -11,7 +11,6 @@
 #include "common.h"
 #include "buffer.h"
 
-
 #include "debug.h"
 
 static int have_buffer(audio_output_t *ao)
@@ -19,19 +18,19 @@ static int have_buffer(audio_output_t *ao)
 	return (ao->buffer_pid != -1);
 }
 
-/* TODO: clean that up */
-extern int intflag;
-
 void out123_clear_module(audio_output_t *ao)
 {
 	ao->open = NULL;
 	ao->get_formats = NULL;
 	ao->write = NULL;
 	ao->flush = NULL;
+	ao->drain = NULL;
 	ao->close = NULL;
 	ao->deinit = NULL;
 
 	ao->module = NULL;
+	ao->userptr = NULL;
+	ao->fn = -1;
 }
 
 audio_output_t* out123_new(void)
@@ -47,9 +46,6 @@ audio_output_t* out123_new(void)
 		ao->buffer_fd = { -1, -1 };
 		ao->buffermem = NULL;
 #endif
-
-		ao->fn = -1;
-		ao->userptr = NULL;
 
 		out123_clear_module(ao);
 		ao->driver = NULL;
@@ -87,10 +83,14 @@ void out123_del(audio_output_t *ao)
 static const char *const errstring[OUT123_ERRCOUNT] =
 {
 	"no problem"
+,	"out of memory"
+,	"bad driver name"
+,	"failure loading driver module"
 ,	"no driver loaded"
 ,	"no active audio device"
 ,	"some device playback error"
-,	"error opening device"
+,	"failed to open device"
+,	"buffer (communication) error"
 };
 
 const char* out123_strerror(audio_output_t *ao)
@@ -137,12 +137,13 @@ int out123_set_buffer(audio_output_t *ao, size_t buffer_bytes)
 	   size is non-zero. */
 	out123_close(ao);
 #ifndef NOXFERMEM
-	if(have_buffer(ao)) buffer_exit(ao);
-	if(buffer_bytes) return buffer_init(ao,
+	if(have_buffer(ao))
+		buffer_exit(ao);
+	if(buffer_bytes)
+		return buffer_init(ao, buffer_bytes);
 #endif
 	return 0;
 }
-
 
 int out123_param( audio_output_t *ao, enum out123_parms code
 ,                 long value, double fvalue )
@@ -453,12 +454,12 @@ void out123_stop(audio_output_t *ao)
 		buffer_stop(ao);
 	else
 #endif
-	if(ao->close)
-		ao->close(ao);
+	if(ao->close && ao->close(ao) && !AOQUIET)
+		error("trouble closing device");
 	ao->state = play_stopped;
 }
 
-size_t out123_play(audio_output_t *ao, unsigned char *bytes, size_t count)
+size_t out123_play(audio_output_t *ao, void *bytes, size_t count)
 {
 	size_t sum = 0;
 	int written;
@@ -483,7 +484,7 @@ size_t out123_play(audio_output_t *ao, unsigned char *bytes, size_t count)
 #endif
 	do /* Playback in a loop to be able to continue after interruptions. */
 	{
-		written = ao->write(ao, bytes, (int)count);
+		written = ao->write(ao, (unsigned char*)bytes, (int)count);
 		if(written >= 0){ sum+=written; count -= written; }
 		else
 		{
@@ -519,58 +520,18 @@ void out123_drain(audio_output_t *ao)
 	if(!ao)
 		return;
 	ao->errcode = 0;
+	if(ao->sate != play_live)
+		return;
 #ifndef NO_XFERMEM
 	if(have_buffer(ao))
 		buffer_drain(ao);
 	else
 #endif
-	if(ao->state == play_live)
-	{
-		debug("TODO: drain hardware");
-		/* TODO: Do proper draining. Thought about closing/opening devices.
-		   That would work unless we have a fake module at hand that writes a
-		   file. Do not want to accidentally truncate! */
-	}
+	if(ao->drain)
+		ao->drain(ao);
 }
 
-static int file_write(struct audio_output_struct* ao, unsigned char *bytes, int count)
-{
-	return (int)write(ao->fn, bytes, count);
-}
-static int wave_write(struct audio_output_struct* ao, unsigned char *bytes, int count)
-{
-	return wav_write(bytes, count);
-}
-static int builtin_get_formats(struct audio_output_struct *ao)
-{
-	if(param.outmode == DECODE_CDR)
-	{
-		if(ao->rate == 44100 && ao->channels == 2)
-		return MPG123_ENC_SIGNED_16;
-		else
-		return 0;
-	}
-	else if(param.outmode == DECODE_AU) return MPG123_ENC_SIGNED_16|MPG123_ENC_UNSIGNED_8|MPG123_ENC_ULAW_8;
-	else if(param.outmode == DECODE_WAV) return MPG123_ENC_SIGNED_16|MPG123_ENC_UNSIGNED_8|MPG123_ENC_FLOAT_32|MPG123_ENC_SIGNED_24|MPG123_ENC_SIGNED_32;
-	else return MPG123_ENC_ANY;
-}
-static int builtin_close(struct audio_output_struct *ao)
-{
-	switch(param.outmode)
-	{
-		case DECODE_WAV:
-		return wav_close();
-		break;
-		case DECODE_AU:
-		return au_close();
-		break;
-		case DECODE_CDR:
-		return cdr_close();
-		break;
-	}
-	return -1;
-}
-static int  builtin_nothingint(struct audio_output_struct *ao){ return 0; }
+/* A function that does nothing and returns nothing. */
 static void builtin_nothing(struct audio_output_struct *ao){}
 
 /* Open one of our builtin driver modules. */
@@ -578,37 +539,44 @@ static int open_fake_module(audio_output_t *ao, const char *driver)
 {
 	if(!strcmp("raw", driver))
 	{
-		ao->open  = builtin_nothingint;
-		ao->fn    = OutputDescriptor; /* TODO: communicate that one, or open here. */
-		ao->write = file_write;
+		ao->open  = raw_open;
+		ao->get_formats = raw_formats;
+		ao->write = wav_write;
+		ao->flush = builtin_nothing;
+		ao->drain = wav_drain;
+		ao->close = raw_close;
 	}
 	else
 	if(!strcmp("wav", driver))
 	{
-		ao->open  = wav_open;
-		ao->write = wave_write;
+		ao->open = wav_open;
+		ao->get_formats = wav_formats;
+		ao->write = wav_write;
+		ao->flush = builtin_nothing;
+		ao->drain = wav_drain;
+		ao->close = wav_close;
 	}
 	else
 	if(!strcmp("cdr", driver))
 	{
 		ao->open  = cdr_open;
-		ao->write = wave_write;
+		ao->get_formats = cdr_formats;
+		ao->write = wav_write;
+		ao->flush = builtin_nothing;
+		ao->drain = wav_drain;
+		ao->close = cdr_close;
 	}
 	else
 	if(strcmp("au", driver))
 	{
 		ao->open  = au_open;
-		ao->write = wave_write;
+		ao->get_formats = au_formats;
+		ao->write = wav_write;
+		ao->flush = builtin_nothing;
+		ao->drain = wav_drain;
+		ao->close = au_close;
 	}
 	else return OUT123_ERR;
-
-	/* Only set of one of the above matched. */
-	ao->module = NULL;
-	ao->flush  = builtin_nothing;
-	ao->get_formats = builtin_get_formats;
-	ao->close  = builtin_close;
-set ao->init_output to make module loader code happy
-
 
 	return OUT123_OK;
 }
@@ -780,7 +748,7 @@ int out123_get_encodings(audio_output_t *ao, int channels, long rate)
 	ao->channels = channels;
 	ao->rate     = rate;
 #ifndef NOXFERMEM
-	if(ao->buffer_pid != -1)
+	if(have_buffer(ao))
 		return buffer_get_encodings(ao);
 	else
 #endif
@@ -794,230 +762,10 @@ int out123_get_encodings(audio_output_t *ao, int channels, long rate)
 			ao->close(ao);
 			return enc;
 		}
-		else return out123_seterr(ao, OUT123_DEV_OPEN);
+		else return out123_seterr(ao, (ao->errcode != OUT123_OK
+		?	ao->errcode
+		:	OUT123_DEV_OPEN));
 	}
-}
-
-/* FIXME: Old output initialization code that needs updating */
-
-int init_output(audio_output_t **ao)
-{
-	static int init_done = FALSE;
-	
-	if (init_done) return 1;
-	init_done = TRUE;
-  
-#ifndef NOXFERMEM
-	if (param.usebuffer)
-	{
-	....
-	}
-#else
-	if(param.usebuffer)
-	{
-		error("Buffer not available in this build!");
-		return -1;
-	}
-#endif
-	if(!param.usebuffer)
-	{ /* Only if I handle audio device output: Get that module. */
-		*ao = open_output_module(param.output_module);
-		if(!(*ao))
-		{
-			error("Failed to open audio output module");
-			return -1;
-		}
-	}
-	else *ao = NULL; /* That ensures we won't try to free it later... */
-#ifndef NOXFERMEM
-	if(param.usebuffer)
-	{ /* Check if buffer is alive. */
-		int res = xfermem_getcmd(buffermem->fd[XF_WRITER], TRUE);
-		if(res < 0)
-		{
-			error("Buffer process didn't initialize!");
-			return -1;
-		}
-	}
-#endif
-	/* This has internal protection for buffer mode. */
-	if(open_output(*ao) < 0) return -1;
-
-	return 0;
-}
-
-void exit_output(audio_output_t *ao, int rude)
-{
-	debug("exit output");
-#ifndef NOXFERMEM
-	if (param.usebuffer)
-	{
-This needs to be moved to buffer.c, should it not?
-Same with starting the buffer process ...
-		debug("ending buffer");
-		buffer_stop(ao); /* Puts buffer into waiting-for-command mode. */
-		buffer_end(ao, rude);  /* Gives command to end operation. */
-		xfermem_done_writer(ao->buffermem);
-		waitpid (ao->buffer_pid, NULL, 0);
-		xfermem_done (ao->buffermem);
-	}
-#endif
-	/* Close the output... doesn't matter if buffer handled it, that's taken care of. */
-	close_output(ao);
-	close_output_module(ao);
-}
-
-/*
-	TODO: This should not flush data away, I need ad->drain(), together
-	with proper ao->pause() or actually closing/reopening things again.
-	Yes, close/reopen is it. I need to change usage in mpg123.c and introduce
-	the proper calls here.
-	Heck! No! We don't want to close the audio output. In case of something like
-	JACK, the user might have connected the outputs manually after opening.
-	We cannot just reopen things. We need to play silence in this case!
-	At least the case of
-	output_pause()
-	sleep(10)
-	output_unpause()
-	should be covered by playing silence instead.
-*/
-void output_pause(audio_output_t *ao)
-{
-	if(param.usebuffer) buffer_stop();
-	else ao->flush(ao);
-}
-
-void output_unpause(audio_output_t *ao)
-{
-	if(param.usebuffer) buffer_start();
-}
-
-int open_output(audio_output_t *ao)
-{
-	if(param.usebuffer) return 0;
-
-	if(ao == NULL)
-	{
-		error("ao should not be NULL here!");
-		exit(110);
-	}
-
-	ao->framesize = ao->channels * mpg123_encsize(ao->format);
-
-	switch(param.outmode)
-	{
-		case DECODE_AUDIO:
-		case DECODE_WAV:
-		case DECODE_AU:
-		case DECODE_CDR:
-		case DECODE_FILE:
-			debug("opening normal audio/file");
-			ao->is_open = ao->open(ao) < 0 ? FALSE : TRUE;
-			if(!ao->is_open)
-			{
-				if(!AOQUIET) error("failed to open audio device");
-				return -1;
-			}
-			else return 0;
-		break;
-		case DECODE_TEST:
-			debug("decoding to nowhere");
-			return 0;
-		break;
-	}
-	debug("nothing");
-	return -1; /* That's an error ... unknown outmode? */
-}
-
-/* is this used? */
-void close_output(audio_output_t *ao)
-{
-	if(param.usebuffer) return;
-
-	debug("closing output");
-	switch(param.outmode)
-	{
-		case DECODE_AUDIO:
-		case DECODE_WAV:
-		case DECODE_AU:
-		case DECODE_CDR:
-		/* Guard that close call; could be nasty. */
-		if(ao->is_open)
-		{
-			ao->is_open = FALSE;
-			if(ao->close != NULL) ao->close(ao);
-		}
-		break;
-	}
-}
-
-/* Also for WAV decoding? */
-int reset_output(audio_output_t *ao)
-{
-	if(!param.usebuffer)
-	{
-		close_output(ao);
-		return open_output(ao);
-	}
-	else return 0;
-}
-
-/* Just set the format parameters that would be used on next opening. */
-void audio_prepare_format(audio_output_t *ao, int rate, int channels, int encoding)
-{
-	if(!ao) return;
-	ao->rate     = rate;
-	ao->channels = channels;
-	ao->format   = encoding;
-}
-
-/*
- *   Change the playback sample rate.
- *   Consider that changing it after starting playback is not covered by gapless code!
- */
-int audio_reset(audio_output_t *ao, long rate, int channels, int format)
-{
-#ifndef NOXFERMEM
-	if (param.usebuffer) {
-		/* wait until the buffer is empty,
-		 * then tell the buffer process to
-		 * change the sample rate.   [OF]
-		 */
-		while (xfermem_get_usedspace(buffermem)	> 0)
-			if (xfermem_block(XF_WRITER, buffermem) == XF_CMD_TERMINATE) {
-				intflag = TRUE;
-				break;
-			}
-		buffermem->freeindex = -1;
-		buffermem->readindex = 0; /* I know what I'm doing! ;-) */
-		buffermem->freeindex = 0;
-		if (intflag)
-			return 0;
-		buffermem->rate     = pitch_rate(rate); 
-		buffermem->channels = channels; 
-		buffermem->format   = format;
-		buffer_reset();
-	}
-	else 
-	{
-#endif
-		if(ao == NULL)
-		{
-			error("Audio handle should not be NULL here!");
-			return 98; /* historic argument to safe_exit() */
-		}
-		ao->rate     = pitch_rate(rate); 
-		ao->channels = channels; 
-		ao->format   = format;
-		if(reset_output(ao) < 0)
-		{
-			error1("failed to reset audio device: %s", strerror(errno));
-			return 1; /* historic argument to safe_exit() */
-		}
-#ifndef NOXFERMEM
-	}
-#endif
-	return 0;
 }
 
 long out123_buffered(audio_output_t *ao)

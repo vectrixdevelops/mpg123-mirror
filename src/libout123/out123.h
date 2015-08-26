@@ -131,26 +131,12 @@ audio_output_t *out123_new(void);
  */
 void out123_del(audio_output_t *ao);
 
-/* TODO: figure out if error codes are part of the API
-
-	Old note to self: Error enumeration values are not part of the official API.
-	This was a mistake in mpg123.h . A new library version can introduce new
-	error codes which are not part of the old client binary's vision of the
-	enum type. Hence, should not have been part of the API to begin with.
-
-	New thought: Should these be defined in the out123 header after all?
-	This would enable client programs to check for specific errors and
-	react to them. But then, I have the issue of the lib being able to
-	return new error codes the app does not know, OUT123_ERRCOUNT being
-	wrong.
-
-	Perhaps better to have certain message codes from API calls documented
-	and handled differently. But not giving names to error codes needs
-	language processing in case a client app indeed wants to react to a
-	certain kind of error. They still can check the value of errno, unless
-	the core error happened in the buffer process. Heck, should I propagate
-	that, too?!
-*/
+/** Error code enumeration
+ * API calls return a useful (positve) value or zero (OUT123_OK) on simple
+ * success. A negative value (-1 == OUT123_ERR) usually indicates that some
+ * error occured. Which one, that can be queried using out123_errcode()
+ * and friends.
+ */
 enum out123_error
 {
 ,	OUT123_ERR = -1 /**< generic alias for verbosity, always == -1 */
@@ -262,7 +248,7 @@ char * out123_supported_drivers(void);
  *  opened. After out123_open(), you can ask for supported encodings
  *  and then really open the device for playback with out123_start().
  * \param driver (comma-separated list of) output driver name(s to try),
- *               NULL for default
+ *               NULL for default (stdout for file-based drivers)
  * \param device device name to open, NULL for default
  * \return 0 on success, -1 on error.
  */
@@ -362,12 +348,16 @@ void out123_stop(audio_output_t *ao);
  *  you provided a byte count divisible by the PCM frame size, it is an
  *  error when less bytes than given are played.
  *  To be sure if an error occured, check out123_errcode().
+ *  Also note that it is no accident that the buffer parameter is not marked
+ *  as constant. Some output drivers might need to do things like swap
+ *  byte order. This is done in-place instead of wasting memory on yet
+ *  another copy. 
  * \param buffer pointer to raw audio data to be played
  * \param bytes number of bytes to read from the buffer
  * \return number of bytes played (might be less than given, even zero)
  */
 size_t out123_play( audio_output_t *ao
-                  , unsigned char const * buffer, size_t bytes );
+                  , void *buffer, size_t bytes );
 
 /** Drop any buffered data, making next provided data play right away.
  *  This is different from out123_pause() in that it doesn't imply
@@ -380,10 +370,14 @@ void out123_drop(audio_output_t *ao);
 /** Drain the output, waiting until all data went to the hardware.
   * This does not imply out123_stop(). You might continue handing in
   * new data after that (after you enforced a buffer underrun ...).
+  * This might involve only the optional buffer process, or the
+  * buffers on the audio driver side, too.
   */
 void out123_drain(audio_output_t *ao);
 
 /** Get an indication of how many bytes reside in the optional buffer.
+ * This might get extended to tell the number of bytes queued up in the
+ * audio backend, too.
  * \return number of bytes in out123 library buffer, -1 on error.
  */
 long out123_buffered(audio_output_t *ao);

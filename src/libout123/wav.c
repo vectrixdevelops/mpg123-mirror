@@ -1,7 +1,7 @@
 /*
-	wav.c: write wav files
+	wav.c: write wav/au/cdr files
 
-	copyright ?-2012 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright ?-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Samuel Audet
 
@@ -16,7 +16,12 @@
 	ThOr: The usage of stdio streams means we loose control over what data is actually written. On a full disk, fwrite() happily suceeds for ages, only a fflush fails.
 	Now: Do we want to fflush() after every write? That defeats the purpose of buffered I/O. So, switching to good old write() is an option (kernel doing disk buffering anyway).
 
-	TODO: convert fully to tab indent
+	ThOr: Again reworked things for libout123, with non-static state.
+	This set of builtin "modules" is what we can use in automated tests
+	of libout123. Code still not very nice, but I tried to keep modification
+	of what stood the test of time minimal. One still can add a module to
+	libout123 that uses sndfile and similar libraries for more choice on writing
+	output files.
 */
 
 #include "out123_int.h"
@@ -27,13 +32,15 @@
 /* Create the two WAV headers. */
 
 #define WAVE_FORMAT 1
-#define RIFF_NAME RIFF
+#define RIFF_NAME riff_template
+#define RIFF_STRUCT_NAME riff
 #include "wavhead.h"
 
 #undef WAVE_FORMAT
 #undef RIFF_NAME
 #define WAVE_FORMAT 3
-#define RIFF_NAME RIFF_FLOAT
+#define RIFF_NAME riff_float_template
+#define RIFF_STRUCT_NAME riff_float
 #define FLOATOUT
 #include "wavhead.h"
 
@@ -47,24 +54,62 @@ struct auhead {
   byte rate[4];
   byte channels[4];
   byte dummy[8];
-} auhead = { 
+} const auhead_template = { 
   { 0x2e,0x73,0x6e,0x64 } , { 0x00,0x00,0x00,0x20 } , 
   { 0xff,0xff,0xff,0xff } , { 0,0,0,0 } , { 0,0,0,0 } , { 0,0,0,0 } , 
   { 0,0,0,0,0,0,0,0 }};
 
+struct wavdata
+{
+	FILE *wavfp;
+	long datalen = 0;
+	int flipendian=0;
+	int bytes_per_sample = -1;
+	int floatwav = 0; /* If we write a floating point WAV file. */
+	/* 
+		Open routines only prepare a header, stored here and written on first
+		actual data write. If no data is written at all, proper files will
+		still get a header via the update at closing; non-seekable streams will
+		just have no no header if there is no data.
+	*/
+	void *the_header = NULL;
+	size_t the_header_size = 0;
+}
 
-static FILE *wavfp;
-static long datalen = 0;
-static int flipendian=0;
-int bytes_per_sample = -1;
-int floatwav = 0; /* If we write a floating point WAV file. */
+static struct wavdata* wavdata_new(void)
+{
+	struct wavdata *wdat = malloc(sizeof(struct wavdata));
+	if(dat)
+	{
+		wdat->wavp = NULL;
+		wdat->datalen = 0;
+		wdat->flipendian = 0;
+		wdat->bytes_per_sample = -1;
+		wdat->floatwav = 0;
+		wdat->the_header = NULL;
+		wdat->the_header_size = 0;
+	}
+	return wdat;
+}
 
-/* Open routines only prepare a header, stored here and written on first actual
-   data write. If no data is written at all, proper files will still get a
-   header via the update at closing; non-seekable streams will just have no
-   no header if there is no data. */
-void *the_header = NULL;
-size_t the_header_size = 0;
+static void wavdata_del(struct wavdata *wdat)
+{
+	if(!wdat) return;
+	if(wdat->wavp && wdat->wavp != stdout)
+		compat_fclose(wdat->wavp);
+	if(wdat->the_header)
+		free(wdat->the_header);
+	free(wdat);
+}
+
+/* Pointer types are for pussies;-) */
+static void* wavhead_new(void *template, size_t size)
+{
+	void *header = malloc(size);
+	if(header)
+		memcpy(header, template, size);
+	return header;
+}
 
 /* Convertfunctions: */
 /* always little endian */
@@ -116,25 +161,25 @@ static int testEndian(void)
 }
 
 /* return: 0 is good, -1 is bad */
-static int open_file(char *filename)
+static int open_file(struct wavdata *wdat, char *filename)
 {
 #if defined(HAVE_SETUID) && defined(HAVE_GETUID)
    setuid(getuid()); /* dunno whether this helps. I'm not a security expert */
 #endif
    if(!strcmp("-",filename))  {
-      wavfp = stdout;
+      wdat->wavfp = stdout;
 #ifdef WIN32
      _setmode(STDOUT_FILENO, _O_BINARY);
 #endif
       /* If stdout is redirected to a file, seeks suddenly can work.
          Doing one here to ensure that such a file has the same output
          it had when opening directly as such. */
-      fseek(wavfp, 0L, SEEK_SET);
+      fseek(wdat->wavfp, 0L, SEEK_SET);
       return 0;
    }
    else {
-     wavfp = compat_fopen(filename, "wb");
-     if(!wavfp)
+     wdat->wavfp = compat_fopen(filename, "wb");
+     if(!wdat->wavfp)
         return -1;
      else
         return 0;
@@ -142,28 +187,43 @@ static int open_file(char *filename)
 }
 
 /* return: 0 is good, -1 is bad */
-static int close_file()
+static int close_file(audio_output_t *ao)
 {
-	if(wavfp != NULL && wavfp != stdout)
+	struct wavdata *wdat = ao->userptr;
+	int ret = 0;
+
+	if(wdat->wavfp != NULL && wdat->wavfp != stdout)
 	{
-		if(compat_fclose(wavfp))
+		if(compat_fclose(wdat->wavfp))
 		{
-			error1("problem closing the audio file, probably because of flushing to disk: %s\n", strerror(errno));
-			return -1;
+			if(!AOQUIET)
+				error1("problem closing the audio file, probably because of flushing to disk: %s\n", strerror(errno));
+			ret = -1;
 		}
-		else return 0;
 	}
 
-	wavfp = NULL;
-	return 0;
+	/* Always cleanup here. */
+	wdat->wavfp = NULL;
+	wavdata_del(wdat);
+	ao->userptr = NULL;
+	return ret;
 }
 
 /* return: 0 is good, -1 is bad */
-static int write_header(const void*ptr, size_t size)
+static int write_header(audio_output_t *ao)
 {
-	if(size > 0 && (fwrite(ptr, size, 1, wavfp) != 1 || fflush(wavfp)))
+	struct wavdata *wdat = ao->userptr;
+
+	if(
+		wdat->the_header_size > 0
+	&&	(
+			fwrite(wdat->the_header, wdat->the_header_size, 1, wdat->wavfp) != 1
+		|| fflush(wdat->wavfp)
+		)
+	)
 	{
-		error1("cannot write header: %s", strerror(errno));
+		if(!AOQUIET)
+			error1("cannot write header: %s", strerror(errno));
 		return -1;
 	}
 	else return 0;
@@ -171,190 +231,316 @@ static int write_header(const void*ptr, size_t size)
 
 int au_open(audio_output_t *ao)
 {
+	struct wavdata *wdat   = NULL;
+	struct auhead  *auhead = NULL;
+
 	if(ao->format < 0) ao->format = MPG123_ENC_SIGNED_16;
 
 	if(ao->format & MPG123_ENC_FLOAT)
 	{
-		error("AU file support for float values not there yet");
-		return -1;
+		if(!AOQUIET)
+			error("AU file support for float values not there yet");
+		goto au_open_bad;
 	}
 
-  flipendian = 0;
+	if(
+		!(wdat   = wavdata_new())
+	||	!(auhead = wavhead_new(&auhead_template, sizeof(auhead_template)))
+	)
+	{
+		ao->errcode = OUT123_DOOM;
+		goto au_open_bad;
+	}
 
-	if(ao->rate < 0) ao->rate = 44100;
-	if(ao->channels < 0) ao->channels = 2;
+	wdat->the_header      = auhead;
+	wdat->the_header_size = sizeof(*auhead);
 
-  switch(ao->format) {
-    case MPG123_ENC_SIGNED_16:
-      {
-        int endiantest = testEndian();
-        if(endiantest == -1) return -1;
-        flipendian = !endiantest; /* big end */
-        long2bigendian(3,auhead.encoding,sizeof(auhead.encoding));
-      }
-      break;
-    case MPG123_ENC_UNSIGNED_8:
-      ao->format = MPG123_ENC_ULAW_8; 
-    case MPG123_ENC_ULAW_8:
-      long2bigendian(1,auhead.encoding,sizeof(auhead.encoding));
-      break;
-    default:
-      error("AU output is only a hack. This audio mode isn't supported yet.");
-      return -1;
-  }
+	wdat->flipendian = 0;
 
-  long2bigendian(0xffffffff,auhead.datalen,sizeof(auhead.datalen));
-  long2bigendian(ao->rate,auhead.rate,sizeof(auhead.rate));
-  long2bigendian(ao->channels,auhead.channels,sizeof(auhead.channels));
+	if(ao->rate < 0)
+		ao->rate = 44100;
+	if(ao->channels < 0)
+		ao->channels = 2;
 
-  if(open_file(ao->device) < 0)
-    return -1;
+	switch(ao->format)
+	{
+		case MPG123_ENC_SIGNED_16:
+		{
+			int endiantest = testEndian();
+			if(endiantest == -1)
+				goto au_open_bad;
+			flipendian = !endiantest; /* big end */
+			long2bigendian(3,auhead->encoding,sizeof(auhead->encoding));
+		}
+		break;
+		case MPG123_ENC_UNSIGNED_8:
+			ao->format = MPG123_ENC_ULAW_8;
+		case MPG123_ENC_ULAW_8:
+			long2bigendian(1,auhead->encoding,sizeof(auhead->encoding));
+		break;
+		default:
+			error("AU output is only a hack. This audio mode isn't supported yet.");
+			goto au_open_bad;
+	}
 
-  datalen = 0;
+	long2bigendian(0xffffffff,auhead->datalen,sizeof(auhead->datalen));
+	long2bigendian(ao->rate,auhead->rate,sizeof(auhead->rate));
+	long2bigendian(ao->channels,auhead->channels,sizeof(auhead->channels));
 
-	the_header = &auhead;
-	the_header_size = sizeof(auhead);
+	if(open_file(ao->device) < 0)
+		goto au_open_bad;
 
+	wdat->datalen = 0;
+
+	ao->userptr = wdat;
 	return 0;
+
+au_open_bad:
+	if(auhead)
+		free(auhead);
+	if(wdat)
+	{
+		wdat->the_header = NULL;
+		wavdata_del(wdat);
+	}
+	return -1;
 }
 
 int cdr_open(audio_output_t *ao)
 {
+	struct wavdata *wdat   = NULL;
+
 	if(ao->format < 0 && ao->rate < 0 && ao->channels < 0)
 	{
-  /* param.force_stereo = 0; */
-  ao->format = MPG123_ENC_SIGNED_16;
-  ao->rate = 44100;
-  ao->channels = 2;
+		/* param.force_stereo = 0; */
+		ao->format = MPG123_ENC_SIGNED_16;
+		ao->rate = 44100;
+		ao->channels = 2;
 	}
-  if(ao->format != MPG123_ENC_SIGNED_16 || ao->rate != 44100 || ao->channels != 2) {
-    fprintf(stderr,"Oops .. not forced to 16 bit, 44kHz?, stereo\n");
-    return -1;
-  }
+	if(
+		ao->format != MPG123_ENC_SIGNED_16
+	||	ao->rate != 44100
+	||	ao->channels != 2
+	)
+	{
+		if(!AOQUIET)
+			error("Oops .. not forced to 16 bit, 44 kHz, stereo?");
+		return -1;
+	}
 
-  flipendian = !testEndian(); /* big end */
-  
+	if(!(wdat = wavdata_new()))
+	{
+		ao->errcode = OUT123_DOOM;
+		return -1;
+	}
 
-  if(open_file(ao->device) < 0)
-    return -1;
+	wdat->flipendian = !testEndian(); /* big end */
 
-	the_header = NULL;
-	the_header_size = 0;
+	if(open_file(wdat, ao->device) < 0)
+	{
+		if(!AOQUIET)
+			error("cannot open file for writing");
+		free(wdat); /* quick cleanup here */
+		return -1;
+	}
 
-  return 0;
+	ao->userptr = wdat;
+	return 0;
+}
+
+/* RAW files are headerless WAVs where the format does not matter. */
+int raw_open(audio_output_t *ao)
+{
+	struct wavdata *wdat;
+
+	if(!(wdat = wavdata_new()))
+	{
+		ao->errcode = OUT123_DOOM;
+		goto raw_open_bad;
+	}
+
+	if(open_file(wdat, ao->device) < 0)
+		goto wav_open_bad;
+
+	ao->userptr = wdat;
+	return 1;
+raw_open_bad:
+	if(wdat)
+		wavdata_del(wdat);
+	return -1;
 }
 
 int wav_open(audio_output_t *ao)
 {
 	int bps;
+	struct wavdata    *wdat      = NULL;
+	struct riff       *inthead   = NULL;
+	struct riff_float *floathead = NULL;
 
-	if(ao->format < 0) ao->format = MPG123_ENC_SIGNED_16;
+	if(!(wdat = wavdata_new()))
+	{
+		ao->errcode = OUT123_DOOM;
+		goto wav_open_bad;
+	}
 
-	flipendian = 0;
+	if(ao->format < 0)
+		ao->format = MPG123_ENC_SIGNED_16;
 
-	/* standard MS PCM, and its format specific is BitsPerSample */
-	long2littleendian(1,RIFF.WAVE.fmt.FormatTag,sizeof(RIFF.WAVE.fmt.FormatTag));
-	floatwav = 0;
+	wdat->floatwav = (ao->format & MPG123_ENC_FLOAT);
+	if(wdat->floatwav)
+	{
+		if(!(floathead = wavhead_new( &riff_float_template
+		,	sizeof(riff_float_template)) ))
+		{
+			ao->errcode = OUT123_DOOM;
+			goto wav_open_bad;
+		}
+		wdat->the_header = floathead;
+		wdat->the_header_size = sizeof(*floathead);
+	}
+	else
+	{
+		if(!(inthead = wavhead_new( &riff_template
+		,	sizeof(riff_template)) ))
+		{
+			ao->errcode = OUT123_DOOM;
+			goto wav_open_bad;
+		}
+		wdat->the_header = inthead;
+		wdat->the_header_size = sizeof(*inthead);
+
+		/* standard MS PCM, and its format specific is BitsPerSample */
+		long2littleendian(1, inthead->WAVE.fmt.FormatTag
+		,	sizeof(inthead->WAVE.fmt.FormatTag));
+	}
+
 	if(ao->format == MPG123_ENC_FLOAT_32)
 	{
-		floatwav = 1;
-		long2littleendian(3,RIFF_FLOAT.WAVE.fmt.FormatTag,sizeof(RIFF_FLOAT.WAVE.fmt.FormatTag));
-		long2littleendian(bps=32,RIFF_FLOAT.WAVE.fmt.BitsPerSample,sizeof(RIFF_FLOAT.WAVE.fmt.BitsPerSample));
-		flipendian = testEndian();
+		long2littleendian(3, floathead->WAVE.fmt.FormatTag
+		,	sizeof(floathead->WAVE.fmt.FormatTag));
+		long2littleendian(bps=32, floathead->WAVE.fmt.BitsPerSample
+		,	sizeof(floathead->WAVE.fmt.BitsPerSample));
+		wdat->flipendian = testEndian();
 	}
-	else if(ao->format == MPG123_ENC_SIGNED_32) {
-		long2littleendian(bps=32,RIFF.WAVE.fmt.BitsPerSample,sizeof(RIFF.WAVE.fmt.BitsPerSample));
-		flipendian = testEndian();
+	else if(ao->format == MPG123_ENC_SIGNED_32)
+	{
+		long2littleendian(bps=32, inthead->WAVE.fmt.BitsPerSample
+		,	sizeof(inthead->WAVE.fmt.BitsPerSample));
+		wdat->flipendian = testEndian();
 	}
-	else if(ao->format == MPG123_ENC_SIGNED_24) {
-		long2littleendian(bps=24,RIFF.WAVE.fmt.BitsPerSample,sizeof(RIFF.WAVE.fmt.BitsPerSample));
-		flipendian = testEndian();
+	else if(ao->format == MPG123_ENC_SIGNED_24)
+	{
+		long2littleendian(bps=24, inthead->WAVE.fmt.BitsPerSample
+		,	sizeof(inthead->WAVE.fmt.BitsPerSample));
+		wdat->flipendian = testEndian();
 	}
-	else if(ao->format == MPG123_ENC_SIGNED_16) {
-		long2littleendian(bps=16,RIFF.WAVE.fmt.BitsPerSample,sizeof(RIFF.WAVE.fmt.BitsPerSample));
-		flipendian = testEndian();
+	else if(ao->format == MPG123_ENC_SIGNED_16)
+	{
+		long2littleendian(bps=16, inthead->WAVE.fmt.BitsPerSample
+		,	sizeof(inthead->WAVE.fmt.BitsPerSample));
+		wdat->flipendian = testEndian();
 	}
 	else if(ao->format == MPG123_ENC_UNSIGNED_8)
-	long2littleendian(bps=8,RIFF.WAVE.fmt.BitsPerSample,sizeof(RIFF.WAVE.fmt.BitsPerSample));
+		long2littleendian(bps=8, inthead->WAVE.fmt.BitsPerSample
+		,	sizeof(inthead->WAVE.fmt.BitsPerSample));
 	else
 	{
-		error("Format not supported.");
-		return -1;
+		if(!AOQUIET)
+			error("Format not supported.");
+		goto wav_open_bad;
 	}
 
-	if(ao->rate < 0) ao->rate = 44100;
-	if(ao->channels < 0) ao->channels = 2;
+	if(ao->rate < 0)
+		ao->rate = 44100;
+	if(ao->channels < 0)
+		ao->channels = 2;
+
+	if(wdat->floatwav)
+	{
+		long2littleendian(ao->channels, floathead->WAVE.fmt.Channels
+		,	sizeof(floathead->WAVE.fmt.Channels));
+		long2littleendian(ao->rate, floathead->WAVE.fmt.SamplesPerSec
+		,	sizeof(floathead->WAVE.fmt.SamplesPerSec));
+		long2littleendian( (int)(ao->channels * ao->rate * bps)>>3
+		,	floathead->WAVE.fmt.AvgBytesPerSec
+		,	sizeof(floathead->WAVE.fmt.AvgBytesPerSec) );
+		long2littleendian( (int)(ao->channels * bps)>>3
+		,	floathead->WAVE.fmt.BlockAlign
+		,	sizeof(floathead->WAVE.fmt.BlockAlign) );
+	}
+	else
+	{
+		long2littleendian(ao->channels, inthead->WAVE.fmt.Channels
+		,	sizeof(inthead->WAVE.fmt.Channels));
+		long2littleendian(ao->rate, inthead->WAVE.fmt.SamplesPerSec
+		,	sizeof(inthead->WAVE.fmt.SamplesPerSec));
+		long2littleendian( (int)(ao->channels * ao->rate * bps)>>3
+		,	inthead->WAVE.fmt.AvgBytesPerSec
+		,sizeof(inthead->WAVE.fmt.AvgBytesPerSec) );
+		long2littleendian( (int)(ao->channels * bps)>>3
+		,	inthead->WAVE.fmt.BlockAlign
+		,	sizeof(inthead->WAVE.fmt.BlockAlign) );
+	}
+
+	if(open_file(wdat, ao->device) < 0)
+		goto wav_open_bad;
 
 	if(floatwav)
 	{
-		long2littleendian(ao->channels,RIFF_FLOAT.WAVE.fmt.Channels,sizeof(RIFF_FLOAT.WAVE.fmt.Channels));
-		long2littleendian(ao->rate,RIFF_FLOAT.WAVE.fmt.SamplesPerSec,sizeof(RIFF_FLOAT.WAVE.fmt.SamplesPerSec));
-		long2littleendian((int)(ao->channels * ao->rate * bps)>>3,
-			RIFF_FLOAT.WAVE.fmt.AvgBytesPerSec,sizeof(RIFF_FLOAT.WAVE.fmt.AvgBytesPerSec));
-		long2littleendian((int)(ao->channels * bps)>>3,
-			RIFF_FLOAT.WAVE.fmt.BlockAlign,sizeof(RIFF_FLOAT.WAVE.fmt.BlockAlign));
+		long2littleendian(wdat->datalen, floathead->WAVE.data.datalen
+		,	sizeof(floathead->WAVE.data.datalen));
+		long2littleendian(wdat->datalen+sizeof(floathead->WAVE)
+		,	floathead->WAVElen, sizeof(floathead->WAVElen));
 	}
 	else
 	{
-		long2littleendian(ao->channels,RIFF.WAVE.fmt.Channels,sizeof(RIFF.WAVE.fmt.Channels));
-		long2littleendian(ao->rate,RIFF.WAVE.fmt.SamplesPerSec,sizeof(RIFF.WAVE.fmt.SamplesPerSec));
-		long2littleendian((int)(ao->channels * ao->rate * bps)>>3,
-			RIFF.WAVE.fmt.AvgBytesPerSec,sizeof(RIFF.WAVE.fmt.AvgBytesPerSec));
-		long2littleendian((int)(ao->channels * bps)>>3,
-			RIFF.WAVE.fmt.BlockAlign,sizeof(RIFF.WAVE.fmt.BlockAlign));
+		long2littleendian(wdat->datalen, inthead->WAVE.data.datalen
+		,	sizeof(inthead->WAVE.data.datalen));
+		long2littleendian( wdat->datalen+sizeof(inthead->WAVE)
+		,	inthead->WAVElen
+		,	sizeof(inthead->WAVElen) );
 	}
 
-	if(open_file(ao->device) < 0)
+	wdat->bytes_per_sample = bps>>3;
+
+	ao->userptr = wdat;
+	return 0;
+
+wav_open_bad:
+	if(inthead)
+		free(inthead);
+	if(floathead)
+		free(floathead);
+	if(wdat)
+	{
+		wdat->the_header = NULL;
+		wavdata_del(wdat);
+	}
 	return -1;
 
-	if(floatwav)
-	{
-		long2littleendian(datalen,RIFF_FLOAT.WAVE.data.datalen,sizeof(RIFF_FLOAT.WAVE.data.datalen));
-		long2littleendian(datalen+sizeof(RIFF_FLOAT.WAVE),RIFF_FLOAT.WAVElen,sizeof(RIFF_FLOAT.WAVElen));
-	}
-	else
-	{
-		long2littleendian(datalen,RIFF.WAVE.data.datalen,sizeof(RIFF.WAVE.data.datalen));
-		long2littleendian(datalen+sizeof(RIFF.WAVE),RIFF.WAVElen,sizeof(RIFF.WAVElen));
-	}
-
-	if(floatwav)
-	{
-		the_header = &RIFF_FLOAT;
-		the_header_size = sizeof(RIFF_FLOAT);
-	}
-	else
-	{
-		the_header = &RIFF;
-		the_header_size = sizeof(RIFF);
-	}
-
-	datalen = 0;
-	bytes_per_sample = bps>>3;
-
-	return 0;
 }
 
-int wav_write(unsigned char *buf,int len)
+int wav_write(audio_output_t *ao, unsigned char *buf, int len)
 {
+	struct wavedata *wdat = ao->userptr;
 	int temp;
 	int i;
 
-	if(!wavfp)
-	return 0;
+	if(!wdat->wavfp)
+		return 0; /* Really? Zero? */
 
-	if(datalen == 0)
-	{
-		if(write_header(the_header, the_header_size) < 0) return -1;
-	}
+	if(wdat->datalen == 0 && write_header(ao) < 0)
+		return -1;
 
-	if(flipendian)
+	/* Endianess conversion. Not fancy / optimized. */
+	if(wdat->flipendian)
 	{
-		if(bytes_per_sample == 4) /* 32 bit */
+		if(wdat->bytes_per_sample == 4) /* 32 bit */
 		{
 			if(len & 3)
 			{
-				error("Number of bytes no multiple of 4 (32bit)!");
+				if(!AOQUIET)
+					error("Number of bytes no multiple of 4 (32bit)!");
 				return -1;
 			}
 			for(i=0;i<len;i+=4)
@@ -382,85 +568,148 @@ int wav_write(unsigned char *buf,int len)
 		}
 	}
 
-	temp = fwrite(buf, 1, len, wavfp);
+	temp = fwrite(buf, 1, len, wdat->wavfp);
 	if(temp <= 0) return temp;
 /* That would kill it of early when running out of disk space. */
 #if 0
-if(fflush(wavfp))
+if(fflush(wdat->wavfp))
 {
-	fprintf(stderr, "flushing failed: %s\n", strerror(errno));
+	if(!AOQUIET)
+		error1("flushing failed: %s\n", strerror(errno));
 	return -1;
 }
 #endif
-	datalen += temp;
+	wdat->datalen += temp;
 
 	return temp;
 }
 
-int wav_close(void)
+int wav_close(audio_output_t *ao)
 {
-	if(!wavfp) return -1;
+	struct wavdata *wdat = ao->userptr;
+
+	if(!wdat->wavfp)
+		return -1;
 
 	/* flush before seeking to catch out-of-disk explicitly at least at the end */
-	if(fflush(wavfp))
+	if(fflush(wdat->wavfp))
 	{
-		error1("cannot flush WAV stream: %s", strerror(errno));
-		compat_fclose(wavfp);
-		return -1;
+		if(!AOQUIET)
+			error1("cannot flush WAV stream: %s", strerror(errno));
+		return close_file(ao);
 	}
-	if(fseek(wavfp, 0L, SEEK_SET) >= 0)
+	if(fseek(wdat->wavfp, 0L, SEEK_SET) >= 0)
 	{
-		if(floatwav)
+		if(wdat->floatwav)
 		{
-			long2littleendian(datalen,RIFF_FLOAT.WAVE.data.datalen,sizeof(RIFF_FLOAT.WAVE.data.datalen));
-			long2littleendian(datalen+sizeof(RIFF_FLOAT.WAVE),RIFF_FLOAT.WAVElen,sizeof(RIFF_FLOAT.WAVElen));
-			long2littleendian(datalen/(from_little(RIFF_FLOAT.WAVE.fmt.Channels,2)*from_little(RIFF_FLOAT.WAVE.fmt.BitsPerSample,2)/8),
-				RIFF_FLOAT.WAVE.fact.samplelen,sizeof(RIFF_FLOAT.WAVE.fact.samplelen));
-			/* Always (over)writing the header here; also for stdout, when fseek worked, this overwrite works. */
-			write_header(&RIFF_FLOAT, sizeof(RIFF_FLOAT));
+			struct riff_float *floathead = wdat->the_header;
+			long2littleendian(wdat->datalen, floathead->WAVE.data.datalen
+			,	sizeof(floathead->WAVE.data.datalen));
+			long2littleendian(datalen+sizeof(floathead->WAVE), floathead->WAVElen
+			,	sizeof(floathead->WAVElen));
+			long2littleendian( wdat->datalen
+			/	(
+					from_little(floathead->WAVE.fmt.Channels,2)
+				*	from_little(floathead->WAVE.fmt.BitsPerSample,2)/8
+				)
+			,	floathead->WAVE.fact.samplelen
+			,	sizeof(floathead->WAVE.fact.samplelen) );
 		}
 		else
 		{
-			long2littleendian(datalen,RIFF.WAVE.data.datalen,sizeof(RIFF.WAVE.data.datalen));
-			long2littleendian(datalen+sizeof(RIFF.WAVE),RIFF.WAVElen,sizeof(RIFF.WAVElen));
-			/* Always (over)writing the header here; also for stdout, when fseek worked, this overwrite works. */
-			write_header(&RIFF, sizeof(RIFF));
+			struct riff *inthead = wdat->the_header;
+			long2littleendian(wdat->datalen, inthead->WAVE.data.datalen
+			,	sizeof(inthead->WAVE.data.datalen));
+			long2littleendian(wdat->datalen+sizeof(inthead->WAVE), inthead->WAVElen
+			,	sizeof(inthead->WAVElen));
 		}
+		/* Always (over)writing the header here; also for stdout, when
+		   fseek worked, this overwrite works. */
+		write_header(ao);
 	}
-	else
-	warning("Cannot rewind WAV file. File-format isn't fully conform now.");
+	else if(!AOQUIET)
+		warning("Cannot rewind WAV file. File-format isn't fully conform now.");
 
-	return close_file();
+	return close_file(ao);
 }
 
-int au_close(void)
+int au_close(audio_output_t *ao)
 {
-	if(!wavfp) return -1;
+	struct wavdata *wdat = ao->userptr;
+
+	if(!wdat->wavfp)
+		return -1;
 
 	/* flush before seeking to catch out-of-disk explicitly at least at the end */
-	if(fflush(wavfp))
+	if(fflush(wdat->wavfp))
 	{
-		error1("cannot flush WAV stream: %s", strerror(errno));
-		compat_fclose(wavfp);
-		return -1;
+		if(!AOQUIET)
+			error1("cannot flush WAV stream: %s", strerror(errno));
+		return close_file(ao);
 	}
-   if(fseek(wavfp, 0L, SEEK_SET) >= 0) {
-     long2bigendian(datalen,auhead.datalen,sizeof(auhead.datalen));
-     /* Always (over)writing the header here; also for stdout, when fseek worked, this overwrite works. */
-     write_header(&auhead, sizeof(auhead));
-   }
-   else
-   warning("Cannot rewind AU file. File-format isn't fully conform now.");
+	if(fseek(wdat->wavfp, 0L, SEEK_SET) >= 0)
+	{
+		struct auhead *auhead = wdat->the_header;
+		long2bigendian(wdat->datalen, auhead->datalen, sizeof(auhead.datalen));
+		/* Always (over)writing the header here; also for stdout, when
+		   fseek worked, this overwrite works. */
+		write_header(ao);
+	}
+	else if(!AOQUIET)
+		warning("Cannot rewind AU file. File-format isn't fully conform now.");
 
-	return close_file();
+	return close_file(ao);
 }
 
-int cdr_close(void)
+/* CDR data also uses that. */
+int raw_close(audio_output_t *ao)
 {
-	if(!wavfp) return -1;
+	struct wavdata *wdat = ao->userptr;
 
-	return close_file();
+	if(!wdat->wavfp)
+		return -1;
+
+	return close_file(ao);
 }
 
+/* Some trivial functions to interface with out123's module architecture. */
 
+int cdr_formats(audio_output_t *ao)
+{
+	if(ao->rate == 44100 && ao->channels == 2)
+		return MPG123_ENC_SIGNED_16;
+	else
+		return 0;
+}
 
+int au_formats(audio_output_t *ao)
+{
+	return MPG123_ENC_SIGNED_16|MPG123_ENC_UNSIGNED_8|MPG123_ENC_ULAW_8;
+}
+
+int raw_formats(audio_output_t *ao)
+{
+	return MPG123_ENC_ANY;
+}
+
+int wav_formats(audio_output_t *ao)
+{
+	return
+		MPG123_ENC_SIGNED_16
+	|	MPG123_ENC_UNSIGNED_8
+	|	MPG123_ENC_FLOAT_32
+	|	MPG123_ENC_SIGNED_24
+	|	MPG123_ENC_SIGNED_32;
+}
+
+/* Draining is flushing to disk. Words do suck at times.
+   One could call fsync(), too, but to be safe, that would need to
+   be called on the directory, too. Also, apps randomly calling
+   fsync() can cause annoying issues in a system. */
+void wav_drain(audio_output_t *ao)
+{
+	struct wavedata *wdat = ao->userptr;
+
+	if(fflush(wdat->wavfp) && !AOQUIET)
+		error1("flushing failed: %s\n", strerror(errno));
+}

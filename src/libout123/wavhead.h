@@ -1,12 +1,12 @@
 /*
 	wavhead.h: wav file header, to be included twice for integer and float wavs
 
-	copyright ?-2008 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright ?-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Samuel Audet
 */
 
-struct
+struct RIFF_STRUCT_NAME
 {
 	byte riffheader[4];
 	byte WAVElen[4]; /* should this include riffheader or not? */
@@ -42,7 +42,7 @@ struct
 			/* from here you insert your PCM data */
 		} data;
 	} WAVE;
-} RIFF_NAME = 
+} const RIFF_NAME = 
 {
 	{ 'R','I','F','F' } ,
 	{ sizeof(RIFF_NAME.WAVE),0,0,0 } , 

@@ -14,7 +14,8 @@
 #include <ltdl.h>
 #endif
 
-#define MPG123_MODULE_API_VERSION		(1)
+/* TODO: put that into out123_int.h instead? */
+#define MPG123_MODULE_API_VERSION		(2)
 
 /* The full structure is delared in audio.h */
 struct audio_output_struct;
