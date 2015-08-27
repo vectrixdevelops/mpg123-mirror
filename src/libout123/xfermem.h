@@ -22,16 +22,10 @@
 
 #include "compat.h"
 
-#ifndef TRUE
-#define FALSE 0
-#define TRUE  1
-#endif
-
 typedef struct {
 	size_t freeindex;	/* [W] next free index */
 	size_t readindex;	/* [R] next index to read */
 	int fd[2];
-	int wakeme[2];
 	byte *data;
 	byte *metadata;
 	size_t size;
@@ -72,13 +66,13 @@ enum xf_cmd_code
 ,	XF_CMD_CUSTOM5   /**< Some custom command to be filled with meaning. */
 ,	XF_CMD_CUSTOM6   /**< Some custom command to be filled with meaning. */
 ,	XF_CMD_CUSTOM7   /**< Some custom command to be filled with meaning. */
-}
+};
 
 #define XF_WRITER 0
 #define XF_READER 1
 int xfermem_getcmd(int fd, int block);
 int xfermem_putcmd(int fd, byte cmd);
-int xfermem_writer_block(int fd, txfermem *xf);
+int xfermem_writer_block(txfermem *xf);
 /* returns TRUE for being interrupted */
 int xfermem_write(txfermem *xf, byte *buffer, size_t bytes);
 

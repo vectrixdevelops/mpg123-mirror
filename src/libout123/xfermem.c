@@ -79,12 +79,10 @@ void xfermem_init (txfermem **xf, size_t bufsize, size_t msize, size_t skipbuf)
 		exit (1);
 	}
 	(*xf)->freeindex = (*xf)->readindex = 0;
-	(*xf)->wakeme[0] = (*xf)->wakeme[1] = FALSE;
 	(*xf)->data = ((byte *) *xf) + sizeof(txfermem) + msize;
 	(*xf)->metadata = ((byte *) *xf) + sizeof(txfermem);
 	(*xf)->size = bufsize;
 	(*xf)->metasize = msize + skipbuf;
-	(*xf)->justwait = 0;
 }
 
 void xfermem_done (txfermem *xf)
@@ -206,12 +204,13 @@ int xfermem_putcmd (int fd, byte cmd)
 	for (;;) {
 		switch (write(fd, &cmd, 1)) {
 			case 1:
-				debug2("xfermem_putcmd(%i, %i) = 1");
+				debug2("xfermem_putcmd(%i, %i) = 1", fd, cmd);
 				return (1);
 			case -1:
 				if (errno != EINTR)
 				{
-					debug2("xfermem_putcmd(%i, %i) = -1 (%s)", strerror(errno));
+					debug3("xfermem_putcmd(%i, %i) = -1 (%s)"
+					,	fd, cmd, strerror(errno));
 					return (-1);
 				}
 		}
