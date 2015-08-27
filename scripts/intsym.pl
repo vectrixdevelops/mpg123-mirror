@@ -2,6 +2,8 @@
 
 use strict;
 
+print STDERR "Do not forget to handle renaming of symbols from a statically linked output module!\n";
+
 my @instances =
 (
 {	name => 'intsym.h'
