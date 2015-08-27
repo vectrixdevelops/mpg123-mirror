@@ -17,9 +17,6 @@
 #define _MPG123_BUFFER_H_
 
 #include "compat.h"
-#include "audio.h"
-/* TODO: Wrap xfermem usage into buffer API calls. */
-#include "xfermem.h"
 #include "out123_int.h"
 
 void buffer_ignore_lowmem(audio_output_t *ao);

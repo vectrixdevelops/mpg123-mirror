@@ -55,7 +55,7 @@ static void catch_interrupt (void)
 	intflag = TRUE;
 }
 
-static int buffer_loop(audio_output_t *ao);
+static int buffer_loop(audio_output_t *ao, sigset_t *oldsigset);
 
 static void catch_child(void)
 {
@@ -103,6 +103,8 @@ int buffer_init(audio_output_t *ao, size_t bytes)
 		}
 		default: /* parent */
 			xfermem_init_writer(buffermem);
+wait for pong ... necessary? kill it if it does not come?
+race condition with startup?!
 	}
 
 	return 0;
@@ -450,11 +452,11 @@ int buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
 	int my_fd = xf->fd[XF_READER];
 	int preloading = FALSE;
 
-	/* Be prepared to use SIGINT and SIGUSR1 for communication. */
+	/* Be prepared to use SIGINT for communication. */
 	catchsignal (SIGINT, catch_interrupt);
 	sigprocmask (SIG_SETMASK, oldsigset, NULL);
 	/* Say hello to the writer. */
-	xfermem_putcmd(my_fd, XF_CMD_WAKEUP);
+	xfermem_putcmd(my_fd, XF_CMD_PONG);
 
 	while(1)
 	{
