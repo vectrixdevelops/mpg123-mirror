@@ -16,6 +16,11 @@
 
 #include "config.h"
 
+/* Needed for strdup(), in strict mode ... */
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 500
+#endif
+
 #ifdef HAVE_STDLIB_H
 /* realloc, size_t */
 #include <stdlib.h>
