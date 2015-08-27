@@ -1,5 +1,5 @@
 /*
-	wav.c: write wav/au/cdr files
+	wav.c: write wav/au/cdr files (and headerless raw
 
 	copyright ?-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
@@ -25,6 +25,7 @@
 */
 
 #include "out123_int.h"
+#include "wav.h"
 
 #include <errno.h>
 #include "debug.h"
@@ -38,6 +39,7 @@
 
 #undef WAVE_FORMAT
 #undef RIFF_NAME
+#undef RIFF_STRUCT_NAME
 #define WAVE_FORMAT 3
 #define RIFF_NAME riff_float_template
 #define RIFF_STRUCT_NAME riff_float
@@ -62,26 +64,26 @@ struct auhead {
 struct wavdata
 {
 	FILE *wavfp;
-	long datalen = 0;
-	int flipendian=0;
-	int bytes_per_sample = -1;
-	int floatwav = 0; /* If we write a floating point WAV file. */
+	long datalen;
+	int flipendian;
+	int bytes_per_sample;
+	int floatwav; /* If we write a floating point WAV file. */
 	/* 
 		Open routines only prepare a header, stored here and written on first
 		actual data write. If no data is written at all, proper files will
 		still get a header via the update at closing; non-seekable streams will
 		just have no no header if there is no data.
 	*/
-	void *the_header = NULL;
-	size_t the_header_size = 0;
-}
+	void *the_header;
+	size_t the_header_size;
+};
 
 static struct wavdata* wavdata_new(void)
 {
 	struct wavdata *wdat = malloc(sizeof(struct wavdata));
-	if(dat)
+	if(wdat)
 	{
-		wdat->wavp = NULL;
+		wdat->wavfp = NULL;
 		wdat->datalen = 0;
 		wdat->flipendian = 0;
 		wdat->bytes_per_sample = -1;
@@ -95,15 +97,15 @@ static struct wavdata* wavdata_new(void)
 static void wavdata_del(struct wavdata *wdat)
 {
 	if(!wdat) return;
-	if(wdat->wavp && wdat->wavp != stdout)
-		compat_fclose(wdat->wavp);
+	if(wdat->wavfp && wdat->wavfp != stdout)
+		compat_fclose(wdat->wavfp);
 	if(wdat->the_header)
 		free(wdat->the_header);
 	free(wdat);
 }
 
 /* Pointer types are for pussies;-) */
-static void* wavhead_new(void *template, size_t size)
+static void* wavhead_new(void const *template, size_t size)
 {
 	void *header = malloc(size);
 	if(header)
@@ -166,7 +168,7 @@ static int open_file(struct wavdata *wdat, char *filename)
 #if defined(HAVE_SETUID) && defined(HAVE_GETUID)
    setuid(getuid()); /* dunno whether this helps. I'm not a security expert */
 #endif
-   if(!strcmp("-",filename))  {
+   if(!filename || !strcmp("-",filename))  {
       wdat->wavfp = stdout;
 #ifdef WIN32
      _setmode(STDOUT_FILENO, _O_BINARY);
@@ -269,7 +271,7 @@ int au_open(audio_output_t *ao)
 			int endiantest = testEndian();
 			if(endiantest == -1)
 				goto au_open_bad;
-			flipendian = !endiantest; /* big end */
+			wdat->flipendian = !endiantest; /* big end */
 			long2bigendian(3,auhead->encoding,sizeof(auhead->encoding));
 		}
 		break;
@@ -287,7 +289,7 @@ int au_open(audio_output_t *ao)
 	long2bigendian(ao->rate,auhead->rate,sizeof(auhead->rate));
 	long2bigendian(ao->channels,auhead->channels,sizeof(auhead->channels));
 
-	if(open_file(ao->device) < 0)
+	if(open_file(wdat, ao->device) < 0)
 		goto au_open_bad;
 
 	wdat->datalen = 0;
@@ -325,13 +327,13 @@ int cdr_open(audio_output_t *ao)
 	{
 		if(!AOQUIET)
 			error("Oops .. not forced to 16 bit, 44 kHz, stereo?");
-		return -1;
+		goto cdr_open_bad;
 	}
 
 	if(!(wdat = wavdata_new()))
 	{
 		ao->errcode = OUT123_DOOM;
-		return -1;
+		goto cdr_open_bad;
 	}
 
 	wdat->flipendian = !testEndian(); /* big end */
@@ -340,12 +342,15 @@ int cdr_open(audio_output_t *ao)
 	{
 		if(!AOQUIET)
 			error("cannot open file for writing");
-		free(wdat); /* quick cleanup here */
-		return -1;
+		goto cdr_open_bad;
 	}
 
 	ao->userptr = wdat;
 	return 0;
+cdr_open_bad:
+	if(wdat)
+		wavdata_del(wdat);
+	return -1;
 }
 
 /* RAW files are headerless WAVs where the format does not matter. */
@@ -360,7 +365,7 @@ int raw_open(audio_output_t *ao)
 	}
 
 	if(open_file(wdat, ao->device) < 0)
-		goto wav_open_bad;
+		goto raw_open_bad;
 
 	ao->userptr = wdat;
 	return 1;
@@ -485,7 +490,7 @@ int wav_open(audio_output_t *ao)
 	if(open_file(wdat, ao->device) < 0)
 		goto wav_open_bad;
 
-	if(floatwav)
+	if(wdat->floatwav)
 	{
 		long2littleendian(wdat->datalen, floathead->WAVE.data.datalen
 		,	sizeof(floathead->WAVE.data.datalen));
@@ -517,12 +522,11 @@ wav_open_bad:
 		wavdata_del(wdat);
 	}
 	return -1;
-
 }
 
 int wav_write(audio_output_t *ao, unsigned char *buf, int len)
 {
-	struct wavedata *wdat = ao->userptr;
+	struct wavdata *wdat = ao->userptr;
 	int temp;
 	int i;
 
@@ -603,9 +607,11 @@ int wav_close(audio_output_t *ao)
 		if(wdat->floatwav)
 		{
 			struct riff_float *floathead = wdat->the_header;
-			long2littleendian(wdat->datalen, floathead->WAVE.data.datalen
+			long2littleendian(wdat->datalen
+			,	floathead->WAVE.data.datalen
 			,	sizeof(floathead->WAVE.data.datalen));
-			long2littleendian(datalen+sizeof(floathead->WAVE), floathead->WAVElen
+			long2littleendian(wdat->datalen+sizeof(floathead->WAVE)
+			,	floathead->WAVElen
 			,	sizeof(floathead->WAVElen));
 			long2littleendian( wdat->datalen
 			/	(
@@ -650,7 +656,7 @@ int au_close(audio_output_t *ao)
 	if(fseek(wdat->wavfp, 0L, SEEK_SET) >= 0)
 	{
 		struct auhead *auhead = wdat->the_header;
-		long2bigendian(wdat->datalen, auhead->datalen, sizeof(auhead.datalen));
+		long2bigendian(wdat->datalen, auhead->datalen, sizeof(auhead->datalen));
 		/* Always (over)writing the header here; also for stdout, when
 		   fseek worked, this overwrite works. */
 		write_header(ao);
@@ -708,7 +714,7 @@ int wav_formats(audio_output_t *ao)
    fsync() can cause annoying issues in a system. */
 void wav_drain(audio_output_t *ao)
 {
-	struct wavedata *wdat = ao->userptr;
+	struct wavdata *wdat = ao->userptr;
 
 	if(fflush(wdat->wavfp) && !AOQUIET)
 		error1("flushing failed: %s\n", strerror(errno));

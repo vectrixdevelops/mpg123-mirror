@@ -139,7 +139,7 @@ void out123_del(audio_output_t *ao);
  */
 enum out123_error
 {
-,	OUT123_ERR = -1 /**< generic alias for verbosity, always == -1 */
+	OUT123_ERR = -1 /**< generic alias for verbosity, always == -1 */
 ,	OUT123_OK  = 0  /**< just a name for zero, not going to change */
 ,	OUT123_DOOM /**< dazzled, out of memory */
 ,	OUT123_BAD_DRIVER_NAME /**< bad driver name given */
@@ -226,8 +226,7 @@ audio_output_t *out123_getparam( audio_output_t *ao, enum out123_parms code
 /** Copy parameters from another out123_handle.
  * \param from_ao the handle to copy parameters from
  */
-int audio_output_t *out123_param_from( audio_output_t *ao
-                                       audio_output_t* from_ao );
+int out123_param_from(audio_output_t *ao, audio_output_t* from_ao);
 
 /** Get list of driver modules reachable in system.
  *  The client is responsible for freeing the memory of the return value!

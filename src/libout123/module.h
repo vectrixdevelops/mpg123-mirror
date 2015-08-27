@@ -1,14 +1,13 @@
 /*
 	module: module loading and listing interface
 
-	copyright ?-2007 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright ?-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
+	initially written by Nicholas J. Humphfrey
 */
 
 #ifndef _MPG123_MODULE_H_
 #define _MPG123_MODULE_H_
-
-/* Pulled in by mpg123app.h! */
 
 #ifdef HAVE_LTDL
 #include <ltdl.h>
@@ -42,11 +41,14 @@ typedef struct mpg123_module_struct {
 
 /* ------ Declarations from "module.c" ------ */
 
-mpg123_module_t* open_module( const char* type, const char* name );
-void close_module( mpg123_module_t* module );
+mpg123_module_t* open_module(const char* type, const char* name, int verbose);
+void close_module(mpg123_module_t* module, int verbose);
 /* TODO: resolve this name hack; settle if the module code really is
    meant for more than output. I don't really think a future *123
    player will use input modules, or playlist modules. */
-void audio_list_modules();
+/* Hm ... with the creation of libout123, it becomes more likely that a
+   input-module-using player might follow. I'll generalize things when
+   it's time. */
+void audio_list_modules(int verbose);
 
 #endif

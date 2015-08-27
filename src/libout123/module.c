@@ -6,15 +6,14 @@
 	initially written by Nicholas J Humfrey
 */
 
+#include "compat.h"
 #include <dirent.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <errno.h>
 #include <ctype.h>
 #include <ltdl.h>
 
-#include "out123_int.h"
-#include "mpg123app.h" /* for param struct */
+#include "module.h"
 #include "debug.h"
 
 #ifndef HAVE_LTDL
@@ -33,8 +32,8 @@ static const char* modulesearch[] =
 	,"plugins"
 };
 
-static char *get_the_cwd(); /* further down... */
-static char *get_module_dir()
+static char *get_the_cwd(int verbose); /* further down... */
+static char *get_module_dir(int verbose)
 {
 	/* Either PKGLIBDIR is accessible right away or we search for some possible plugin dirs relative to binary path. */
 	DIR* dir = NULL;
@@ -44,7 +43,7 @@ static char *get_module_dir()
 	defaultdir = getenv("MPG123_MODDIR");
 	if(defaultdir == NULL)
 		defaultdir=PKGLIBDIR;
-	else if(param.verbose > 1)
+	else if(verbose > 1)
 		fprintf(stderr, "Trying module directory from environment: %s\n", defaultdir);
 
 	dir = opendir(defaultdir);
@@ -52,7 +51,8 @@ static char *get_module_dir()
 	{
 		size_t l = strlen(defaultdir);
 
-		if(param.verbose > 1) fprintf(stderr, "Using default module dir: %s\n", defaultdir);
+		if(verbose > 1)
+			fprintf(stderr, "Using default module dir: %s\n", defaultdir);
 		moddir = malloc(l+1);
 		if(moddir != NULL)
 		{
@@ -68,19 +68,21 @@ static char *get_module_dir()
 		{
 			const char *testpath = modulesearch[i];
 			size_t l;
-			if(binpath != NULL) l = strlen(binpath) + strlen(testpath) + 1;
-			else l = strlen(testpath);
+			fprintf(stderr, "TODO: module search relative to binary path\n");
+/*			if(binpath != NULL) l = strlen(binpath) + strlen(testpath) + 1;
+			else */ l = strlen(testpath);
 
 			moddir = malloc(l+1);
 			if(moddir != NULL)
 			{
-				if(binpath==NULL) /* a copy of testpath, when there is no prefix */
+				/*if(binpath==NULL)*/ /* a copy of testpath, when there is no prefix */
 				snprintf(moddir, l+1, "%s", testpath);
-				else
-				snprintf(moddir, l+1, "%s/%s", binpath, testpath);
+				/* else
+				snprintf(moddir, l+1, "%s/%s", binpath, testpath); */
 
 				moddir[l] = 0;
-				if(param.verbose > 1) fprintf(stderr, "Looking for module dir: %s\n", moddir);
+				if(verbose > 1)
+					fprintf(stderr, "Looking for module dir: %s\n", moddir);
 
 				dir = opendir(moddir);
 				if(dir != NULL)
@@ -92,12 +94,13 @@ static char *get_module_dir()
 			}
 		}
 	}
-	if(param.verbose > 1) fprintf(stderr, "Module dir: %s\n", moddir != NULL ? moddir : "<nil>");
+	if(verbose > 1)
+		fprintf(stderr, "Module dir: %s\n", moddir != NULL ? moddir : "<nil>");
 	return moddir;
 }
 
 /* Open a module in current directory. */
-mpg123_module_t* open_module_here(const char* type, const char* name)
+mpg123_module_t* open_module_here(const char* type, const char* name, int verbose)
 {
 	lt_dlhandle handle = NULL;
 	mpg123_module_t *module = NULL;
@@ -109,7 +112,8 @@ mpg123_module_t* open_module_here(const char* type, const char* name)
 	/* Initialize libltdl */
 	if(lt_dlinit())
 	{
-		error("Failed to initialise libltdl");
+		if(verbose > -1)
+			error("Failed to initialise libltdl");
 		return NULL;
 	}
 
@@ -118,20 +122,22 @@ mpg123_module_t* open_module_here(const char* type, const char* name)
 	module_path_len = 2 + strlen(type) + 1 + strlen(name) + strlen(MODULE_FILE_SUFFIX) + 1;
 	module_path = malloc( module_path_len );
 	if (module_path == NULL) {
-		error1( "Failed to allocate memory for module name: %s", strerror(errno) );
+		if(verbose > -1)
+			error1( "Failed to allocate memory for module name: %s", strerror(errno) );
 		return NULL;
 	}
 	snprintf( module_path, module_path_len, "./%s_%s%s", type, name, MODULE_FILE_SUFFIX );
 	/* Display the path of the module created */
-	if(param.verbose > 1) fprintf(stderr, "Module path: %s\n", module_path );
+	if(verbose > 1)
+		fprintf(stderr, "Module path: %s\n", module_path );
 
 	/* Open the module */
 	handle = lt_dlopen( module_path );
 	free( module_path );
 	if (handle==NULL) {
 		error2( "Failed to open module %s: %s", name, lt_dlerror() );
-		if(param.verbose > 1)
-		fprintf(stderr, "Note: This could be because of braindead path in the .la file...\n");
+		if(verbose > 1)
+			fprintf(stderr, "Note: This could be because of braindead path in the .la file...\n");
 
 		return NULL;
 	}
@@ -142,7 +148,8 @@ mpg123_module_t* open_module_here(const char* type, const char* name)
 						strlen( MODULE_SYMBOL_SUFFIX ) + 1;
 	module_symbol = malloc(module_symbol_len);
 	if (module_symbol == NULL) {
-		error1( "Failed to allocate memory for module symbol: %s", strerror(errno) );
+		if(verbose > -1)
+			error1( "Failed to allocate memory for module symbol: %s", strerror(errno) );
 		return NULL;
 	}
 	snprintf( module_symbol, module_symbol_len, "%s%s%s", MODULE_SYMBOL_PREFIX, type, MODULE_SYMBOL_SUFFIX );
@@ -171,26 +178,31 @@ mpg123_module_t* open_module_here(const char* type, const char* name)
 
 
 /* Open a module, including directory search. */
-mpg123_module_t* open_module(const char* type, const char* name)
+mpg123_module_t* open_module(const char* type, const char* name, int verbose)
 {
 	mpg123_module_t *module = NULL;
 	char *workdir = NULL;
 	char *moddir  = NULL;
 
-	workdir = get_the_cwd();
-	moddir  = get_module_dir();
+	workdir = get_the_cwd(verbose);
+	moddir  = get_module_dir(verbose);
 	if(workdir == NULL || moddir == NULL)
 	{
-		error("Failure getting workdir or moddir! (Perhaps set MPG123_MODDIR?)");
-		if(workdir == NULL) fprintf(stderr, "Hint: I need to know the current working directory to be able to come back after hunting modules. I will not leave because I do not know where I am.\n");
-
+		if(verbose > -1)
+		{
+			error("Failure getting workdir or moddir! (Perhaps set MPG123_MODDIR?)");
+			if(workdir == NULL)
+				fprintf(stderr, "Hint: I need to know the current working directory to be able to come back after hunting modules. I will not leave because I do not know where I am.\n");
+		}
 		if(workdir != NULL) free(workdir);
 		if(moddir  != NULL) free(moddir);
 		return NULL;
 	}
 
-	if(chdir(moddir) == 0) module = open_module_here(type, name);
-	else error2("Failed to enter module directory %s: %s", moddir, strerror(errno));
+	if(chdir(moddir) == 0)
+		module = open_module_here(type, name, verbose);
+	else if(verbose > -1)
+		error2("Failed to enter module directory %s: %s", moddir, strerror(errno));
 
 	chdir(workdir);
 	free(moddir);
@@ -198,17 +210,18 @@ mpg123_module_t* open_module(const char* type, const char* name)
 	return module;
 }
 
-void close_module( mpg123_module_t* module )
+void close_module( mpg123_module_t* module, int verbose )
 {
 	lt_dlhandle handle = module->handle;
 	int err = lt_dlclose( handle );
 	
-	if (err) error1("Failed to close module: %s", lt_dlerror() );
+	if(err && verbose > -1)
+		error1("Failed to close module: %s", lt_dlerror());
 
 }
 
 #define PATH_STEP 50
-static char *get_the_cwd()
+static char *get_the_cwd(int verbose)
 {
 	size_t bs = PATH_STEP;
 	char *buf = malloc(bs);
@@ -218,7 +231,8 @@ static char *get_the_cwd()
 		char *buf2;
 		if(errno != ERANGE)
 		{
-			error1("getcwd returned unexpected error: %s", strerror(errno));
+			if(verbose > -1)
+				error1("getcwd returned unexpected error: %s", strerror(errno));
 			free(buf);
 			return NULL;
 		}
@@ -231,29 +245,35 @@ static char *get_the_cwd()
 	return buf;
 }
 
-void audio_list_modules()
+/* Gah! That needs to return strings, not print stuff!
+   Later ... this routine will be moved to the main programs, only the part
+   about fetching the module names stays. */
+void audio_list_modules(int verbose)
 {
 	DIR* dir = NULL;
 	struct dirent *dp = NULL;
 	char *moddir  = NULL;
 
-	moddir = get_module_dir();
+	moddir = get_module_dir(verbose);
 	if(moddir == NULL)
 	{
-		error("Failure getting module directory! (Perhaps set MPG123_MODDIR?)");
+		if(verbose > -1)
+			error("Failure getting module directory! (Perhaps set MPG123_MODDIR?)");
 		exit(-1); /* TODO: change this to return a value instead of exit()! */
 	}
 	/* Open the module directory */
 	dir = moddir != NULL ? opendir(moddir) : NULL;
 	if (dir==NULL) {
-		error2("Failed to open the module directory (%s): %s\n", PKGLIBDIR, strerror(errno));
+		if(verbose > -1)
+			error2("Failed to open the module directory (%s): %s\n", PKGLIBDIR, strerror(errno));
 		free(moddir);
 		exit(-1);
 	}
 	
 	if(chdir(moddir) != 0)
 	{
-		error2("Failed to enter module directory (%s): %s\n", PKGLIBDIR, strerror(errno));
+		if(verbose > -1)
+			error2("Failed to enter module directory (%s): %s\n", PKGLIBDIR, strerror(errno));
 		closedir( dir );
 		free(moddir);
 		exit(-1);
@@ -294,12 +314,12 @@ void audio_list_modules()
 				module_name = strdup( dp->d_name + strlen( module_type ) + 1 );
 				module_name[ strlen( module_name ) - strlen( MODULE_FILE_SUFFIX ) ] = '\0';
 				/* Open the module */
-				module = open_module_here(module_type, module_name);
+				module = open_module_here(module_type, module_name, verbose);
 				if (module) {
 					printf("%-15s%s  %s\n", module->name, module_type, module->description );
 				
 					/* Close the module again */
-					close_module( module );
+					close_module(module, verbose);
 				}
 				free( module_name );
 				free( module_type );

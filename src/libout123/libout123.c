@@ -1,4 +1,4 @@
-b/*
+/*
 	audio: audio output interface
 
 	copyright ?-2015 by the mpg123 project - free software under the terms of the LGPL 2.1
@@ -8,7 +8,7 @@ b/*
 
 #include <errno.h>
 #include "out123_int.h"
-#include "common.h"
+#include "wav.h"
 #include "buffer.h"
 
 #include "debug.h"
@@ -564,7 +564,7 @@ static int open_fake_module(audio_output_t *ao, const char *driver)
 		ao->write = wav_write;
 		ao->flush = builtin_nothing;
 		ao->drain = wav_drain;
-		ao->close = cdr_close;
+		ao->close = raw_close;
 	}
 	else
 	if(strcmp("au", driver))

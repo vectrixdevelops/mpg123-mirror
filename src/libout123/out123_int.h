@@ -15,6 +15,10 @@
 #include "out123.h"
 #include "module.h"
 
+#ifndef NOXFERMEM
+#include "xfermem.h"
+#endif
+
 /* 3% rate tolerance */
 #define AUDIO_RATE_TOLERANCE	  3
 
@@ -41,15 +45,15 @@ enum playstate
 ,	play_live     /* playing right now */
 };
 
-typedef struct audio_output_struct
+struct audio_output_struct
 {
-	enum out123_errors errcode;
+	enum out123_error errcode;
 #ifndef NOXFERMEM
 	/* If buffer_pid >= 0, there is a separate buffer process actually
 	   handling everything, this instance here is then only a proxy. */
 	int buffer_pid;
-	static int buffer_fd[2];
-	txfermem *buffermem
+	int buffer_fd[2];
+	txfermem *buffermem;
 #endif
 
 	int fn;			/* filenumber */
@@ -80,7 +84,7 @@ typedef struct audio_output_struct
 	double preload;	/* buffer fraction to preload before play */
 	int verbose;	/* verbosity to stderr */
 /* TODO int intflag;   ... is it really useful/necessary from the outside? */
-} audio_output_t;
+};
 
 /* Lazy. */
 #define AOQUIET ((ao->auxflags | ao->flags) & OUT123_QUIET)
@@ -95,14 +99,6 @@ struct audio_format_name {
 	char *name;
 	char *sname;
 };
-
-int cdr_open(audio_output_t *);
-int au_open(audio_output_t *);
-int wav_open(audio_output_t *);
-int wav_write(unsigned char *buf,int len);
-int cdr_close(void);
-int au_close(void);
-int wav_close(void);
 
 #endif
 
