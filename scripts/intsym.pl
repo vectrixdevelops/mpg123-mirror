@@ -19,11 +19,11 @@ my @instances =
 { name => 'out123_intsym.h'
 , guard => 'OUT123_INTSYM_H'
 , dir => 'src/libout123'
-, headers => [qw(../compat/compat module buffer xfermem)]
+, headers => [qw(../compat/compat module buffer xfermem wav out123_int)]
 , prefix => 'IOT123_'
 , apiprefix => 'out123_|audio_|output_'
 , conditional => { strerror=>'HAVE_STRERROR', strdup=>'HAVE_STRDUP' }
-, symbols => [] # extra symbols
+, symbols => [qw(catchsignal)] # extra symbols
 }
 );
 
@@ -44,7 +44,7 @@ for my $i (@instances)
 		print STDERR "==== working on header $header\n";
 		open(DAT, '<', $dir.'/'.$header.'.h') or die "Cannot open $header.\n";
 		while(<DAT>)
-		{
+		{ # Only
 			if(/^([^\s\(#][^\(]*)\s\*?([a-z][a-z_0-9]+)\s*\(/)
 			{
 				# Skip preprocessing/comment stuff and official API.
