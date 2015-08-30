@@ -181,19 +181,7 @@ debug1("control for frame: %li", (long)mpg123_tellframe(fr));
 	{
 		/* pause_cycle counts the remaining frames _after_ this one, thus <0, not ==0 . */
 		if(--pause_cycle < 0)
-		{
 			pause_recycle(fr);
-			if(param.usebuffer)
-			{
-				while(paused && audio_buffered_bytes(ao))
-				{
-					audio_continue(ao);
-					term_handle_input(fr, ao, TRUE);
-				}
-				/* Undo the cycling offset if we are done with cycling. */
-				if(!paused)	pause_uncycle();
-			}
-		}
 	}
 
 	do
@@ -223,7 +211,7 @@ static void seekmode(void)
 	if(param.usebuffer && !stopped)
 	{
 		stopped = TRUE;
-		audio_stop(ao); /* TODO: just plain audio_stop() */
+		out123_pause(ao);
 		fprintf(stderr, "%s", MPG123_STOPPED_STRING);
 	}
 }
@@ -292,40 +280,41 @@ static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 	break;
 	case MPG123_PAUSE_KEY:
 		paused=1-paused;
-		if(paused) {
+		if(paused)
+		{
 			/* Not really sure if that is what is wanted
 				 This jumps in audio output, but has direct reaction to pausing loop. */
+			out123_drop(ao);
+			out123_param(ao, OUT123_PRELOAD, 0, 0.);
 			if(param.usebuffer) audio_drop(ao);
 
 			pause_recycle(fr);
 		}
+		else
+			out123_param(ao, OUT123_PRELOAD, 0, param.preload);
 		if(stopped)
 		{
 			stopped=0;
-			if(param.usebuffer) audio_start(ao);
+			out123_continue(ao);
 		}
 		fprintf(stderr, "%s", (paused) ? MPG123_PAUSED_STRING : MPG123_EMPTY_STRING);
 	break;
 	case MPG123_STOP_KEY:
 	case ' ':
-		/* when seeking while stopped and then resuming, I want to prevent the chirp from the past */
-		/* TODO: I smell lots of simplification here regarding the buffer. */
-		if(!param.usebuffer) audio_drop(ao);
+		/* TODO: Verify/ensure that there is no "chirp from the past" when
+		   seeking while stopped. */
 		stopped=1-stopped;
 		if(paused) {
 			paused=0;
 			offset -= pause_cycle;
 		}
-		if(param.usebuffer)
+		if(stopped)
+			out123_pause(ao);
+		else
 		{
-			if(stopped) audio_stop(ao);
-			else
-			{
-				/* When we stopped buffer for seeking, we must resync. */
-				if(offset) audio_drop(ao);
-
-				audio_start(ao);
-			}
+			if(offset) /* If position changed, old is outdated. */
+				out123_drop(ao);
+			out123_continue(ao);
 		}
 		fprintf(stderr, "%s", (stopped) ? MPG123_STOPPED_STRING : MPG123_EMPTY_STRING);
 	break;
@@ -393,7 +382,7 @@ static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 		mpg123_volume_change(fr, 0.);
 	break;
 	case MPG123_PREV_KEY:
-		audio_drop(ao);
+		out123_drop(ao);
 
 		prev_track();
 	break;
