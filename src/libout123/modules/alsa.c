@@ -16,6 +16,7 @@
 #define ALSA_PCM_NEW_HW_PARAMS_API
 #define ALSA_PCM_NEW_SW_PARAMS_API
 
+#include <alloca.h> /* GCC complains about missing declaration of alloca. */
 #include <alsa/asoundlib.h>
 
 #include "debug.h"
