@@ -10,12 +10,23 @@ AC_PREREQ(2.57)
 dnl ############# Initialisation
 AC_INIT([mpg123], [1.23.0], [mpg123-devel@lists.sourceforge.net])
 dnl Increment API_VERSION when the API gets changes (new functions).
+
+dnl libmpg123
 API_VERSION=41
 LIB_PATCHLEVEL=2
+
+dnl libout123
+OUTAPI_VERSION=1
+OUTLIB_PATCHLEVEL=0
+
 dnl Since we want to be backwards compatible, both sides get set to API_VERSION.
 LIBMPG123_VERSION=$API_VERSION:$LIB_PATCHLEVEL:$API_VERSION
+LIBOUT123_VERSION=$OUTAPI_VERSION:$OUTLIB_PATCHLEVEL:$OUTAPI_VERSION
 AC_SUBST(LIBMPG123_VERSION)
 AC_SUBST(API_VERSION)
+AC_SUBST(LIBOUT123_VERSION)
+AC_SUBST(OUTAPI_VERSION)
+
 
 AC_CONFIG_SRCDIR(src/mpg123.c)
 AC_CONFIG_AUX_DIR(build)
@@ -2292,6 +2303,7 @@ AC_CONFIG_FILES([
 	libmpg123.pc
 	mpg123.spec
 	src/libmpg123/mpg123.h
+	src/libout123/out123.h
 ])
 
 AC_OUTPUT

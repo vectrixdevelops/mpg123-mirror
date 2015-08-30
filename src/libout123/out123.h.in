@@ -27,6 +27,8 @@
 #ifndef _OUT123_H_
 #define _OUT123_H_
 
+#define OUT123_API_VERSION @OUTAPI_VERSION@
+
 /** \defgroup out123_api
  *  This is out123, a library focused on continuous playback of audio streams
  *  via various platform-specific output methods. It glosses over details of

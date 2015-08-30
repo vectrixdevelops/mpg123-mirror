@@ -21,6 +21,9 @@ src_libout123_libout123_la_SOURCES = \
   src/libout123/xfermem.c \
   src/libout123/xfermem.h
 
+src_libout123_libout123_la_LDFLAGS = \
+  -no-undefined -version-info @LIBOUT123_VERSION@ -export-symbols-regex '^out123_'
+
 src_libout123_libout123_la_LIBADD = \
   src/libout123/libmodule.la \
   src/libout123/modules/libdefaultmodule.la
@@ -43,7 +46,9 @@ EXTRA_DIST += src/libout123/outmod_def.h
 
 # The sfifo code is directly used in some modules.
 EXTRA_DIST += \
+  src/libout123/out123.h.in \
   src/libout123/sfifo.c \
   src/libout123/sfifo.h
 
-# TODO: actually turn the stuff into a library.
+nodist_include_HEADERS += \
+  src/libout123/out123.h
