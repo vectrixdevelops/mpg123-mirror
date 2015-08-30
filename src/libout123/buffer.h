@@ -16,8 +16,8 @@
 #ifndef _MPG123_BUFFER_H_
 #define _MPG123_BUFFER_H_
 
-#include "compat.h"
 #include "out123_int.h"
+#include "compat.h"
 
 int  buffer_init(audio_output_t *ao, size_t bytes);
 void buffer_exit(audio_output_t *ao);
@@ -42,5 +42,11 @@ void buffer_end(audio_output_t *ao);
 
 void buffer_pause(audio_output_t *ao);
 void buffer_drop(audio_output_t *ao);
+
+/* The actual work: Hand over audio data. */
+size_t buffer_write(audio_output_t *ao, void *buffer, size_t bytes);
+
+/* Thin wrapper over xfermem giving the current buffer fill. */
+long buffer_fill(audio_output_t *ao);
 
 #endif

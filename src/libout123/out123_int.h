@@ -101,5 +101,8 @@ struct audio_format_name {
 	char *sname;
 };
 
+int write_parameters(audio_output_t *ao, int fd);
+int read_parameters(audio_output_t *ao, int fd);
+
 #endif
 

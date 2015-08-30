@@ -253,7 +253,7 @@ int out123_param_from(audio_output_t *ao, audio_output_t* from_ao)
 /* Serialization of tunable parameters to communicate them between
    main process and buffer. Make sure these two stay in sync ... */
 
-int out123_write_parameters(audio_output_t *ao, int fd)
+int write_parameters(audio_output_t *ao, int fd)
 {
 	if(
 		GOOD_WRITEVAL(fd, ao->flags)
@@ -267,7 +267,7 @@ int out123_write_parameters(audio_output_t *ao, int fd)
 		return -1;
 }
 
-int out123_read_parameters(audio_output_t *ao, int fd)
+int read_parameters(audio_output_t *ao, int fd)
 {
 	if(
 		GOOD_READVAL(fd, ao->flags)
@@ -303,8 +303,6 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 	{
 		/* We just quickly check if the device can be accessed at all,
 		   same as out123_get_encodings! */
-
-		int result = 0;
 		char *nextname, *modnames;
 		const char *names = driver ? driver : DEFAULT_OUTPUT_MODULE;
 

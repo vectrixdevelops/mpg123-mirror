@@ -79,8 +79,8 @@ void xfermem_init (txfermem **xf, size_t bufsize, size_t msize, size_t skipbuf)
 		exit (1);
 	}
 	(*xf)->freeindex = (*xf)->readindex = 0;
-	(*xf)->data = ((void *) *xf) + sizeof(txfermem) + msize;
-	(*xf)->metadata = ((void *) *xf) + sizeof(txfermem);
+	(*xf)->data = ((char *) *xf) + sizeof(txfermem) + msize;
+	(*xf)->metadata = ((char *) *xf) + sizeof(txfermem);
 	(*xf)->size = bufsize;
 	(*xf)->metasize = msize + skipbuf;
 }
@@ -283,7 +283,7 @@ int xfermem_write(txfermem *xf, void *buffer, size_t bytes)
 	{ /* two blocks */
 		size_t endblock = xf->size - xf->freeindex;
 		memcpy(xf->data+xf->freeindex, buffer, endblock);
-		memcpy(xf->data, buffer + endblock, bytes-endblock);
+		memcpy(xf->data, (char*)buffer + endblock, bytes-endblock);
 	}
 	/* Advance the free space pointer, including the wrap. */
 	xf->freeindex = (xf->freeindex + bytes) % xf->size;

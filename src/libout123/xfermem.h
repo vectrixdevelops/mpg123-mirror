@@ -26,8 +26,8 @@ typedef struct {
 	size_t freeindex;	/* [W] next free index */
 	size_t readindex;	/* [R] next index to read */
 	int fd[2];
-	void *data;
-	void *metadata;
+	char *data;
+	char *metadata;
 	size_t size;
 	size_t metasize;
 } txfermem;

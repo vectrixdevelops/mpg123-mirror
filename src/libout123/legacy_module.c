@@ -16,7 +16,7 @@ extern mpg123_module_t mpg123_output_module_info;
 
 /* Open a module */
 mpg123_module_t*
-open_module( const char* type, const char* name )
+open_module(const char* type, const char* name, int verbose)
 {
 	mpg123_module_t *mod = NULL;
 	
@@ -28,14 +28,19 @@ open_module( const char* type, const char* name )
 		mod = &mpg123_input_module_info;
 */
 	} else {
-		error1("Unable to open module type '%s'.", type);
+		if(verbose >= 0)
+			error1("Unable to open module type '%s'.", type);
 		return NULL;
 	}
 	
 	/* Check the module compiled in is the module requested */
 	if (strcmp(name, mod->name)!=0) {
-		error1("Unable to open requested module '%s'.", name);
-		error1("The only available statically compiled module is '%s'.", mod->name);
+		if(verbose >= 0)
+		{
+			error1("Unable to open requested module '%s'.", name);
+			error1("The only available statically compiled module is '%s'."
+			,	mod->name);
+		}
 		return NULL;
 	}
 	
@@ -51,7 +56,7 @@ open_module( const char* type, const char* name )
 }
 
 
-void close_module( mpg123_module_t* module )
+void close_module(mpg123_module_t* module, int verbose)
 {
 	debug("close_module()");
 	

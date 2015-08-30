@@ -136,7 +136,7 @@ buffer_init_bad:
 void buffer_exit(audio_output_t *ao)
 {
 	int status = 0;
-	if(ao->buffer_pid == -1) return
+	if(ao->buffer_pid == -1) return;
 
 	debug("ending buffer");
 	buffer_stop(ao); /* Puts buffer into waiting-for-command mode. */
@@ -189,7 +189,7 @@ int buffer_sync_param(audio_output_t *ao)
 	}
 	/* Calling an external serialization routine to avoid forgetting
 	   any fresh parameters here. */
-	if(out123_write_parameters(ao, writerfd))
+	if(write_parameters(ao, writerfd))
 	{
 		ao->errcode = OUT123_BUFFER_ERROR;
 		return -1;
@@ -262,7 +262,6 @@ int buffer_get_encodings(audio_output_t *ao)
 int buffer_start(audio_output_t *ao)
 {
 	int writerfd = ao->buffermem->fd[XF_WRITER];
-	size_t namelen;
 	if(xfermem_putcmd(writerfd, BUF_CMD_START) != 1)
 	{
 		ao->errcode = OUT123_BUFFER_ERROR;
@@ -327,7 +326,8 @@ size_t buffer_write(audio_output_t *ao, void *buffer, size_t bytes)
 		size_t count_piece = bytes > max_piece
 		?	max_piece
 		:	bytes;
-		int ret = xfermem_write(ao->buffermem, buffer+written, count_piece);
+		int ret = xfermem_write(ao->buffermem
+		,	(char*)buffer+written, count_piece);
 		if(ret)
 		{
 			if(!AOQUIET)
@@ -404,7 +404,7 @@ static void buffer_play(audio_output_t *ao, size_t bytes)
 	bytes -= bytes % ao->framesize;
 	/* Now do a normal ao->write(), with interruptions by signals
 		being expected. */
-	written = ao->write(ao, xf->data+xf->readindex, (int)bytes);
+	written = ao->write(ao, (unsigned char*)xf->data+xf->readindex, (int)bytes);
 	if(written >= 0)
 		/* Advance read pointer by the amount of written bytes. */
 		xf->readindex = (xf->readindex + written) % xf->size;
@@ -458,6 +458,7 @@ static int read_string(audio_output_t *ao, char **buf)
 		ao->errcode = OUT123_BUFFER_ERROR;
 		return 2;
 	}
+	return 0;
 }
 
 /* The main loop, returns 0 when no issue occured. */
@@ -522,7 +523,7 @@ int buffer_loop(audio_output_t *ao)
 			case BUF_CMD_PARAM:
 				/* If that does not work, communication is broken anyway and
 				   writer will notice soon enough. */
-				out123_read_parameters(ao, my_fd);
+				read_parameters(ao, my_fd);
 				xfermem_putcmd(my_fd, XF_CMD_OK);
 			break;
 			case BUF_CMD_OPEN:
@@ -587,7 +588,7 @@ int buffer_loop(audio_output_t *ao)
 				else
 				{
 					xfermem_putcmd(my_fd, XF_CMD_ERROR);
-					if(!GOOD_WRITEWAL(my_fd, ao->errcode))
+					if(!GOOD_WRITEVAL(my_fd, ao->errcode))
 						return 2;
 				}
 			break;
