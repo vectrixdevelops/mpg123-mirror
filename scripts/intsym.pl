@@ -44,7 +44,7 @@ for my $i (@instances)
 		print STDERR "==== working on header $header\n";
 		open(DAT, '<', $dir.'/'.$header.'.h') or die "Cannot open $header.\n";
 		while(<DAT>)
-		{ # Only
+		{ # Only simple declarations parsed here, more configured manually.
 			if(/^([^\s\(#][^\(]*)\s\*?([a-z][a-z_0-9]+)\s*\(/)
 			{
 				# Skip preprocessing/comment stuff and official API.
