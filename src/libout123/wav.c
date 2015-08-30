@@ -165,6 +165,8 @@ static int testEndian(void)
 /* return: 0 is good, -1 is bad */
 static int open_file(struct wavdata *wdat, char *filename)
 {
+	if(!wdat)
+		return -1;
 #if defined(HAVE_SETUID) && defined(HAVE_GETUID)
    setuid(getuid()); /* dunno whether this helps. I'm not a security expert */
 #endif
@@ -188,7 +190,9 @@ static int open_file(struct wavdata *wdat, char *filename)
    }
 }
 
-/* return: 0 is good, -1 is bad */
+/* return: 0 is good, -1 is bad
+   Works for any partial state of setup, especially should not complain if
+   ao->userptr == NULL. */
 static int close_file(audio_output_t *ao)
 {
 	struct wavdata *wdat = ao->userptr;
@@ -216,6 +220,9 @@ static int write_header(audio_output_t *ao)
 {
 	struct wavdata *wdat = ao->userptr;
 
+	if(!wdat)
+		return 0;
+
 	if(
 		wdat->the_header_size > 0
 	&&	(
@@ -236,7 +243,8 @@ int au_open(audio_output_t *ao)
 	struct wavdata *wdat   = NULL;
 	struct auhead  *auhead = NULL;
 
-	if(ao->format < 0) ao->format = MPG123_ENC_SIGNED_16;
+	if(ao->format < 0)
+		return 0;
 
 	if(ao->format & MPG123_ENC_FLOAT)
 	{
@@ -312,13 +320,9 @@ int cdr_open(audio_output_t *ao)
 {
 	struct wavdata *wdat   = NULL;
 
-	if(ao->format < 0 && ao->rate < 0 && ao->channels < 0)
-	{
-		/* param.force_stereo = 0; */
-		ao->format = MPG123_ENC_SIGNED_16;
-		ao->rate = 44100;
-		ao->channels = 2;
-	}
+	if(ao->format < 0)
+		return 0;
+
 	if(
 		ao->format != MPG123_ENC_SIGNED_16
 	||	ao->rate != 44100
@@ -358,6 +362,9 @@ int raw_open(audio_output_t *ao)
 {
 	struct wavdata *wdat;
 
+	if(ao->format < 0)
+		return 0;
+
 	if(!(wdat = wavdata_new()))
 	{
 		ao->errcode = OUT123_DOOM;
@@ -382,14 +389,14 @@ int wav_open(audio_output_t *ao)
 	struct riff       *inthead   = NULL;
 	struct riff_float *floathead = NULL;
 
+	if(ao->format < 0)
+		return 0;
+
 	if(!(wdat = wavdata_new()))
 	{
 		ao->errcode = OUT123_DOOM;
 		goto wav_open_bad;
 	}
-
-	if(ao->format < 0)
-		ao->format = MPG123_ENC_SIGNED_16;
 
 	wdat->floatwav = (ao->format & MPG123_ENC_FLOAT);
 	if(wdat->floatwav)
@@ -454,11 +461,6 @@ int wav_open(audio_output_t *ao)
 			error("Format not supported.");
 		goto wav_open_bad;
 	}
-
-	if(ao->rate < 0)
-		ao->rate = 44100;
-	if(ao->channels < 0)
-		ao->channels = 2;
 
 	if(wdat->floatwav)
 	{
@@ -530,7 +532,7 @@ int wav_write(audio_output_t *ao, unsigned char *buf, int len)
 	int temp;
 	int i;
 
-	if(!wdat->wavfp)
+	if(!wdat || !wdat->wavfp)
 		return 0; /* Really? Zero? */
 
 	if(wdat->datalen == 0 && write_header(ao) < 0)
@@ -592,7 +594,10 @@ int wav_close(audio_output_t *ao)
 {
 	struct wavdata *wdat = ao->userptr;
 
-	if(!wdat->wavfp)
+	if(!wdat) /* Special case: Opened only for format query. */
+		return 0;
+
+	if(!wdat || !wdat->wavfp)
 		return -1;
 
 	/* flush before seeking to catch out-of-disk explicitly at least at the end */
@@ -643,6 +648,9 @@ int au_close(audio_output_t *ao)
 {
 	struct wavdata *wdat = ao->userptr;
 
+	if(!wdat) /* Special case: Opened only for format query. */
+		return 0;
+
 	if(!wdat->wavfp)
 		return -1;
 
@@ -671,6 +679,9 @@ int au_close(audio_output_t *ao)
 int raw_close(audio_output_t *ao)
 {
 	struct wavdata *wdat = ao->userptr;
+
+	if(!wdat) /* Special case: Opened only for format query. */
+		return 0;
 
 	if(!wdat->wavfp)
 		return -1;
@@ -715,6 +726,9 @@ int wav_formats(audio_output_t *ao)
 void wav_drain(audio_output_t *ao)
 {
 	struct wavdata *wdat = ao->userptr;
+
+	if(!wdat)
+		return;
 
 	if(fflush(wdat->wavfp) && !AOQUIET)
 		error1("flushing failed: %s\n", strerror(errno));

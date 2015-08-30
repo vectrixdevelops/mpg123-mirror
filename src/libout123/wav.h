@@ -23,6 +23,7 @@ int wav_write(audio_output_t *, unsigned char *buf, int len);
 int wav_close(audio_output_t *);
 int au_close(audio_output_t *);
 int raw_close(audio_output_t *);
+int cdr_formats(audio_output_t *);
 int au_formats(audio_output_t *);
 int raw_formats(audio_output_t *);
 int wav_formats(audio_output_t *);

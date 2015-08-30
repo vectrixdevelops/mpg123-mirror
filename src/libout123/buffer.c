@@ -55,11 +55,13 @@ static void catch_interrupt (void)
 	intflag = TRUE;
 }
 
-static int buffer_loop(audio_output_t *ao, sigset_t *oldsigset);
+static int buffer_loop(audio_output_t *ao);
 
 static void catch_child(void)
 {
-  while (waitpid(-1, NULL, WNOHANG) > 0);
+	/* Disabled for now. We do not really need that.
+	   Rather get return status in a controlled way in buffer_exit(). */
+	/* while (waitpid(-1, NULL, WNOHANG) > 0); */
 }
 
 /*
@@ -69,13 +71,14 @@ static void catch_child(void)
 /* Start a buffer process. */
 int buffer_init(audio_output_t *ao, size_t bytes)
 {
-	sigset_t newsigset, oldsigset;
-
 	buffer_exit(ao);
 	if(bytes < outburst) bytes = 2*outburst;
 
-	xfermem_init (&ao->buffermem, bytes, 0, 0);
-	catchsignal (SIGCHLD, catch_child);
+	xfermem_init(&ao->buffermem, bytes, 0, 0);
+	/* Is catch_child() really useful? buffer_exit() does waitpid().
+	   And if buffer_exit() is not called, the main process might be
+	   killed off and not be able to run a signal handler anyway. */
+	catchsignal(SIGCHLD, catch_child);
 	switch((ao->buffer_pid = fork()))
 	{
 		case -1: /* error */
@@ -94,7 +97,7 @@ int buffer_init(audio_output_t *ao, size_t bytes)
 			ao->buffer_pid = -1;
 			/* Not preparing audio output anymore, that comes later. */
 			xfermem_init_reader(ao->buffermem);
-			ret = buffer_loop(ao, &oldsigset); /* Here the work happens. */
+			ret = buffer_loop(ao); /* Here the work happens. */
 			xfermem_done_reader(ao->buffermem);
 			xfermem_done(ao->buffermem);
 			/* Proper cleanup of output handle, including out123_close(). */
@@ -102,9 +105,21 @@ int buffer_init(audio_output_t *ao, size_t bytes)
 			exit(ret);
 		}
 		default: /* parent */
-			xfermem_init_writer(buffermem);
-wait for pong ... necessary? kill it if it does not come?
-race condition with startup?!
+		{
+			int cmd;
+			xfermem_init_writer(ao->buffermem);
+			debug("waiting for inital pong from buffer process");
+			if( (cmd=xfermem_getcmd(ao->buffermem->fd[XF_WRITER], TRUE))
+			    != XF_CMD_PONG )
+			{
+				if(!AOQUIET)
+					error2("Got %i instead of expected initial response %i. Killing rogue buffer process."
+					,	cmd, XF_CMD_PONG);
+				kill(ao->buffer_pid, SIGKILL);
+				buffer_exit(ao);
+				return -1;
+			}
+		}
 	}
 
 	return 0;
@@ -120,15 +135,17 @@ buffer_init_bad:
 /* End a buffer process. */
 void buffer_exit(audio_output_t *ao)
 {
-	int status;
+	int status = 0;
 	if(ao->buffer_pid == -1) return
 
 	debug("ending buffer");
 	buffer_stop(ao); /* Puts buffer into waiting-for-command mode. */
-	buffer_end(ao, 1);  /* Gives command to end operation. */
+	buffer_end(ao);  /* Gives command to end operation. */
 	xfermem_done_writer(ao->buffermem);
 	waitpid(ao->buffer_pid, &status, 0);
 	xfermem_done(ao->buffermem);
+	ao->buffermem = NULL;
+	ao->buffer_pid = -1;
 	if(WIFEXITED(status))
 	{
 		int ret = WEXITSTATUS(status);
@@ -137,8 +154,6 @@ void buffer_exit(audio_output_t *ao)
 	}
 	else if(!AOQUIET)
 		error("Buffer process did not exit normally.");
-	ao->buffer_pid = -1;
-	/* TODO: I sense that close(xf->fd[XF_WRITER]) is missing. */
 }
 
 /*
@@ -154,7 +169,7 @@ static int buffer_cmd_finish(audio_output_t *ao)
 	{
 		case XF_CMD_OK: return 0;
 		case XF_CMD_ERROR:
-			if(!GOOD_READVAL(writerfd, ao->errcode))
+			if(!GOOD_READVAL(ao->buffermem->fd[XF_WRITER], ao->errcode))
 				ao->errcode = OUT123_BUFFER_ERROR;
 			return -1;
 		break;
@@ -204,7 +219,7 @@ int buffer_open(audio_output_t *ao, const char* driver, const char* device)
 	||	!GOOD_WRITEBUF(writerfd, device, devlen)
 	)
 	{
-		ao->errocde = OUT123_BUFFER_ERROR;
+		ao->errcode = OUT123_BUFFER_ERROR;
 		return -1;
 	}
 
@@ -226,7 +241,7 @@ int buffer_get_encodings(audio_output_t *ao)
 	||	!GOOD_WRITEVAL(writerfd, ao->rate)
 	)
 	{
-		ao->errocde = OUT123_BUFFER_ERROR;
+		ao->errcode = OUT123_BUFFER_ERROR;
 		return -1;
 	}
 
@@ -255,12 +270,12 @@ int buffer_start(audio_output_t *ao)
 	}
 	/* Now shoving over the parameters for opening the device. */
 	if(
-		!GOOD_WRITEVAL(writerfd, ao->encoding)
+		!GOOD_WRITEVAL(writerfd, ao->format)
 	||	!GOOD_WRITEVAL(writerfd, ao->channels)
 	|| !GOOD_WRITEVAL(writerfd, ao->rate)
 	)
 	{
-		ao->errocde = OUT123_BUFFER_ERROR;
+		ao->errcode = OUT123_BUFFER_ERROR;
 		return -1;
 	}
 
@@ -289,7 +304,7 @@ void name(audio_output_t *ao) \
 }
 
 BUFFER_SIGNAL_CONTROL(buffer_pause, XF_CMD_PAUSE)
-BUFFER_SIGNAL_CONTROL(buffer_flush, XF_CMD_FLUSH)
+BUFFER_SIGNAL_CONTROL(buffer_drop, XF_CMD_DROP)
 
 long buffer_fill(audio_output_t *ao)
 {
@@ -298,7 +313,7 @@ long buffer_fill(audio_output_t *ao)
 
 /* The workhorse: Send data to the buffer with some synchronization and even
    error checking. */
-size_t buffer_write(audio_outout_t *ao, void *buffer, size_t bytes)
+size_t buffer_write(audio_output_t *ao, void *buffer, size_t bytes)
 {
 	/*
 		Writing the whole buffer in one piece is no good as that means
@@ -312,7 +327,7 @@ size_t buffer_write(audio_outout_t *ao, void *buffer, size_t bytes)
 		size_t count_piece = bytes > max_piece
 		?	max_piece
 		:	bytes;
-		int ret = xfermem_write(buffermem, buffer+written, count_piece);
+		int ret = xfermem_write(ao->buffermem, buffer+written, count_piece);
 		if(ret)
 		{
 			if(!AOQUIET)
@@ -320,7 +335,7 @@ size_t buffer_write(audio_outout_t *ao, void *buffer, size_t bytes)
 			if(ret == XF_CMD_ERROR)
 			{
 				/* Buffer tells me that it has an error waiting. */
-				if(!GOOD_READVAL(writerfd, ao->errcode))
+				if(!GOOD_READVAL(ao->buffermem->fd[XF_WRITER], ao->errcode))
 					ao->errcode = OUT123_BUFFER_ERROR;
 			}
 			return 0;
@@ -389,14 +404,14 @@ static void buffer_play(audio_output_t *ao, size_t bytes)
 	bytes -= bytes % ao->framesize;
 	/* Now do a normal ao->write(), with interruptions by signals
 		being expected. */
-	written = ao->write(ao, bytes, (int)count);
+	written = ao->write(ao, xf->data+xf->readindex, (int)bytes);
 	if(written >= 0)
 		/* Advance read pointer by the amount of written bytes. */
 		xf->readindex = (xf->readindex + written) % xf->size;
 	else
 	{
 		ao->errcode = OUT123_DEV_PLAY;
-		if(!(ao->flags & OUT123_QUIET)
+		if(!(ao->flags & OUT123_QUIET))
 			error1("Error in writing audio (%s?)!", strerror(errno));
 		out123_close(ao);
 	}
@@ -423,7 +438,7 @@ static int read_string(audio_output_t *ao, char **buf)
 	size_t len;
 
 	if(*buf)
-		free(*buf)
+		free(*buf);
 	*buf = NULL;
 
 	if(!GOOD_READVAL(my_fd, len))
@@ -446,7 +461,7 @@ static int read_string(audio_output_t *ao, char **buf)
 }
 
 /* The main loop, returns 0 when no issue occured. */
-int buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
+int buffer_loop(audio_output_t *ao)
 {
 	txfermem *xf = ao->buffermem;
 	int my_fd = xf->fd[XF_READER];
@@ -454,7 +469,7 @@ int buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
 
 	/* Be prepared to use SIGINT for communication. */
 	catchsignal (SIGINT, catch_interrupt);
-	sigprocmask (SIG_SETMASK, oldsigset, NULL);
+	/* sigprocmask (SIG_SETMASK, oldsigset, NULL); */
 	/* Say hello to the writer. */
 	xfermem_putcmd(my_fd, XF_CMD_PONG);
 
@@ -477,8 +492,7 @@ int buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
 		}
 		/* Now always check for a pending command, in a blocking way if there is
 		   no playback. */
-		cmd = xfermem_getcmd( my_fd
-		,	(intflag || (ao->state != play_live));
+		cmd = xfermem_getcmd(my_fd, (intflag || (ao->state != play_live)));
 		/* The writer only ever signals before sending a command and also waiting for
 		   a response. So, this is the right place to clear the flag, before giving
 		   that response */
@@ -494,12 +508,12 @@ int buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
 			case XF_CMD_PING:
 				/* Expecting ping-pong only while playing! Otherwise, the writer
 				   could get stuck waiting for free space forever. */
-				if(!(ao->state == play_live)
+				if(!(ao->state == play_live))
 					xfermem_putcmd(my_fd, XF_CMD_PONG);
 				else
 				{
 					xfermem_putcmd(my_fd, XF_CMD_ERROR);
-					if(ao->errocde == OUT123_OK)
+					if(ao->errcode == OUT123_OK)
 						ao->errcode = OUT123_NOT_LIVE;
 					if(!GOOD_WRITEVAL(my_fd, ao->errcode))
 						return 2;
@@ -560,12 +574,12 @@ int buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
 			break;
 			case BUF_CMD_START:
 				if(
-				||	!GOOD_READVAL(my_fd, ao->encoding)
+					!GOOD_READVAL(my_fd, ao->format)
 				||	!GOOD_READVAL(my_fd, ao->channels)
-					!GOOD_READVAL(my_fd, ao->rate)
+				||	!GOOD_READVAL(my_fd, ao->rate)
 				)
 					return 2;
-				if(!out123_start(ao, ao->encoding, ao->channels, ao->rate))
+				if(!out123_start(ao, ao->format, ao->channels, ao->rate))
 				{
 					preloading = TRUE;
 					xfermem_putcmd(my_fd, XF_CMD_OK);
@@ -580,14 +594,14 @@ int buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
 			case BUF_CMD_STOP:
 				if(ao->state == play_live)
 				{ /* Drain is implied! */
-					size_t bytes
+					size_t bytes;
 					while((bytes = xfermem_get_usedspace(xf)))
 						buffer_play(ao, bytes);
 				}
 				out123_stop(ao);
 				xfermem_putcmd(my_fd, XF_CMD_OK);
 			break;
-			case BUF_CMD_CONTINUE:
+			case XF_CMD_CONTINUE:
 				out123_continue(ao);
 				preloading = TRUE;
 				xfermem_putcmd(my_fd, XF_CMD_OK);
@@ -599,7 +613,7 @@ int buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
 			case XF_CMD_DRAIN:
 				if(ao->state == play_live)
 				{
-					size_t bytes
+					size_t bytes;
 					while((bytes = xfermem_get_usedspace(xf)))
 						buffer_play(ao, bytes);
 					out123_drain(ao);
@@ -615,9 +629,9 @@ int buffer_loop(audio_output_t *ao, sigset_t *oldsigset)
 				out123_pause(ao);
 				xfermem_putcmd(my_fd, XF_CMD_OK);
 			break;
-			case XF_CMD_FLUSH:
+			case XF_CMD_DROP:
 				xf->readindex = xf->freeindex;
-				out123_flush(ao);
+				out123_drop(ao);
 			break;
 			default:
 				if(!AOQUIET)

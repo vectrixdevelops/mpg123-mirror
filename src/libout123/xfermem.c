@@ -79,8 +79,8 @@ void xfermem_init (txfermem **xf, size_t bufsize, size_t msize, size_t skipbuf)
 		exit (1);
 	}
 	(*xf)->freeindex = (*xf)->readindex = 0;
-	(*xf)->data = ((byte *) *xf) + sizeof(txfermem) + msize;
-	(*xf)->metadata = ((byte *) *xf) + sizeof(txfermem);
+	(*xf)->data = ((void *) *xf) + sizeof(txfermem) + msize;
+	(*xf)->metadata = ((void *) *xf) + sizeof(txfermem);
 	(*xf)->size = bufsize;
 	(*xf)->metasize = msize + skipbuf;
 }
@@ -90,7 +90,10 @@ void xfermem_done (txfermem *xf)
 	if(!xf)
 		return;
 #ifdef HAVE_MMAP
-	munmap ((caddr_t) xf, xf->size + xf->metasize + sizeof(txfermem));
+	/* Here was a cast to (caddr_t) ... why? Was this needed for SunOS?
+	   Casting to (void*) should silence compilers in case of funny
+	   prototype for munmap(). */
+	munmap ( (void*)xf, xf->size + xf->metasize + sizeof(txfermem));
 #else
 	if (shmdt((void *) xf) == -1) {
 		perror ("shmdt()");
@@ -260,7 +263,7 @@ int xfermem_writer_block(txfermem *xf)
 /* Return: 0 on success, -1 on communication error, > 0 for
    error on buffer side, some special return code from buffer to be
    evaluated. */
-int xfermem_write(txfermem *xf, byte *buffer, size_t bytes)
+int xfermem_write(txfermem *xf, void *buffer, size_t bytes)
 {
 	if(buffer == NULL || bytes < 1) return 0;
 

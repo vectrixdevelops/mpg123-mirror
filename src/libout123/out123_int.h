@@ -83,6 +83,7 @@ struct audio_output_struct
 	int auxflags;	/* For now just one: quiet mode (for probing). */
 	double preload;	/* buffer fraction to preload before play */
 	int verbose;	/* verbosity to stderr */
+	double device_buffer; /* device buffer in seconds */
 /* TODO int intflag;   ... is it really useful/necessary from the outside? */
 };
 

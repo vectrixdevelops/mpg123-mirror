@@ -18,7 +18,17 @@ static int have_buffer(audio_output_t *ao)
 	return (ao->buffer_pid != -1);
 }
 
-void out123_clear_module(audio_output_t *ao)
+static int modverbose(audio_output_t *ao)
+{
+	return AOQUIET
+	?	-1
+	:	ao->verbose;
+}
+
+static void check_output_module( audio_output_t *ao
+,	const char *name, const char *device, int final );
+
+static void out123_clear_module(audio_output_t *ao)
 {
 	ao->open = NULL;
 	ao->get_formats = NULL;
@@ -43,7 +53,8 @@ audio_output_t* out123_new(void)
 
 #ifndef NOXFERMEM
 		ao->buffer_pid = -1;
-		ao->buffer_fd = { -1, -1 };
+		ao->buffer_fd[0] = -1;
+		ao->buffer_fd[1] = -1;
 		ao->buffermem = NULL;
 #endif
 
@@ -61,6 +72,7 @@ audio_output_t* out123_new(void)
 		ao->auxflags = 0;
 		ao->preload = 0.;
 		ao->verbose = 0;
+		ao->device_buffer = 0.;
 	}
 	return ao;
 }
@@ -169,7 +181,7 @@ int out123_param( audio_output_t *ao, enum out123_parms code
 			ao->verbose = (int)value;
 		break;
 		case OUT123_DEVICEBUFFER:
-			ao->device_buffer = fvalue
+			ao->device_buffer = fvalue;
 		break;
 		default:
 			error1("bad parameter code %i", (int)code);
@@ -185,8 +197,8 @@ int out123_param( audio_output_t *ao, enum out123_parms code
 	return ret;
 }
 
-int *out123_getparam( audio_output_t *ao, enum out123_parms code
-,                     long *ret_value, double *ret_fvalue )
+int out123_getparam( audio_output_t *ao, enum out123_parms code
+,                    long *ret_value, double *ret_fvalue )
 {
 	int ret = 0;
 	long value = 0;
@@ -219,13 +231,13 @@ int *out123_getparam( audio_output_t *ao, enum out123_parms code
 	}
 	if(!ret)
 	{
-		if(ret_value) *ret_value = value
-		if(ret_fvalue) *ret_fvalule = fvalue;
+		if(ret_value)  *ret_value  = value;
+		if(ret_fvalue) *ret_fvalue = fvalue;
 	}
 	return ret;
 }
 
-int audio_output_t *out123_param_from(audio_output_t *ao, audio_output_t* from_ao)
+int out123_param_from(audio_output_t *ao, audio_output_t* from_ao)
 {
 	if(!ao || !from_ao) return -1;
 
@@ -279,12 +291,12 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 
 	/* Ensure that audio format is freshly set for "no format yet" mode.
 	   In out123_start*/
-	ao->rate = -1
-	ao->channels = -1
+	ao->rate = -1;
+	ao->channels = -1;
 	ao->format = -1;
 
 #ifndef NOXFERMEM
-	if(have_buffer(ao)
+	if(have_buffer(ao))
 		return buffer_open(ao, driver, device);
 	else
 #endif
@@ -328,7 +340,7 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 				if(!(ao->driver = strdup(curname)))
 				{
 					out123_close(ao);
-					if(!AOQUIET(ao)) error("OOM driver name");
+					if(!AOQUIET) error("OOM driver name");
 					return out123_seterr(ao, OUT123_DOOM);
 				}
 			}
@@ -339,8 +351,8 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 		if(!ao->open) /* At least an open() routine must be present. */
 		{
 			if(!AOQUIET)
-				error1("Found no driver out of [%s] working with device %s."
-				,	names, device ? device : "<default>")
+				error2("Found no driver out of [%s] working with device %s."
+				,	names, device ? device : "<default>");
 			/* Proper more detailed error code could be set already. */
 			if(ao->errcode == OUT123_OK)
 				ao->errcode = OUT123_BAD_DRIVER;
@@ -361,11 +373,18 @@ void out123_close(audio_output_t *ao)
 	ao->errcode = 0;
 
 	if(ao->close)
-		ao->close(ao);
+	{
+		int ret;
+		if((ret=ao->close(ao)))
+		{
+			if(!AOQUIET)
+				error1("ao->close() returned %i", ret);
+		}
+	}
 	if(ao->deinit)
 		ao->deinit(ao);
 	if(ao->module)
-		close_module(ao->module);
+		close_module(ao->module, modverbose(ao));
 
 	if(ao->driver)
 		free(ao->driver);
@@ -489,7 +508,7 @@ size_t out123_play(audio_output_t *ao, void *bytes, size_t count)
 		else
 		{
 			ao->errcode = OUT123_DEV_PLAY;
-			if(!(ao->flags & OUT123_QUIET)
+			if(!AOQUIET)
 				error1("Error in writing audio (%s?)!", strerror(errno));
 			/* If written < 0, this is a serious issue ending this playback round. */
 			break;
@@ -506,7 +525,7 @@ void out123_drop(audio_output_t *ao)
 	ao->errcode = 0;
 #ifndef NO_XFERMEM
 	if(have_buffer(ao))
-		buffer_flush(ao);
+		buffer_drop(ao);
 	else
 #endif
 	if(ao->state == play_live)
@@ -520,7 +539,7 @@ void out123_drain(audio_output_t *ao)
 	if(!ao)
 		return;
 	ao->errcode = 0;
-	if(ao->sate != play_live)
+	if(ao->state != play_live)
 		return;
 #ifndef NO_XFERMEM
 	if(have_buffer(ao))
@@ -583,17 +602,20 @@ static int open_fake_module(audio_output_t *ao, const char *driver)
 
 /* Check if given output module is loadable and has a working device.
    final flag triggers printing and storing of errors. */
-void check_output_module( audio_output_t *ao
+static void check_output_module( audio_output_t *ao
 ,	const char *name, const char *device, int final )
 {
-	if(AOVERBOSE(1)) fprintf(stderr, "Trying output module %s.\n", name);
+	int result;
+
+	if(AOVERBOSE(1))
+		fprintf(stderr, "Trying output module %s.\n", name);
 
 	/* Use internal code. */
 	if(open_fake_module(ao, name) == OUT123_OK)
 		return;
 
 	/* Open the module, initial check for availability+libraries. */
-	ao->module = open_module( "output", name );
+	ao->module = open_module( "output", name, modverbose(ao));
 	if(!ao->module)
 		return;
 	/* Check if module supports output */
@@ -616,10 +638,12 @@ void check_output_module( audio_output_t *ao
 	result = ao->module->init_output(ao);
 	if(result == 0)
 	{ /* Try to open the device. I'm only interested in actually working modules. */
-		result = open_output(ao);
-		close_output(ao);
+		ao->format = -1;
+		result = ao->open(ao);
+		ao->close(ao);
 	}
-	else if(!AOQUIET) error2("Module '%s' init failed: %i", name, result);
+	else if(!AOQUIET)
+		error2("Module '%s' init failed: %i", name, result);
 
 	ao->auxflags &= ~OUT123_QUIET;
 
@@ -628,7 +652,7 @@ void check_output_module( audio_output_t *ao
 
 check_output_module_cleanup:
 	/* Only if module did not check out we get to clean up here. */
-	close_module(ao->module);
+	close_module(ao->module, modverbose(ao));
 	out123_clear_module(ao);
 	return;
 }
@@ -720,17 +744,23 @@ const char* audio_encoding_name(const int encoding, const int longer)
 /* TODO: fix for buffer use, try to minimize number of these small functions */
 const char* audio_module_name(audio_output_t *ao)
 {
+	return "<TODO>";
+#if 0
 	if(param.usebuffer)
 		return "<buffer>";
 	else
 		return ao->module ? ao->module->name : "file/raw/test";
+#endif
 }
 const char* audio_device_name(audio_output_t *ao)
 {
-	if(param.usebuffer)
+	return "<TODO>";
+#if 0
+	if(param.usebufer)
 		return "<none>";
 	else
 		return ao->device ? ao->device : "<none>";
+#endif
 }
 
 
@@ -738,7 +768,7 @@ int out123_get_encodings(audio_output_t *ao, int channels, long rate)
 {
 	if(!ao)
 		return OUT123_ERR;
-	ao->errocde = OUT123_OK;
+	ao->errcode = OUT123_OK;
 
 	out123_stop(ao); /* That brings the buffer into waiting state, too. */
 
@@ -754,7 +784,6 @@ int out123_get_encodings(audio_output_t *ao, int channels, long rate)
 #endif
 	{
 		int enc = 0;
-		if(ao->) return 0;
 		ao->format   = -1;
 		if(ao->open(ao) >= 0)
 		{
@@ -762,9 +791,10 @@ int out123_get_encodings(audio_output_t *ao, int channels, long rate)
 			ao->close(ao);
 			return enc;
 		}
-		else return out123_seterr(ao, (ao->errcode != OUT123_OK
-		?	ao->errcode
-		:	OUT123_DEV_OPEN));
+		else
+			return out123_seterr(ao, (ao->errcode != OUT123_OK
+			?	ao->errcode
+			:	OUT123_DEV_OPEN));
 	}
 }
 
@@ -774,10 +804,9 @@ long out123_buffered(audio_output_t *ao)
 		return OUT123_ERR;
 	ao->errcode = 0;
 #ifndef NOXFERMEM
-	if(have_buffer(ao)
+	if(have_buffer(ao))
 		return buffer_fill(ao);
 	else
-#else
-	return 0;
 #endif
+		return 0;
 }

@@ -96,7 +96,7 @@ enum out123_parms
  *  This might be ignored, might have only a loose relation to actual
  *  buffer sizes and latency, depending on output driver. Try to tune
  *  this before opening a device if you want to influcence latency or reduce
- *  dropouts.
+ *  dropouts. Value <= 0 uses some default.
  */
 ,	OUT123_DEVICEBUFFER
 };
@@ -220,8 +220,8 @@ int out123_param( audio_output_t *ao, enum out123_parms code
  * \param fvalue output address for floating point parameters
  * \return 0 on success, MPG123_ERR on error (bad parameter name or bad handle).
  */
-audio_output_t *out123_getparam( audio_output_t *ao, enum out123_parms code
-,                                long *ret_value, double *ret_fvalue );
+int out123_getparam( audio_output_t *ao, enum out123_parms code
+,                    long *ret_value, double *ret_fvalue );
 
 /** Copy parameters from another out123_handle.
  * \param from_ao the handle to copy parameters from
