@@ -186,7 +186,7 @@ int win32_utf8_wide(const char *const mbptr, wchar_t **wptr, size_t *buflen)
 
 /* This shall survive signals and any return value less than given byte count
    is an error */
-size_t unintr_write(int fd, byte* buffer, size_t bytes)
+size_t unintr_write(int fd, void const *buffer, size_t bytes)
 {
 	size_t written = 0;
 	while(bytes)
@@ -194,14 +194,14 @@ size_t unintr_write(int fd, byte* buffer, size_t bytes)
 		ssize_t part = write(fd, buffer+written, bytes);
 		if(part < 0 && errno != EINTR)
 			break;
-		count   -= part;
+		bytes   -= part;
 		written += part;
 	}
 	return written;
 }
 
 /* Same for reading the data. */
-size_t unintr_read(int fd, byte* buffer, size_t bytes)
+size_t unintr_read(int fd, void *buffer, size_t bytes)
 {
 	size_t got = 0;
 	while(bytes)
@@ -209,7 +209,7 @@ size_t unintr_read(int fd, byte* buffer, size_t bytes)
 		ssize_t part = read(fd, buffer+got, bytes);
 		if(part < 0 && errno != EINTR)
 			break;
-		count -= part;
+		bytes -= part;
 		got   += part;
 	}
 	return got;
