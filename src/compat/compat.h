@@ -200,4 +200,8 @@ typedef int socklen_t;
 
 #include "true.h"
 
+#if (!defined(WIN32) || defined (__CYGWIN__)) && defined(HAVE_SIGNAL_H)
+void (*catchsignal(int signum, void(*handler)()))();
+#endif
+
 #endif

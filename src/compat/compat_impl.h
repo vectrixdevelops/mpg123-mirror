@@ -215,3 +215,22 @@ size_t unintr_read(int fd, void *buffer, size_t bytes)
 	return got;
 }
 
+#if (!defined(WIN32) || defined (__CYGWIN__)) && defined(HAVE_SIGNAL_H)
+void (*catchsignal(int signum, void(*handler)()))()
+{
+	struct sigaction new_sa;
+	struct sigaction old_sa;
+
+#ifdef DONT_CATCH_SIGNALS
+	fprintf (stderr, "Not catching any signals.\n");
+	return ((void (*)()) -1);
+#endif
+
+	new_sa.sa_handler = handler;
+	sigemptyset(&new_sa.sa_mask);
+	new_sa.sa_flags = 0;
+	if(sigaction(signum, &new_sa, &old_sa) == -1)
+		return ((void (*)()) -1);
+	return (old_sa.sa_handler);
+}
+#endif
