@@ -329,7 +329,7 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 
 		/* Now loop over the list of possible modules to find one that works. */
 		nextname = strtok(modnames, ",");
-		while(!ao->open && nextname);
+		while(!ao->open && nextname)
 		{
 			char *curname = nextname;
 			nextname = strtok(NULL, ",");
