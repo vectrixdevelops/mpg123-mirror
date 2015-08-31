@@ -367,6 +367,38 @@ static void set_appflag(char *arg)
 {
 	param.appflags |= appflag;
 }
+
+static void list_output_modules(void)
+{
+	char **names = NULL;
+	char **descr = NULL;
+	int count = -1;
+	audio_output_t *lao;
+
+	if((lao=out123_new()))
+	{
+		printf("\n");
+		printf("Available modules\n");
+		printf("-----------------\n");
+		out123_param(lao, OUT123_VERBOSE, param.verbose, 0.);
+		out123_param(lao, OUT123_FLAGS, OUT123_QUIET, 0.);
+		if((count=out123_drivers(lao, &names, &descr)) >= 0)
+		{
+			int i;
+			for(i=0; i<count; ++i)
+				printf( "%-15s%s  %s\n"
+				,	names[i], "output", descr[i] );
+			free(names);
+			free(descr);
+		}
+		out123_del(lao);
+	}
+	else if(!param.quiet)
+		error("Failed to create an out123 handle.");
+	exit(count >= 0 ? 0 : 1);
+}
+
+
 /* static void unset_appflag(char *arg)
 {
 	param.appflags &= ~appflag;
@@ -415,7 +447,7 @@ DECODE_TEST: handle that here, not in audio output!
 	{0,   "speaker",     0,                  set_output_s, 0,0},
 	{0,   "lineout",     0,                  set_output_l, 0,0},
 	{'o', "output",      GLO_ARG | GLO_CHAR, set_output, 0,  0},
-	{0,   "list-modules",0,       audio_list_modules, NULL,  0}, 
+	{0,   "list-modules",0,       list_output_modules, NULL, 0},
 	{'a', "audiodevice", GLO_ARG | GLO_CHAR, 0, &param.output_device,  0},
 	{'f', "scale",       GLO_ARG | GLO_LONG, 0, &param.outscale,   0},
 	{'n', "frames",      GLO_ARG | GLO_LONG, 0, &param.frame_number,  0},

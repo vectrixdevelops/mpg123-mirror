@@ -80,6 +80,8 @@ src_mpg123_SOURCES +=
 
 # Replace common.h by sysutil.h!
 src_out123_SOURCES = \
+  src/audio.h \
+  src/audio.c \
   src/sysutil.c \
   src/sysutil.h \
   src/common.h \

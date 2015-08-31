@@ -8,6 +8,7 @@
 
 #include <errno.h>
 #include "mpg123app.h"
+#include "out123.h"
 #include "common.h"
 
 #ifdef HAVE_SYS_WAIT_H
@@ -16,9 +17,77 @@
 
 #include "debug.h"
 
+struct enc_desc
+{
+	int code; /* MPG123_ENC_SOMETHING */
+	const char *longname; /* signed bla bla */
+	const char *name; /* sXX, short name */
+	const unsigned char nlen; /* significant characters in short name */
+};
 
-/* TODO: clean that up */
-extern int intflag;
+static const struct enc_desc encdesc[] =
+{
+	{ MPG123_ENC_SIGNED_16, "signed 16 bit", "s16 ", 3 },
+	{ MPG123_ENC_UNSIGNED_16, "unsigned 16 bit", "u16 ", 3 },
+	{ MPG123_ENC_UNSIGNED_8, "unsigned 8 bit", "u8  ", 2 },
+	{ MPG123_ENC_SIGNED_8, "signed 8 bit", "s8  ", 2 },
+	{ MPG123_ENC_ULAW_8, "mu-law (8 bit)", "ulaw ", 4 },
+	{ MPG123_ENC_ALAW_8, "a-law (8 bit)", "alaw ", 4 },
+	{ MPG123_ENC_FLOAT_32, "float (32 bit)", "f32 ", 3 },
+	{ MPG123_ENC_SIGNED_32, "signed 32 bit", "s32 ", 3 },
+	{ MPG123_ENC_UNSIGNED_32, "unsigned 32 bit", "u32 ", 3 },
+	{ MPG123_ENC_SIGNED_24, "signed 24 bit", "s24 ", 3 },
+	{ MPG123_ENC_UNSIGNED_24, "unsigned 24 bit", "u24 ", 3 }
+};
+#define KNOWN_ENCS (sizeof(encdesc)/sizeof(struct enc_desc))
+
+int audio_enc_name2code(const char* name)
+{
+	int code = 0;
+	int i;
+	for(i=0;i<KNOWN_ENCS;++i)
+	if(!strncasecmp(encdesc[i].name, name, encdesc[i].nlen))
+	{
+		code = encdesc[i].code;
+		break;
+	}
+	return code;
+}
+
+void audio_enclist(char** list)
+{
+	size_t length = 0;
+	int i;
+	*list = NULL;
+	for(i=0;i<KNOWN_ENCS;++i) length += encdesc[i].nlen;
+
+	length += KNOWN_ENCS-1; /* spaces between the encodings */
+	*list = malloc(length+1); /* plus zero */
+	if(*list != NULL)
+	{
+		size_t off = 0;
+		(*list)[length] = 0;
+		for(i=0;i<KNOWN_ENCS;++i)
+		{
+			if(i>0) (*list)[off++] = ' ';
+			memcpy(*list+off, encdesc[i].name, encdesc[i].nlen);
+			off += encdesc[i].nlen;
+		}
+	}
+}
+
+/* Safer as function... */
+const char* audio_encoding_name(const int encoding, const int longer)
+{
+	const char *name = longer ? "unknown" : "???";
+	int i;
+	for(i=0;i<KNOWN_ENCS;++i)
+	if(encdesc[i].code == encoding)
+	name = longer ? encdesc[i].longname : encdesc[i].name;
+
+	return name;
+}
+
 
 static void capline(mpg123_handle *mh, long rate)
 {
@@ -47,10 +116,9 @@ void print_capabilities(audio_output_t *ao, mpg123_handle *mh)
 	size_t      num_rates;
 	const int  *encs;
 	size_t      num_encs;
-	const char *name;
-	const char *dev;
-	name = audio_module_name(ao);
-	dev  = audio_device_name(ao);
+	char *name;
+	char *dev;
+	out123_driver_info(ao, &name, &dev);
 	mpg123_rates(&rates, &num_rates);
 	mpg123_encodings(&encs, &num_encs);
 	fprintf(stderr,"\nAudio driver: %s\nAudio device: %s\nAudio capabilities:\n(matrix of [S]tereo or [M]ono support for sample format and rate in Hz)\n       |", name, dev);
@@ -84,7 +152,6 @@ void audio_capabilities(audio_output_t *ao, mpg123_handle *mh)
 	mpg123_format_none(mh); /* Start with nothing. */
 	if(param.force_encoding != NULL)
 	{
-		int i;
 		if(!param.quiet) fprintf(stderr, "Note: forcing output encoding %s\n", param.force_encoding);
 
 		force_fmt = audio_enc_name2code(param.force_encoding);
@@ -103,7 +170,7 @@ void audio_capabilities(audio_output_t *ao, mpg123_handle *mh)
 		rate = pitch_rate(decode_rate);
 		if(param.verbose > 2) fprintf(stderr, "Note: checking support for %liHz/%ich.\n", rate, channels);
 
-		fmts = audio_format_support(ao, rate, channels);
+		fmts = out123_encodings(ao, channels, rate);
 
 		if(param.verbose > 2) fprintf(stderr, "Note: result 0x%x\n", fmts);
 		if(force_fmt)
@@ -118,14 +185,11 @@ void audio_capabilities(audio_output_t *ao, mpg123_handle *mh)
 		else mpg123_format(mh, decode_rate, channels, fmts);
 	}
 
-	audio_fixme_wake_buffer(ao);
-
 	if(param.verbose > 1) print_capabilities(ao, mh);
 }
 
 int set_pitch(mpg123_handle *fr, audio_output_t *ao, double new_pitch)
 {
-	int ret = 1;
 	double old_pitch = param.pitch;
 	long rate;
 	int channels, format;
@@ -139,19 +203,13 @@ int set_pitch(mpg123_handle *fr, audio_output_t *ao, double new_pitch)
 		return 0;
 	}
 
-	if(param.usebuffer)
-	{
-		error("No runtime pitch change with output buffer, sorry.");
-		return 0;
-	}
-
 	param.pitch = new_pitch;
 	if(param.pitch < -0.99) param.pitch = -0.99;
 
 	if(channels == 1) smode = MPG123_MONO;
 	if(channels == 2) smode = MPG123_STEREO;
 
-	output_pause(ao);
+	out123_stop(ao);
 	/* Remember: This takes param.pitch into account. */
 	audio_capabilities(ao, fr);
 	if(!(mpg123_format_support(fr, rate, format) & smode))
@@ -162,10 +220,6 @@ int set_pitch(mpg123_handle *fr, audio_output_t *ao, double new_pitch)
 		error("Reached a hardware limit there with pitch!");
 		param.pitch = old_pitch;
 		audio_capabilities(ao, fr);
-		ret = 0;
 	}
-	audio_prepare_format(ao, pitch_rate(rate), channels, format);
-	reset_output(ao);
-	output_unpause(ao);
-	return ret;
+	return out123_start(ao, pitch_rate(rate), channels, format);
 }

@@ -51,13 +51,12 @@ struct parameter
 	int shuffle;	/* shuffle/random play */
 	int remote;	/* remote operation */
 	int remote_err;	/* remote operation to stderr */
-	int outmode;	/* where to out the decoded sampels */
 	int quiet;	/* shut up! */
 	int xterm_title;	/* Change xterm title to song names? */
 	long usebuffer;	/* second level buffer size */
 	int verbose;    /* verbose level */
-	char* output_module;	/* audio output module to use */
-	char* output_device;	/* audio output device to use */
+	const char* output_module;	/* audio output module to use */
+	const char* output_device;	/* audio output device to use */
 	int   output_flags;	/* legacy output destination for AIX/HP/Sun */
 #ifdef HAVE_TERMIOS
 	int term_ctrl;
@@ -72,7 +71,6 @@ struct parameter
 #ifdef HAVE_WINDOWS_H
 	int w32_priority;
 #endif
-	char *filename;
 	long listentry; /* possibility to choose playback of one entry in playlist (0: off, > 0 : select, < 0; just show list*/
 	char* listname; /* name of playlist */
 	int long_id3;
