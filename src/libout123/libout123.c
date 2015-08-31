@@ -103,6 +103,7 @@ static const char *const errstring[OUT123_ERRCOUNT] =
 ,	"some device playback error"
 ,	"failed to open device"
 ,	"buffer (communication) error"
+,	"basic module system error"
 };
 
 const char* out123_strerror(audio_output_t *ao)
@@ -297,12 +298,15 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 
 #ifndef NOXFERMEM
 	if(have_buffer(ao))
-		return buffer_open(ao, driver, device);
+	{
+		if(buffer_open(ao, driver, device))
+			return OUT123_ERR;
+	}
 	else
 #endif
 	{
 		/* We just quickly check if the device can be accessed at all,
-		   same as out123_get_encodings! */
+		   same as out123_encodings! */
 		char *nextname, *modnames;
 		const char *names = driver ? driver : DEFAULT_OUTPUT_MODULE;
 
@@ -356,11 +360,10 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 				ao->errcode = OUT123_BAD_DRIVER;
 			return OUT123_ERR;
 		}
-
-		/* Got something. */
-		ao->state = play_stopped;
-		return OUT123_OK;
 	}
+	/* Got something. */
+	ao->state = play_stopped;
+	return OUT123_OK;
 }
 
 /* Be resilient, always do cleanup work regardless of state. */
@@ -370,28 +373,36 @@ void out123_close(audio_output_t *ao)
 		return;
 	ao->errcode = 0;
 
-	if(ao->close)
+#ifndef NOXFERMEM
+	if(have_buffer(ao))
+		buffer_close(ao);
+	else
+#endif
 	{
-		int ret;
-		if((ret=ao->close(ao)))
+		if(ao->close)
 		{
-			if(!AOQUIET)
-				error1("ao->close() returned %i", ret);
+			int ret;
+			if((ret=ao->close(ao)))
+			{
+				if(!AOQUIET)
+					error1("ao->close() returned %i", ret);
+			}
 		}
+		if(ao->deinit)
+			ao->deinit(ao);
+		if(ao->module)
+			close_module(ao->module, modverbose(ao));
+		/* Null module methods and pointer. */
+		out123_clear_module(ao);
 	}
-	if(ao->deinit)
-		ao->deinit(ao);
-	if(ao->module)
-		close_module(ao->module, modverbose(ao));
 
+	/* These copies exist in addition to the ones for the buffer. */
 	if(ao->driver)
 		free(ao->driver);
 	ao->driver = NULL;
 	if(ao->device)	
 		free(ao->device);
 	ao->device = NULL;
-	/* Null module methods and pointer. */
-	out123_clear_module(ao);
 
 	ao->state = play_dead;
 }
@@ -549,11 +560,49 @@ void out123_drain(audio_output_t *ao)
 }
 
 /* A function that does nothing and returns nothing. */
-static void builtin_nothing(struct audio_output_struct *ao){}
+static void builtin_nothing(audio_output_t *ao){}
+static int test_open(audio_output_t *ao)
+{
+	debug("test_open");
+	return OUT123_OK;
+}
+static int test_get_formats(audio_output_t *ao)
+{
+	debug("test_get_formats");
+	return MPG123_ENC_ANY;
+}
+static int test_write(audio_output_t *ao, unsigned char *buf, int len)
+{
+	debug2("test_write: %i B from %p", len, (void*)buf);
+	return len;
+}
+static void test_flush(audio_output_t *ao)
+{
+	debug("test_flush");
+}
+static void test_drain(audio_output_t *ao)
+{
+	debug("test_drain");
+}
+static int test_close(audio_output_t *ao)
+{
+	debug("test_drain");
+	return 0;
+}
 
 /* Open one of our builtin driver modules. */
 static int open_fake_module(audio_output_t *ao, const char *driver)
 {
+	if(!strcmp("test", driver))
+	{
+		ao->open  = test_open;
+		ao->get_formats = test_get_formats;
+		ao->write = test_write;
+		ao->flush = test_flush;
+		ao->drain = test_drain;
+		ao->close = test_close;
+	}
+	else
 	if(!strcmp("raw", driver))
 	{
 		ao->open  = raw_open;
@@ -668,101 +717,58 @@ static void audio_output_dump(audio_output_t *ao)
 }
 */
 
-struct enc_desc
+int out123_drivers(audio_output_t *ao, char ***names, char ***descr)
 {
-	int code; /* MPG123_ENC_SOMETHING */
-	const char *longname; /* signed bla bla */
-	const char *name; /* sXX, short name */
-	const unsigned char nlen; /* significant characters in short name */
-};
-
-static const struct enc_desc encdesc[] =
-{
-	{ MPG123_ENC_SIGNED_16, "signed 16 bit", "s16 ", 3 },
-	{ MPG123_ENC_UNSIGNED_16, "unsigned 16 bit", "u16 ", 3 },
-	{ MPG123_ENC_UNSIGNED_8, "unsigned 8 bit", "u8  ", 2 },
-	{ MPG123_ENC_SIGNED_8, "signed 8 bit", "s8  ", 2 },
-	{ MPG123_ENC_ULAW_8, "mu-law (8 bit)", "ulaw ", 4 },
-	{ MPG123_ENC_ALAW_8, "a-law (8 bit)", "alaw ", 4 },
-	{ MPG123_ENC_FLOAT_32, "float (32 bit)", "f32 ", 3 },
-	{ MPG123_ENC_SIGNED_32, "signed 32 bit", "s32 ", 3 },
-	{ MPG123_ENC_UNSIGNED_32, "unsigned 32 bit", "u32 ", 3 },
-	{ MPG123_ENC_SIGNED_24, "signed 24 bit", "s24 ", 3 },
-	{ MPG123_ENC_UNSIGNED_24, "unsigned 24 bit", "u24 ", 3 }
-};
-#define KNOWN_ENCS (sizeof(encdesc)/sizeof(struct enc_desc))
-
-int audio_enc_name2code(const char* name)
-{
-	int code = 0;
+	char **tmpnames;
+	char **tmpdescr;
+	int count;
 	int i;
-	for(i=0;i<KNOWN_ENCS;++i)
-	if(!strncasecmp(encdesc[i].name, name, encdesc[i].nlen))
-	{
-		code = encdesc[i].code;
-		break;
-	}
-	return code;
-}
 
-void audio_enclist(char** list)
-{
-	size_t length = 0;
-	int i;
-	*list = NULL;
-	for(i=0;i<KNOWN_ENCS;++i) length += encdesc[i].nlen;
+	/* Wrap the call to isolate the lower levels from the user not being
+	   interested in both lists. it's a bit wasteful, but the code looks
+	   ugly enough already down there. */
+	count = list_modules("output", &tmpnames, &tmpdescr, modverbose(ao));
 
-	length += KNOWN_ENCS-1; /* spaces between the encodings */
-	*list = malloc(length+1); /* plus zero */
-	if(*list != NULL)
-	{
-		size_t off = 0;
-		(*list)[length] = 0;
-		for(i=0;i<KNOWN_ENCS;++i)
-		{
-			if(i>0) (*list)[off++] = ' ';
-			memcpy(*list+off, encdesc[i].name, encdesc[i].nlen);
-			off += encdesc[i].nlen;
-		}
-	}
-}
+	if(count < 0)
+		return count;
 
-/* Safer as function... */
-const char* audio_encoding_name(const int encoding, const int longer)
-{
-	const char *name = longer ? "unknown" : "???";
-	int i;
-	for(i=0;i<KNOWN_ENCS;++i)
-	if(encdesc[i].code == encoding)
-	name = longer ? encdesc[i].longname : encdesc[i].name;
-
-	return name;
-}
-
-/* TODO: fix for buffer use, try to minimize number of these small functions */
-const char* audio_module_name(audio_output_t *ao)
-{
-	return "<TODO>";
-#if 0
-	if(param.usebuffer)
-		return "<buffer>";
+	/* Return or free gathered lists of names or descriptions. */
+	if(names)
+		*names = tmpnames;
 	else
-		return ao->module ? ao->module->name : "file/raw/test";
-#endif
-}
-const char* audio_device_name(audio_output_t *ao)
-{
-	return "<TODO>";
-#if 0
-	if(param.usebufer)
-		return "<none>";
+	{
+		for(i=0; i<count; ++i)
+			free(tmpnames[i]);
+		free(tmpnames);
+	}
+	if(descr)
+		*descr = tmpdescr;
 	else
-		return ao->device ? ao->device : "<none>";
-#endif
+	{
+		for(i=0; i<count; ++i)
+			free(tmpdescr[i]);
+		free(tmpdescr);
+	}
+	return count;
 }
 
+/* We always have ao->driver and ao->device set, also with buffer.
+   The latter can be positively NULL, though. */
+int out123_driver_info(audio_output_t *ao, char **driver, char **device)
+{
+	if(!ao)
+		return OUT123_ERR;
+	if(!ao->driver)
+		return out123_seterr(ao, OUT123_NO_DRIVER);
 
-int out123_get_encodings(audio_output_t *ao, int channels, long rate)
+	if(driver)
+		*driver = ao->driver;
+	if(device)
+		*device = ao->device;
+	return OUT123_OK;
+}
+
+int out123_encodings(audio_output_t *ao, int channels, long rate)
 {
 	if(!ao)
 		return OUT123_ERR;
@@ -777,7 +783,7 @@ int out123_get_encodings(audio_output_t *ao, int channels, long rate)
 	ao->rate     = rate;
 #ifndef NOXFERMEM
 	if(have_buffer(ao))
-		return buffer_get_encodings(ao);
+		return buffer_encodings(ao);
 	else
 #endif
 	{

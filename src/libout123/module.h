@@ -43,12 +43,6 @@ typedef struct mpg123_module_struct {
 
 mpg123_module_t* open_module(const char* type, const char* name, int verbose);
 void close_module(mpg123_module_t* module, int verbose);
-/* TODO: resolve this name hack; settle if the module code really is
-   meant for more than output. I don't really think a future *123
-   player will use input modules, or playlist modules. */
-/* Hm ... with the creation of libout123, it becomes more likely that a
-   input-module-using player might follow. I'll generalize things when
-   it's time. */
-void audio_list_modules(int verbose);
+int list_modules(const char *type, char ***names, char ***descr, int verbose);
 
 #endif

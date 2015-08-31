@@ -5,7 +5,8 @@
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Nicholas J Humfrey
 */
-
+#include "config.h"
+#include "out123_intsym.h"
 #include "compat.h"
 #include <dirent.h>
 #include <sys/stat.h>
@@ -245,91 +246,125 @@ static char *get_the_cwd(int verbose)
 	return buf;
 }
 
-/* Gah! That needs to return strings, not print stuff!
-   Later ... this routine will be moved to the main programs, only the part
-   about fetching the module names stays. */
-void audio_list_modules(int verbose)
+int list_modules(const char *type, char ***names, char ***descr, int verbose)
 {
 	DIR* dir = NULL;
 	struct dirent *dp = NULL;
 	char *moddir  = NULL;
+	int count = 0;
+
+	*names = NULL;
+	*descr = NULL;
 
 	moddir = get_module_dir(verbose);
 	if(moddir == NULL)
 	{
 		if(verbose > -1)
 			error("Failure getting module directory! (Perhaps set MPG123_MODDIR?)");
-		exit(-1); /* TODO: change this to return a value instead of exit()! */
+		return -1;
 	}
 	/* Open the module directory */
 	dir = moddir != NULL ? opendir(moddir) : NULL;
 	if (dir==NULL) {
 		if(verbose > -1)
-			error2("Failed to open the module directory (%s): %s\n", PKGLIBDIR, strerror(errno));
+			error2("Failed to open the module directory (%s): %s\n"
+			,	PKGLIBDIR, strerror(errno));
 		free(moddir);
-		exit(-1);
+		return -1;
 	}
-	
+
 	if(chdir(moddir) != 0)
 	{
 		if(verbose > -1)
-			error2("Failed to enter module directory (%s): %s\n", PKGLIBDIR, strerror(errno));
-		closedir( dir );
+			error2("Failed to enter module directory (%s): %s\n"
+			,	PKGLIBDIR, strerror(errno));
+		closedir(dir);
 		free(moddir);
-		exit(-1);
+		return -1;
 	}
-	/* Display the program title */
-	/* print_title(stderr); */
-
-	/* List the output modules */
-	printf("\n");
-	printf("Available modules\n");
-	printf("-----------------\n");
-	
-	while( (dp = readdir(dir)) != NULL ) {
-		struct stat fst;
-		if(stat(dp->d_name, &fst) != 0) continue;
-		if(S_ISREG(fst.st_mode)) /* Allow links? */
-		{
-			char* ext = dp->d_name + strlen( dp->d_name ) - strlen( MODULE_FILE_SUFFIX );
-			if (strcmp(ext, MODULE_FILE_SUFFIX) == 0)
-			{
-				char *module_name = NULL;
-				char *module_type = NULL;
-				char *uscore_pos = NULL;
-				mpg123_module_t *module = NULL;
-				
-				/* Extract the module type */
-				module_type = strdup( dp->d_name );
-				uscore_pos = strchr( module_type, '_' );
-				if (uscore_pos==NULL || (uscore_pos>=module_type+strlen(module_type)+1) )
-				{
-					free(module_type);
-					continue;
-				}
-				
-				*uscore_pos = '\0';
-				
-				/* Extract the short name of the module */
-				module_name = strdup( dp->d_name + strlen( module_type ) + 1 );
-				module_name[ strlen( module_name ) - strlen( MODULE_FILE_SUFFIX ) ] = '\0';
-				/* Open the module */
-				module = open_module_here(module_type, module_name, verbose);
-				if (module) {
-					printf("%-15s%s  %s\n", module->name, module_type, module->description );
-				
-					/* Close the module again */
-					close_module(module, verbose);
-				}
-				free( module_name );
-				free( module_type );
-			}
-		}
-	}
-
-	closedir( dir );
 	free(moddir);
-	exit(0);
+
+	while( count >= 0 && (dp = readdir(dir)) != NULL )
+	{
+		char *module_name = NULL;
+		char *module_type = NULL;
+		char *uscore_pos = NULL;
+		mpg123_module_t *module = NULL;
+		char* ext;
+		struct stat fst;
+
+		/* Various checks as loop shortcuts, avoiding too much nesting. */
+
+		if(stat(dp->d_name, &fst) != 0)
+			continue;
+		if(!S_ISREG(fst.st_mode)) /* Allow links? */
+			continue;
+
+		ext = dp->d_name
+		+	strlen(dp->d_name)
+		-	strlen(MODULE_FILE_SUFFIX);
+		if(strcmp(ext, MODULE_FILE_SUFFIX))
+			continue;
+
+		/* Extract the module type */
+		if(!(module_type=strdup(dp->d_name)))
+			continue;
+		/* Only list modules of desired type. */
+		if(strcmp(type, module_type))
+			continue;
+		uscore_pos = strchr( module_type, '_' );
+		if(   uscore_pos==NULL
+		  || (uscore_pos>=module_type+strlen(module_type)+1) )
+		{
+			free(module_type);
+			continue;
+		}
+		*uscore_pos = '\0';
+
+		/* Extract the short name of the module */
+		module_name = strdup(dp->d_name + strlen(module_type) + 1);
+		if(!module_name)
+		{
+			free(module_type);
+			continue;
+		}
+		module_name[strlen(module_name)-strlen(MODULE_FILE_SUFFIX)] = '\0';
+
+		/* Open the module */
+		if((module=open_module_here(module_type, module_name, verbose)))
+		{
+			char **more_names = NULL;
+			char **more_descr = NULL;
+			char *name = NULL;
+			char *description = NULL;
+			if(
+				(name=strdup(module->name))
+			&&	(description=strdup(module->description))
+			&&	(more_names=safe_realloc(*names, sizeof(char*)*(count+1)))
+			&&	(more_descr=safe_realloc(*descr, sizeof(char*)*(count+1)))
+			)
+			{
+				*names = more_names;
+				*descr = more_descr;
+				(*names)[count] = name;
+				(*descr)[count] = description;
+				++count;
+			}
+			else
+			{
+				free(more_descr);
+				free(more_names);
+				free(description);
+				free(name);
+			}
+			/* Close the module again */
+			close_module(module, verbose);
+		}
+		free(module_name);
+		free(module_type);
+	}
+	closedir(dir);
+	return count;
 }
 
 

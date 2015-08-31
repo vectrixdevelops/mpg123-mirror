@@ -55,6 +55,8 @@ static void catch_interrupt (void)
 	intflag = TRUE;
 }
 
+static int write_string(audio_output_t *ao, int who, const char *buf);
+static int read_string(audio_output_t *ao, int who, char **buf);
 static int buffer_loop(audio_output_t *ao);
 
 static void catch_child(void)
@@ -200,8 +202,6 @@ int buffer_sync_param(audio_output_t *ao)
 int buffer_open(audio_output_t *ao, const char* driver, const char* device)
 {
 	int writerfd = ao->buffermem->fd[XF_WRITER];
-	size_t drvlen;
-	size_t devlen;
 
 	if(xfermem_putcmd(writerfd, BUF_CMD_OPEN) != 1)
 	{
@@ -209,24 +209,27 @@ int buffer_open(audio_output_t *ao, const char* driver, const char* device)
 		return -1;
 	}
 	/* Passing over driver and device name. */
-	drvlen = driver ? (strlen(driver) + 1) : 0;
-	devlen = device ? (strlen(device) + 1) : 0;
-	if(
-	/* Size of string in memory, then string itself. */
-		!GOOD_WRITEVAL(writerfd, drvlen)
-	||	!GOOD_WRITEBUF(writerfd, driver, drvlen)
-	||	!GOOD_WRITEVAL(writerfd, devlen)
-	||	!GOOD_WRITEBUF(writerfd, device, devlen)
-	)
+	if(  write_string(ao, XF_WRITER, driver)
+	  || write_string(ao, XF_WRITER, device) )
 	{
 		ao->errcode = OUT123_BUFFER_ERROR;
 		return -1;
 	}
 
-	return buffer_cmd_finish(ao);
+	if(buffer_cmd_finish(ao) == 0)
+	{
+		/* Retrieve driver and device name. */
+		if(  read_string(ao, XF_WRITER, &ao->driver)
+		  || read_string(ao, XF_WRITER, &ao->device) )
+		{
+			ao->errcode = OUT123_BUFFER_ERROR;
+			return -1;
+		}
+	}
+	return 0;
 }
 
-int buffer_get_encodings(audio_output_t *ao)
+int buffer_encodings(audio_output_t *ao)
 {
 	int writerfd = ao->buffermem->fd[XF_WRITER];
 
@@ -293,6 +296,7 @@ BUFFER_SIMPLE_CONTROL(buffer_continue, XF_CMD_CONTINUE)
 BUFFER_SIMPLE_CONTROL(buffer_ignore_lowmem, XF_CMD_IGNLOW)
 BUFFER_SIMPLE_CONTROL(buffer_drain, XF_CMD_DRAIN)
 BUFFER_SIMPLE_CONTROL(buffer_end, XF_CMD_TERMINATE)
+BUFFER_SIMPLE_CONTROL(buffer_close, BUF_CMD_CLOSE)
 
 #define BUFFER_SIGNAL_CONTROL(name, cmd) \
 void name(audio_output_t *ao) \
@@ -429,12 +433,31 @@ static void skip_bytes(int fd, size_t count)
 	}
 }
 
-/* Read a string passed from the reader via command channel.
+/* Write a string to command channel.
    Return 0 on success, set ao->errcode on issues. */
-static int read_string(audio_output_t *ao, char **buf)
+static int write_string(audio_output_t *ao, int who, const char *buf)
 {
 	txfermem *xf = ao->buffermem;
-	int my_fd = xf->fd[XF_READER];
+	int my_fd = xf->fd[who];
+	size_t len;
+
+	/* A NULL string is passed als zero bytes. */
+	len = buf ? (strlen(buf)+1) : 0;
+	if( !GOOD_WRITEVAL(my_fd, len)
+	 || !GOOD_WRITEBUF(my_fd, buf, len) )
+	{
+		ao->errcode = OUT123_BUFFER_ERROR;
+		return 2;
+	}
+	return 0;
+}
+
+/* Read a string from command channel.
+   Return 0 on success, set ao->errcode on issues. */
+static int read_string(audio_output_t *ao, int who, char **buf)
+{
+	txfermem *xf = ao->buffermem;
+	int my_fd = xf->fd[who];
 	size_t len;
 
 	if(*buf)
@@ -532,14 +555,19 @@ int buffer_loop(audio_output_t *ao)
 				char *device  = NULL;
 				int success;
 				success = (
-					!read_string(ao, &driver)
-				&&	!read_string(ao, &device)
+					!read_string(ao, XF_READER, &driver)
+				&&	!read_string(ao, XF_READER, &device)
 				&&	!out123_open(ao, driver, device)
 				);
 				free(device);
 				free(driver);
 				if(success)
+				{
 					xfermem_putcmd(my_fd, XF_CMD_OK);
+					if(  write_string(ao, XF_READER, ao->driver)
+					  || write_string(ao, XF_READER, ao->device) )
+						return 2;
+				}
 				else
 				{
 					xfermem_putcmd(my_fd, XF_CMD_ERROR);
@@ -550,6 +578,10 @@ int buffer_loop(audio_output_t *ao)
 				}
 			}
 			break;
+			case BUF_CMD_CLOSE:
+				out123_close(ao);
+				xfermem_putcmd(my_fd, XF_CMD_OK);
+			break;
 			case BUF_CMD_AUDIOCAP:
 			{
 				int encodings;
@@ -558,7 +590,7 @@ int buffer_loop(audio_output_t *ao)
 				||	!GOOD_READVAL(my_fd, ao->rate)
 				)
 					return 2;
-				encodings = out123_get_encodings(ao, ao->channels, ao->rate);
+				encodings = out123_encodings(ao, ao->channels, ao->rate);
 				if(encodings >= 0)
 				{
 					xfermem_putcmd(my_fd, XF_CMD_OK);

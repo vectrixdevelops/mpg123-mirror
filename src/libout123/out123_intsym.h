@@ -13,13 +13,15 @@
 #define unintr_read IOT123_unintr_read
 #define open_module IOT123_open_module
 #define close_module IOT123_close_module
+#define list_modules IOT123_list_modules
 #define buffer_init IOT123_buffer_init
 #define buffer_exit IOT123_buffer_exit
 #define buffer_sync_param IOT123_buffer_sync_param
 #define buffer_open IOT123_buffer_open
-#define buffer_get_encodings IOT123_buffer_get_encodings
+#define buffer_encodings IOT123_buffer_encodings
 #define buffer_start IOT123_buffer_start
 #define buffer_stop IOT123_buffer_stop
+#define buffer_close IOT123_buffer_close
 #define buffer_continue IOT123_buffer_continue
 #define buffer_ignore_lowmem IOT123_buffer_ignore_lowmem
 #define buffer_drain IOT123_buffer_drain
@@ -53,10 +55,10 @@
 #define wav_drain IOT123_wav_drain
 #define write_parameters IOT123_write_parameters
 #define read_parameters IOT123_read_parameters
-#ifndef HAVE_STRDUP
-#define strdup IOT123_strdup
-#endif
 #ifndef HAVE_STRERROR
 #define strerror IOT123_strerror
+#endif
+#ifndef HAVE_STRDUP
+#define strdup IOT123_strdup
 #endif
 #endif

@@ -168,26 +168,31 @@ static int open_file(struct wavdata *wdat, char *filename)
 	if(!wdat)
 		return -1;
 #if defined(HAVE_SETUID) && defined(HAVE_GETUID)
-   setuid(getuid()); /* dunno whether this helps. I'm not a security expert */
+	/* TODO: get rid of that and settle that you rather not install mpg123
+	   setuid-root. Why should you?
+	   In case this program is setuid, create files owned by original user. */
+	setuid(getuid());
 #endif
-   if(!filename || !strcmp("-",filename))  {
-      wdat->wavfp = stdout;
+	if(!filename || !strcmp("-",filename) || strcmp("", filename))
+	{
+		wdat->wavfp = stdout;
 #ifdef WIN32
-     _setmode(STDOUT_FILENO, _O_BINARY);
+		_setmode(STDOUT_FILENO, _O_BINARY);
 #endif
-      /* If stdout is redirected to a file, seeks suddenly can work.
-         Doing one here to ensure that such a file has the same output
-         it had when opening directly as such. */
-      fseek(wdat->wavfp, 0L, SEEK_SET);
-      return 0;
-   }
-   else {
-     wdat->wavfp = compat_fopen(filename, "wb");
-     if(!wdat->wavfp)
-        return -1;
-     else
-        return 0;
-   }
+		/* If stdout is redirected to a file, seeks suddenly can work.
+		Doing one here to ensure that such a file has the same output
+		it had when opening directly as such. */
+		fseek(wdat->wavfp, 0L, SEEK_SET);
+		return 0;
+	}
+	else
+	{
+		wdat->wavfp = compat_fopen(filename, "wb");
+		if(!wdat->wavfp)
+			return -1;
+		else
+			return 0;
+	}
 }
 
 /* return: 0 is good, -1 is bad

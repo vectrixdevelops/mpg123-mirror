@@ -26,12 +26,13 @@ void buffer_exit(audio_output_t *ao);
 
 int buffer_sync_param(audio_output_t *ao);
 int buffer_open(audio_output_t *ao, const char* driver, const char* device);
-int buffer_get_encodings(audio_output_t *ao);
+int buffer_encodings(audio_output_t *ao);
 int buffer_start(audio_output_t *ao);
 
 /* Simple messages to be deal with after playback. */
 
 void buffer_stop(audio_output_t *ao);
+void buffer_close(audio_output_t *ao);
 void buffer_continue(audio_output_t *ao);
 /* Still undecided if that one is to be used anywhere. */
 void buffer_ignore_lowmem(audio_output_t *ao);

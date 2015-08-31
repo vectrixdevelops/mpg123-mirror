@@ -152,6 +152,7 @@ enum out123_error
 ,	OUT123_DEV_OPEN /**< error opening device */
 /** Some (really unexpected) error in buffer infrastructure. */	
 ,	OUT123_BUFFER_ERROR
+,	OUT123_MODULE_ERROR /**< basic failure in module loading */
 ,	OUT123_ERRCOUNT /**< placeholder for shaping arrays */
 };
 
@@ -230,18 +231,18 @@ int out123_getparam( audio_output_t *ao, enum out123_parms code
  */
 int out123_param_from(audio_output_t *ao, audio_output_t* from_ao);
 
-/** Get list of driver modules reachable in system.
- *  The client is responsible for freeing the memory of the return value!
- * \return comma-separated list of drivers in one freshly allocated string
+/** Get list of driver modules reachable in system in C argv-style format.
+ *  The client is responsible for freeing the memory of both the individual
+ *  strings and the lists themselves.
+ *  A module that is not loadable because of missing libraries is simply
+ *  skipped. You will get stderr messages about that unless OUT123_QUIET was
+ *  was set, though. Failure to open the module directory is a serious error,
+ *  resulting in negative return value.
+ * \param names address for storing list of names
+ * \param descr address for storing list of descriptions
+ * \return number of drivers found, -1 on error
  */
-char * out123_drivers(void);
-
-/** Get list of driver modules that actually can be loaded
- *   (library dependencies met).
- *   The client is responsible for freeing the memory of the return value!
- * \return comma-separated list of drivers in one freshly allocated string
- */
-char * out123_supported_drivers(void);
+int out123_drivers(audio_output_t *ao, char ***names, char ***descr);
 
 /** Open an output device with a certain driver
  *  Note: Opening means that the driver code is loaded and the desired
@@ -254,6 +255,18 @@ char * out123_supported_drivers(void);
  * \return 0 on success, -1 on error.
  */
 int out123_open(audio_output_t *ao, const char* driver, const char* device);
+
+/** Give info about currently loaded driver and device
+ *  Any of the return addresses can be NULL if you are not interested in
+ *  everything. You get pointers to internal storage. They are valid
+ *  as long as the driver/device combination is opened.
+ *  The device may be NULL indicating some unnamed default.
+ *  TODO: Make the driver modules return names for such defaults.
+ * \param driver return address for driver name
+ * \param device return address for device name
+ * \return 0 on success, -1 on error (i.e. no driver loaded)
+ */
+int out123_driver_info(audio_output_t *ao, char **driver, char **device);
 
 /** Close the current output device and driver. */
 void out123_close(audio_output_t *ao);
@@ -274,7 +287,7 @@ void out123_close(audio_output_t *ao);
  * \return supported encodings combined with bitwise or, to be checked
  *         against your favourite bitmask, -1 on error
  */
-int out123_get_encodings(audio_output_t *ao, int channels, long rate);
+int out123_encodings(audio_output_t *ao, int channels, long rate);
 
 /** Get size of one PCM sample with given encoding.
  *  This is a macro that might belong into a header file separate from
@@ -282,6 +295,7 @@ int out123_get_encodings(audio_output_t *ao, int channels, long rate);
  *  tied to library code.
  *  Also: Thomas really likes the ?: operator.
  * \param encoding the encoding (mpg123_enc_enum value)
+ * \return size of one sample in bytes
  */
 #define out123_samplesize(enc) ( \
 	(enc) & MPG123_ENC_8 \
@@ -296,6 +310,8 @@ int out123_get_encodings(audio_output_t *ao, int channels, long rate);
 					?	8 \
 					:	0 \
 )	)	)	)	)
+
+
 
 /** Start playback with a certain output format
  *  It might be a good idea to have audio data handy to feed after this
