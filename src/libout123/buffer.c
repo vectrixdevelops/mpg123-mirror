@@ -335,7 +335,7 @@ size_t buffer_write(audio_output_t *ao, void *buffer, size_t bytes)
 		if(ret)
 		{
 			if(!AOQUIET)
-				error("writing to buffer memory failed");
+				error1("writing to buffer memory failed (%i)", ret);
 			if(ret == XF_CMD_ERROR)
 			{
 				/* Buffer tells me that it has an error waiting. */
@@ -383,8 +383,8 @@ static size_t preload_size(audio_output_t *ao)
 	/* Fill configured part of buffer on first run before starting to play.
 	 * Live mp3 streams constantly approach buffer underrun otherwise. [dk]
 	 */
-	if(ao->preload > 0.)   preload = (size_t)(ao->preload*xf->size);
-	if(preload > xf->size) preload = xf->size;
+	if(ao->preload > 0.)     preload = (size_t)(ao->preload*xf->size);
+	if(preload > xf->size/2) preload = xf->size/2;
 
 	return preload;
 }
@@ -409,6 +409,7 @@ static void buffer_play(audio_output_t *ao, size_t bytes)
 	/* Now do a normal ao->write(), with interruptions by signals
 		being expected. */
 	written = ao->write(ao, (unsigned char*)xf->data+xf->readindex, (int)bytes);
+	debug2("buffer wrote %i B / %i B to device", written, (int)bytes);
 	if(written >= 0)
 		/* Advance read pointer by the amount of written bytes. */
 		xf->readindex = (xf->readindex + written) % xf->size;
@@ -497,6 +498,7 @@ int buffer_loop(audio_output_t *ao)
 	/* Say hello to the writer. */
 	xfermem_putcmd(my_fd, XF_CMD_PONG);
 
+	debug1("buffer with preload %g", ao->preload);
 	while(1)
 	{
 		int cmd;
@@ -504,6 +506,8 @@ int buffer_loop(audio_output_t *ao)
 		if(ao->state == play_live)
 		{
 			size_t bytes = xfermem_get_usedspace(xf);
+			debug2( "Play or preload? Got %"SIZE_P" B / %"SIZE_P" B."
+			,	(size_p)bytes, (size_p)preload_size(ao) );
 			if(preloading)
 				preloading = (bytes < preload_size(ao));
 			if(!preloading)
@@ -516,7 +520,8 @@ int buffer_loop(audio_output_t *ao)
 		}
 		/* Now always check for a pending command, in a blocking way if there is
 		   no playback. */
-		cmd = xfermem_getcmd(my_fd, (intflag || (ao->state != play_live)));
+		cmd = xfermem_getcmd( my_fd
+		,	(preloading || intflag || (ao->state != play_live)) );
 		/* The writer only ever signals before sending a command and also waiting for
 		   a response. So, this is the right place to clear the flag, before giving
 		   that response */
@@ -529,10 +534,13 @@ int buffer_loop(audio_output_t *ao)
 			case 0:
 				debug("no command pending");
 			break;
+			case XF_CMD_DATA:
+				debug("got new data");
+			break;
 			case XF_CMD_PING:
 				/* Expecting ping-pong only while playing! Otherwise, the writer
 				   could get stuck waiting for free space forever. */
-				if(!(ao->state == play_live))
+				if(ao->state == play_live)
 					xfermem_putcmd(my_fd, XF_CMD_PONG);
 				else
 				{
