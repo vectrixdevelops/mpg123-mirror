@@ -535,6 +535,7 @@ int main(int sys_argc, char ** sys_argv)
 	bufferblock = pcmblock*pcmframe;
 	audio = (unsigned char*) malloc(bufferblock);
 
+	check_fatal_output(out123_set_buffer(ao, param.usebuffer*1024));
 	/* This needs bufferblock set! */
 	check_fatal_output(out123_open( ao
 	,	param.output_module, param.output_device ));
@@ -542,7 +543,6 @@ int main(int sys_argc, char ** sys_argv)
 	fprintf(stderr, "TODO: Check audio caps, add option to display 'em.\n");
 	/* audio_capabilities(ao, mh); */
 
-	check_fatal_output(out123_set_buffer(ao, param.usebuffer*1024));
 	check_fatal_output(out123_start(ao, encoding, channels, param.force_rate));
 
 	input = stdin;
