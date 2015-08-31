@@ -124,7 +124,7 @@ struct parameter param = {
 	,0 /* force_utf8 */
 	,INDEX_SIZE
 	,"s16" /* force_encoding */
-	,1. /* preload */
+	,0.2 /* preload */
 	,-1 /* preframes */
 	,-1 /* gain */
 	,NULL /* stream dump file */
