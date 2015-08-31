@@ -64,16 +64,32 @@ void close_module(mpg123_module_t* module, int verbose)
 }
 
 
-void list_modules()
+int list_modules(const char *type, char ***names, char ***descr, int verbose)
 {
 	debug("list_modules()" );
 
-	printf("\nmpg123 has been built in legacy mode - dynamic modules are not available.\n");
-	
-	printf("Available modules\n");
-	printf("-----------------\n");
-	printf("%-15s%s  %s\n", mpg123_output_module_info.name, "output", mpg123_output_module_info.description );
+	*names = NULL;
+	*descr = NULL;
 
+	if(
+		(*names=malloc(sizeof(char*)))
+	&&	!((*names)[0]=NULL) /* for safe cleanup */
+	&&	((*names)[0]=strdup(mpg123_output_module_info.name))
+	&&	(*descr=malloc(sizeof(char*)))
+	&&	!((*descr)[0]=NULL) /* for safe cleanup */
+	&& ((*descr)[0]=strdup(mpg123_output_module_info.description))
+	)
+		return 1;
+	else
+	{
+		if(*names)
+			free((*names)[0]);
+		free(*names);
+		if(*descr)
+			free((*descr)[0]);
+		free(*descr);
+		return -1;
+	}
 }
 
 
