@@ -139,6 +139,7 @@ static int out123_seterr(audio_output_t *ao, enum out123_error errcode)
 
 int out123_set_buffer(audio_output_t *ao, size_t buffer_bytes)
 {
+	debug2("out123_set_buffer(%p, %"SIZE_P")", (void*)ao, (size_p)buffer_bytes);
 	if(!ao)
 		return OUT123_ERR;
 	ao->errcode = 0;
@@ -160,6 +161,7 @@ int out123_param( audio_output_t *ao, enum out123_parms code
 {
 	int ret = 0;
 
+	debug4("out123_param(%p, %i, %li, %g)", (void*)ao, (int)code, value, fvalue);
 	if(!ao)
 		return OUT123_ERR;
 	ao->errcode = 0;
@@ -202,6 +204,8 @@ int out123_getparam( audio_output_t *ao, enum out123_parms code
 	long value = 0;
 	double fvalue = 0.;
 
+	debug4( "out123_getparam(%p, %i, %p, %p)"
+	,	(void*)ao, (int)code, (void*)ret_value, (void*)ret_fvalue );
 	if(!ao)
 		return OUT123_ERR;
 	ao->errcode = 0;
@@ -237,6 +241,7 @@ int out123_getparam( audio_output_t *ao, enum out123_parms code
 
 int out123_param_from(audio_output_t *ao, audio_output_t* from_ao)
 {
+	debug2("out123_param_from(%p, %p)", (void*)ao, (void*)from_ao);
 	if(!ao || !from_ao) return -1;
 
 	ao->flags     = from_ao->flags;
@@ -281,6 +286,8 @@ int read_parameters(audio_output_t *ao, int fd)
 
 int out123_open(audio_output_t *ao, const char* driver, const char* device)
 {
+	debug3( "out123_open(%p, %s, %s)", (void*)ao
+	,	driver ? driver : "<nil>", device ? device : "<nil>" );
 	if(!ao)
 		return OUT123_ERR;
 	ao->errcode = 0;
@@ -366,6 +373,7 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 /* Be resilient, always do cleanup work regardless of state. */
 void out123_close(audio_output_t *ao)
 {
+	debug1("out123_close(%p)", (void*)ao);
 	if(!ao)
 		return;
 	ao->errcode = 0;
@@ -407,6 +415,8 @@ void out123_close(audio_output_t *ao)
 int out123_start( audio_output_t *ao
 ,                  int encoding, int channels, long rate )
 {
+	debug4( "out123_start(%p, %i, %i, %li)"
+	,	(void*)ao, (int)encoding, channels, rate );
 	if(!ao)
 		return OUT123_ERR;
 	ao->errcode = 0;
@@ -445,6 +455,7 @@ int out123_start( audio_output_t *ao
 
 void out123_pause(audio_output_t *ao)
 {
+	debug1("out123_pause(%p)", (void*)ao);
 	if(ao && ao->state == play_live)
 	{
 #ifndef NOXFERMEM
@@ -457,6 +468,7 @@ void out123_pause(audio_output_t *ao)
 
 void out123_continue(audio_output_t *ao)
 {
+	debug1("out123_continue(%p)", (void*)ao);
 	if(ao && ao->state == play_paused)
 	{
 #ifndef NOXFERMEM
@@ -469,6 +481,7 @@ void out123_continue(audio_output_t *ao)
 
 void out123_stop(audio_output_t *ao)
 {
+	debug1("out123_stop(%p)", (void*)ao);
 	if(!ao)
 		return;
 	ao->errcode = 0;
@@ -489,6 +502,7 @@ size_t out123_play(audio_output_t *ao, void *bytes, size_t count)
 	size_t sum = 0;
 	int written;
 
+	debug3("out123_play(%p, %p, %"SIZE_P")", (void*)ao, bytes, (size_p)count);
 	if(!ao)
 		return 0;
 	ao->errcode = 0;
@@ -526,6 +540,7 @@ size_t out123_play(audio_output_t *ao, void *bytes, size_t count)
 /* Drop means to flush it down. Quickly. */
 void out123_drop(audio_output_t *ao)
 {
+	debug1("out123_drop(%p)", (void*)ao);
 	if(!ao)
 		return;
 	ao->errcode = 0;
@@ -542,6 +557,7 @@ void out123_drop(audio_output_t *ao)
 
 void out123_drain(audio_output_t *ao)
 {
+	debug1("out123_drain(%p)", (void*)ao);
 	if(!ao)
 		return;
 	ao->errcode = 0;
@@ -721,6 +737,7 @@ int out123_drivers(audio_output_t *ao, char ***names, char ***descr)
 	int count;
 	int i;
 
+	debug3("out123_drivers(%p, %p, %p)", (void*)ao, (void*)names, (void*)descr);
 	/* Wrap the call to isolate the lower levels from the user not being
 	   interested in both lists. it's a bit wasteful, but the code looks
 	   ugly enough already down there. */
@@ -753,6 +770,8 @@ int out123_drivers(audio_output_t *ao, char ***names, char ***descr)
    The latter can be positively NULL, though. */
 int out123_driver_info(audio_output_t *ao, char **driver, char **device)
 {
+	debug3( "out123_driver_info(%p, %p, %p)"
+	,	(void*)ao, (void*)driver, (void*)device );
 	if(!ao)
 		return OUT123_ERR;
 	if(!ao->driver)
@@ -767,6 +786,7 @@ int out123_driver_info(audio_output_t *ao, char **driver, char **device)
 
 int out123_encodings(audio_output_t *ao, int channels, long rate)
 {
+	debug3("out123_encodings(%p, %i, %li)", (void*)ao, channels, rate);
 	if(!ao)
 		return OUT123_ERR;
 	ao->errcode = OUT123_OK;
@@ -801,6 +821,7 @@ int out123_encodings(audio_output_t *ao, int channels, long rate)
 
 long out123_buffered(audio_output_t *ao)
 {
+	debug1("out123_buffered(%p)", (void*)ao);
 	if(!ao)
 		return OUT123_ERR;
 	ao->errcode = 0;
