@@ -293,6 +293,7 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 	ao->errcode = 0;
 
 	out123_close(ao);
+	debug("out123_open() continuing");
 
 	/* Ensure that audio format is freshly set for "no format yet" mode.
 	   In out123_start*/
@@ -422,6 +423,7 @@ int out123_start( audio_output_t *ao
 	ao->errcode = 0;
 
 	out123_stop(ao);
+	debug("out123_start() continuing");
 	if(ao->state != play_stopped)
 		return out123_seterr(ao, OUT123_NO_DRIVER);
 
