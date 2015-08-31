@@ -337,7 +337,7 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device)
 			if(ao->open)
 			{
 				if(AOVERBOSE(2))
-					fprintf(stderr, "Output module '%s' chosen.\n", curname);
+					fprintf(stderr, "Chosen output module: %s\n", curname);
 				/* A bit redundant, but useful when it's a fake module. */
 				if(!(ao->driver = strdup(curname)))
 				{
@@ -655,7 +655,7 @@ static void check_output_module( audio_output_t *ao
 	int result;
 
 	if(AOVERBOSE(1))
-		fprintf(stderr, "Trying output module %s.\n", name);
+		fprintf(stderr, "Trying output module: %s\n", name);
 
 	/* Use internal code. */
 	if(open_fake_module(ao, name) == OUT123_OK)
