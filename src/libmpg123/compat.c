@@ -12,4 +12,5 @@
 
 #include "config.h"
 #include "intsym.h"
+#define NO_CATCHSIGNAL
 #include "compat/compat_impl.h"
