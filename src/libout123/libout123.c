@@ -46,34 +46,31 @@ static void out123_clear_module(audio_output_t *ao)
 audio_output_t* out123_new(void)
 {
 	audio_output_t* ao = malloc( sizeof( audio_output_t ) );
-	if (!ao) error( "Failed to allocate memory for audio_output_t." );
-	else
-	{
-		ao->errcode = 0;
-
+	if(!ao)
+		return NULL;
+	ao->errcode = 0;
 #ifndef NOXFERMEM
-		ao->buffer_pid = -1;
-		ao->buffer_fd[0] = -1;
-		ao->buffer_fd[1] = -1;
-		ao->buffermem = NULL;
+	ao->buffer_pid = -1;
+	ao->buffer_fd[0] = -1;
+	ao->buffer_fd[1] = -1;
+	ao->buffermem = NULL;
 #endif
 
-		out123_clear_module(ao);
-		ao->driver = NULL;
-		ao->device = NULL;
+	out123_clear_module(ao);
+	ao->driver = NULL;
+	ao->device = NULL;
 
-		ao->flags = 0;
-		ao->rate = -1;
-		ao->gain = -1;
-		ao->channels = -1;
-		ao->format = -1;
-		ao->framesize = 0;
-		ao->state = play_dead;
-		ao->auxflags = 0;
-		ao->preload = 0.;
-		ao->verbose = 0;
-		ao->device_buffer = 0.;
-	}
+	ao->flags = 0;
+	ao->rate = -1;
+	ao->gain = -1;
+	ao->channels = -1;
+	ao->format = -1;
+	ao->framesize = 0;
+	ao->state = play_dead;
+	ao->auxflags = 0;
+	ao->preload = 0.;
+	ao->verbose = 0;
+	ao->device_buffer = 0.;
 	return ao;
 }
 
