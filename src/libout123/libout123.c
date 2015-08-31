@@ -648,7 +648,7 @@ static int open_fake_module(audio_output_t *ao, const char *driver)
 		ao->close = raw_close;
 	}
 	else
-	if(strcmp("au", driver))
+	if(!strcmp("au", driver))
 	{
 		ao->open  = au_open;
 		ao->get_formats = au_formats;
