@@ -1177,7 +1177,7 @@ int main(int sys_argc, char ** sys_argv)
 #endif
 		}
 
-	if(!param.smooth)
+	if(!param.smooth && !intflag)
 		out123_drain(ao);
 	if(param.verbose) print_stat(mh,0,ao); 
 
