@@ -206,12 +206,24 @@ debug1("control for frame: %li", (long)mpg123_tellframe(fr));
 }
 
 /* Stop playback while seeking if buffer is involved. */
-static void seekmode(void)
+static void seekmode(mpg123_handle *mh, audio_output_t *ao)
 {
 	if(param.usebuffer && !stopped)
 	{
 		stopped = TRUE;
+		int channels;
+		int encoding;
+		off_t back_samples;
+
 		out123_pause(ao);
+		mpg123_getformat(mh, NULL, &channels, &encoding);
+		back_samples = out123_buffered(ao)/(out123_samplesize(encoding)*channels);
+		fprintf(stderr, "\nseeking back %"OFF_P" samples from %"OFF_P"\n"
+		,	(off_p)back_samples, (off_p)mpg123_tell(mh));
+		mpg123_seek(mh, -back_samples, SEEK_CUR);
+		out123_drop(ao);
+		fprintf(stderr, "\ndropped, now at %"OFF_P"\n"
+		,	(off_p)mpg123_tell(mh));
 		fprintf(stderr, "%s", MPG123_STOPPED_STRING);
 	}
 }
@@ -314,27 +326,27 @@ static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 		fprintf(stderr, "%s", (stopped) ? MPG123_STOPPED_STRING : MPG123_EMPTY_STRING);
 	break;
 	case MPG123_FINE_REWIND_KEY:
-		if(param.usebuffer) seekmode();
+		seekmode(fr, ao);
 		offset--;
 	break;
 	case MPG123_FINE_FORWARD_KEY:
-		seekmode();
+		seekmode(fr, ao);
 		offset++;
 	break;
 	case MPG123_REWIND_KEY:
-		seekmode();
+		seekmode(fr, ao);
 		  offset-=10;
 	break;
 	case MPG123_FORWARD_KEY:
-		seekmode();
+		seekmode(fr, ao);
 		offset+=10;
 	break;
 	case MPG123_FAST_REWIND_KEY:
-		seekmode();
+		seekmode(fr, ao);
 		offset-=50;
 	break;
 	case MPG123_FAST_FORWARD_KEY:
-		seekmode();
+		seekmode(fr, ao);
 		offset+=50;
 	break;
 	case MPG123_VOL_UP_KEY:
@@ -451,10 +463,14 @@ static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 		num = val == '0' ? 10 : val - '0';
 		--num; /* from 0 to 9 */
 
-		seekmode();
+		/* Do not swith to seekmode() here, as we are jumping once to a
+		   specific position. Dropping buffer contents is enough and there
+		   is no race filling the buffer or waiting for more incremental
+		   seek orders. */
 		len = mpg123_length(fr);
-		if(len > 0) mpg123_seek(fr, (off_t)( (num/10.)*len ), SEEK_SET);
-
+		if(len > 0)
+			mpg123_seek(fr, (off_t)( (num/10.)*len ), SEEK_SET);
+		out123_drop(ao);
 	}
 	break;
 	case MPG123_BOOKMARK_KEY:

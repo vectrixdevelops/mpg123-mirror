@@ -1,7 +1,9 @@
 TODO:
 
-- Fix jumping in terminal mode with buffer for small seeks. One should
-  be able to seek _in_ buffer.
+- Draining of the buffer needs to be interruptible. It can take a long time
+  and no amount of SIGINT helps currently.
+  So, there should be a out123_drain_max() or out123_drain_partial() to limit
+  the amount of samples written and to be able to react in between.
 
 1.23.0
 ---
@@ -16,6 +18,10 @@ TODO:
 - Default for --preload now is 0.2 instead of 1 (fill whole buffer before
   playback). The maximum is 0.5 . This is mandated by corrected buffer
   interaction in libout123.
+- Improved interaction with buffer process in terminal control mode.
+  Seeking is more transparent now, taking dropped samples from buffer into
+  account to avoid unintended jumps. Direct seeks with number row do not
+  pause playback anymore.
 
 1.22.3
 - Fix UTF-16 surrogate detection because that used to falsely detect
