@@ -76,6 +76,7 @@ audio_output_t* out123_new(void)
 
 void out123_del(audio_output_t *ao)
 {
+	debug1("out123_del(%p)", (void*)ao);
 	if(!ao) return;
 
 	out123_close(ao); /* TODO: That talks to the buffer if present. */
