@@ -71,6 +71,7 @@ enum xf_cmd_code
 #define XF_WRITER 0
 #define XF_READER 1
 int xfermem_getcmd(int fd, int block);
+int xfermem_getcmds(int fd, int block, byte* cmds, int count);
 int xfermem_putcmd(int fd, byte cmd);
 int xfermem_writer_block(txfermem *xf);
 /* returns TRUE for being interrupted */

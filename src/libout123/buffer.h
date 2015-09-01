@@ -50,4 +50,9 @@ size_t buffer_write(audio_output_t *ao, void *buffer, size_t bytes);
 /* Thin wrapper over xfermem giving the current buffer fill. */
 long buffer_fill(audio_output_t *ao);
 
+/* Special handler to safely read values from command channel with
+   an additional buffer handed in. Exported for read_parameters(). */
+int read_buf(int fd, void *addr, size_t size
+,	byte *prebuf, int *preoff, int presize);
+
 #endif

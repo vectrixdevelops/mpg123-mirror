@@ -148,10 +148,10 @@ size_t xfermem_get_usedspace (txfermem *xf)
 		return (xf->size - (readindex - freeindex));
 }
 
-static int xfermem_getcmd_raw (int fd, int block)
+static int xfermem_getcmd_raw (int fd, int block, byte *cmds, int count)
 {
 	fd_set selfds;
-	byte cmd;
+	int ret;
 
 	for (;;) {
 		struct timeval selto = {0, 0};
@@ -174,17 +174,16 @@ static int xfermem_getcmd_raw (int fd, int block)
 				return (-2);
 			case 1:
 				if (FD_ISSET(fd, &selfds))
-					switch (read(fd, &cmd, 1)) {
+					switch((ret=read(fd, cmds, count)))
+					{
 						case 0: /* EOF */
 							return (-1);
 						case -1:
 							if (errno == EINTR)
 								continue;
 							return (-3);
-						case 1:
-							return (cmd);
-						default: /* ?!? */
-							return (-4);
+						default:
+							return ret;
 					}
 				else /* ?!? */
 					return (-5);
@@ -197,10 +196,21 @@ static int xfermem_getcmd_raw (int fd, int block)
 /* Verbose variant for debugging communication. */
 int xfermem_getcmd(int fd, int block)
 {
-	int res = xfermem_getcmd_raw(fd, block);
-	debug3("xfermem_getcmd(%i, %i) = %i", fd, block, res);
+	byte cmd;
+	int res = xfermem_getcmd_raw(fd, block, &cmd, 1);
+	debug3("xfermem_getcmd(%i, %i) = %i", fd, block, res == 1 ? cmd : res);
+	return res == 1 ? cmd : res;
+}
+
+int xfermem_getcmds(int fd, int block, byte *cmds, int count)
+{
+	int res = xfermem_getcmd_raw(fd, block, cmds, count);
+	debug5("xfermem_getcmds(%i, %i, %p, %i) = %i"
+	,	fd, block, (void*)cmds, count
+	,	res);
 	return res;
 }
+
 
 int xfermem_putcmd (int fd, byte cmd)
 {

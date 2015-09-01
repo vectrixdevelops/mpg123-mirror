@@ -139,7 +139,6 @@ int fresh = TRUE;
 
 size_t bufferblock = 4096;
 
-int intflag = FALSE;
 int OutputDescriptor;
 
 char *fullprogname = NULL; /* Copy of argv[0]. */
@@ -422,6 +421,14 @@ int play_frame(void)
 /* Hack: A hidden function in audio.c just for me. */
 int audio_enc_name2code(const char* name);
 
+static int intflag = FALSE;
+#if !defined(WIN32) && !defined(GENERIC)
+static void catch_interrupt(void)
+{
+        intflag = TRUE;
+}
+#endif
+
 int main(int sys_argc, char ** sys_argv)
 {
 	int result;
@@ -478,6 +485,11 @@ int main(int sys_argc, char ** sys_argv)
 			usage(1);
 	}
 
+	/* Ensure cleanup before we cause too much mess. */
+#if !defined(WIN32) && !defined(GENERIC)
+	catchsignal(SIGINT, catch_interrupt);
+	catchsignal(SIGTERM, catch_interrupt);
+#endif
 	ao = out123_new();
 	if(!ao){ error("Failed to allocate output."); exit(1); }
 
@@ -546,9 +558,15 @@ int main(int sys_argc, char ** sys_argv)
 	check_fatal_output(out123_start(ao, encoding, channels, param.force_rate));
 
 	input = stdin;
-	while(play_frame())
+	while(play_frame() && !intflag)
 	{
 		/* be happy */
+	}
+	if(intflag) /* Make it quick! */
+	{
+		if(!param.quiet)
+			fprintf(stderr, "Interrupted. Dropping the ball.\n");
+		out123_drop(ao);
 	}
 
 	safe_exit(0); /* That closes output and restores terminal, too. */

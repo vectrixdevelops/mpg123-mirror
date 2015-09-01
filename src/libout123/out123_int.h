@@ -102,7 +102,8 @@ struct audio_format_name {
 };
 
 int write_parameters(audio_output_t *ao, int fd);
-int read_parameters(audio_output_t *ao, int fd);
+int read_parameters(audio_output_t *ao
+,	int fd, byte *prebuf, int *preoff, int presize);
 
 #endif
 

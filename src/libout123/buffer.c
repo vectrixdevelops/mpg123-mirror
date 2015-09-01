@@ -56,7 +56,8 @@ static void catch_interrupt (void)
 }
 
 static int write_string(audio_output_t *ao, int who, const char *buf);
-static int read_string(audio_output_t *ao, int who, char **buf);
+static int read_string(audio_output_t *ao
+,	int who, char **buf, byte *prebuf, int *preoff, int presize);
 static int buffer_loop(audio_output_t *ao);
 
 static void catch_child(void)
@@ -219,8 +220,8 @@ int buffer_open(audio_output_t *ao, const char* driver, const char* device)
 	if(buffer_cmd_finish(ao) == 0)
 	{
 		/* Retrieve driver and device name. */
-		if(  read_string(ao, XF_WRITER, &ao->driver)
-		  || read_string(ao, XF_WRITER, &ao->device) )
+		if(  read_string(ao, XF_WRITER, &ao->driver, NULL, NULL, 0)
+		  || read_string(ao, XF_WRITER, &ao->device, NULL, NULL, 0) )
 		{
 			ao->errcode = OUT123_BUFFER_ERROR;
 			return -1;
@@ -453,9 +454,34 @@ static int write_string(audio_output_t *ao, int who, const char *buf)
 	return 0;
 }
 
+/* Read a value from command channel with prebuffer.
+   This assumes responsible use and avoids needless checking of input.
+   And, yes, it modifies the preoff argument!
+   Returns 0 on success, modifies prebuffer fill. */
+int read_buf(int fd, void *addr, size_t size, byte *prebuf, int *preoff, int presize)
+{
+	size_t need = size;
+
+	if(prebuf)
+	{
+		int have = presize - *preoff;
+		if(have > need)
+			have = need;
+		memcpy(addr, prebuf+*preoff, have);
+		*preoff += have;
+		addr = (char*)addr+have;
+		need -= have;
+	}
+	if(need)
+		return !GOOD_READBUF(fd, addr, need);
+	else
+		return 0;
+}
+
 /* Read a string from command channel.
    Return 0 on success, set ao->errcode on issues. */
-static int read_string(audio_output_t *ao, int who, char **buf)
+static int read_string(audio_output_t *ao
+,	int who, char **buf, byte *prebuf, int *preoff, int presize)
 {
 	txfermem *xf = ao->buffermem;
 	int my_fd = xf->fd[who];
@@ -465,7 +491,7 @@ static int read_string(audio_output_t *ao, int who, char **buf)
 		free(*buf);
 	*buf = NULL;
 
-	if(!GOOD_READVAL(my_fd, len))
+	if(read_buf(my_fd, &len, sizeof(len), prebuf, preoff, presize))
 	{
 		ao->errcode = OUT123_BUFFER_ERROR;
 		return 2;
@@ -477,13 +503,15 @@ static int read_string(audio_output_t *ao, int who, char **buf)
 		skip_bytes(my_fd, len);
 		return -1;
 	}
-	if(!GOOD_READBUF(my_fd, *buf, len))
+	
+	if(read_buf(my_fd, *buf, len, prebuf, preoff, presize))
 	{
 		ao->errcode = OUT123_BUFFER_ERROR;
 		return 2;
 	}
 	return 0;
 }
+
 
 /* The main loop, returns 0 when no issue occured. */
 int buffer_loop(audio_output_t *ao)
@@ -501,7 +529,6 @@ int buffer_loop(audio_output_t *ao)
 	debug1("buffer with preload %g", ao->preload);
 	while(1)
 	{
-		int cmd;
 		/* If a device is opened and playing, it is our first duty to keep it playing. */
 		if(ao->state == play_live)
 		{
@@ -520,189 +547,209 @@ int buffer_loop(audio_output_t *ao)
 		}
 		/* Now always check for a pending command, in a blocking way if there is
 		   no playback. */
-		debug("Buffer cmd?");
-		cmd = xfermem_getcmd( my_fd
-		,	(preloading || intflag || (ao->state != play_live)) );
+		debug1("Buffer cmd? (Interruped: %i)", intflag);
 		/*
-			The writer only ever signals before sending a command and also waiting for
-			a response. So, the right place to reset the flag is any time before
-			giving the response.
-			These actions should rely heavily on calling the normal out123
-			API functions, just with some parameter passing and error checking
-			wrapped around. If there is much code here, it is wrong.
+			The writer only ever signals before sending a command and also waiting
+			for a response. So, the right place to reset the flag is any time
+			before giving the response. But let's ensure two things:
+			1. The flag really is only cleared when a command response is given.
+			2. Command parsing does not stop until a command demanding a response
+			   was handled.
 		*/
-		do switch(cmd)
+		do
 		{
-			case 0:
-				debug("no command pending");
-			break;
-			case XF_CMD_DATA:
-				debug("got new data");
-			break;
-			case XF_CMD_PING:
-				intflag = FALSE;
-				/* Expecting ping-pong only while playing! Otherwise, the writer
-				   could get stuck waiting for free space forever. */
-				if(ao->state == play_live)
-					xfermem_putcmd(my_fd, XF_CMD_PONG);
-				else
-				{
-					xfermem_putcmd(my_fd, XF_CMD_ERROR);
-					if(ao->errcode == OUT123_OK)
-						ao->errcode = OUT123_NOT_LIVE;
-					if(!GOOD_WRITEVAL(my_fd, ao->errcode))
-						return 2;
-				}
-			break;
-			case BUF_CMD_PARAM:
-				intflag = FALSE;
-				/* If that does not work, communication is broken anyway and
-				   writer will notice soon enough. */
-				read_parameters(ao, my_fd);
-				xfermem_putcmd(my_fd, XF_CMD_OK);
-			break;
-			case BUF_CMD_OPEN:
-			{
-				char *driver  = NULL;
-				char *device  = NULL;
-				int success;
+			/* Getting a whole block of commands to efficiently process those
+			   XF_CMD_DATA messages. */
+			byte cmd[100];
+			int cmdcount;
+			int i;
 
-				intflag = FALSE;
-				success = (
-					!read_string(ao, XF_READER, &driver)
-				&&	!read_string(ao, XF_READER, &device)
-				&&	!out123_open(ao, driver, device)
-				);
-				free(device);
-				free(driver);
-				if(success)
-				{
-					xfermem_putcmd(my_fd, XF_CMD_OK);
-					if(  write_string(ao, XF_READER, ao->driver)
-					  || write_string(ao, XF_READER, ao->device) )
-						return 2;
-				}
-				else
-				{
-					xfermem_putcmd(my_fd, XF_CMD_ERROR);
-					/* Again, no sense to bitch around about communication errors,
-					   just quit. */
-					if(!GOOD_WRITEVAL(my_fd, ao->errcode))
-						return 2;
-				}
-			}
-			break;
-			case BUF_CMD_CLOSE:
-				intflag = FALSE;
-				out123_close(ao);
-				xfermem_putcmd(my_fd, XF_CMD_OK);
-			break;
-			case BUF_CMD_AUDIOCAP:
+			cmdcount = xfermem_getcmds( my_fd
+			,	(preloading || intflag || (ao->state != play_live))
+			,	cmd
+			,	sizeof(cmd) );
+			if(cmdcount < 0)
 			{
-				int encodings;
-
-				intflag = FALSE;
-				if(
-					!GOOD_READVAL(my_fd, ao->channels)
-				||	!GOOD_READVAL(my_fd, ao->rate)
-				)
-					return 2;
-				encodings = out123_encodings(ao, ao->channels, ao->rate);
-				if(encodings >= 0)
-				{
-					xfermem_putcmd(my_fd, XF_CMD_OK);
-					if(!GOOD_WRITEVAL(my_fd, encodings))
-						return 2;
-				}
-				else
-				{
-					xfermem_putcmd(my_fd, XF_CMD_ERROR);
-					if(!GOOD_WRITEVAL(my_fd, ao->errcode))
-						return 2;
-				}
+				error1("Reading a command set returned %i, my link is broken.", cmdcount);
+				return 1;
 			}
-			break;
-			case BUF_CMD_START:
-				intflag = FALSE;
-				if(
-					!GOOD_READVAL(my_fd, ao->format)
-				||	!GOOD_READVAL(my_fd, ao->channels)
-				||	!GOOD_READVAL(my_fd, ao->rate)
-				)
-					return 2;
-				if(!out123_start(ao, ao->format, ao->channels, ao->rate))
+#ifdef DEBUG
+			for(i=0; i<cmdcount; ++i)
+				debug2("cmd[%i]=%u", i, cmd[i]);
+#endif
+			/*
+				These actions should rely heavily on calling the normal out123
+				API functions, just with some parameter passing and error checking
+				wrapped around. If there is much code here, it is wrong.
+			*/
+			for(i=0; i<cmdcount;) switch(cmd[i++])
+			{
+#define GOOD_READVAL_BUF(fd, val) \
+	!read_buf(my_fd, &val, sizeof(val), cmd, &i, cmdcount)
+				case XF_CMD_DATA:
+					debug("got new data");
+				break;
+				case XF_CMD_PING:
+					intflag = FALSE;
+					/* Expecting ping-pong only while playing! Otherwise, the writer
+					   could get stuck waiting for free space forever. */
+					if(ao->state == play_live)
+						xfermem_putcmd(my_fd, XF_CMD_PONG);
+					else
+					{
+						xfermem_putcmd(my_fd, XF_CMD_ERROR);
+						if(ao->errcode == OUT123_OK)
+							ao->errcode = OUT123_NOT_LIVE;
+						if(!GOOD_WRITEVAL(my_fd, ao->errcode))
+							return 2;
+					}
+				break;
+				case BUF_CMD_PARAM:
+					intflag = FALSE;
+					/* If that does not work, communication is broken anyway and
+					   writer will notice soon enough. */
+					read_parameters(ao, my_fd, cmd, &i, cmdcount);
+					xfermem_putcmd(my_fd, XF_CMD_OK);
+				break;
+				case BUF_CMD_OPEN:
 				{
+					char *driver  = NULL;
+					char *device  = NULL;
+					int success;
+
+					intflag = FALSE;
+					success = (
+						!read_string(ao, XF_READER, &driver, cmd, &i, cmdcount)
+					&&	!read_string(ao, XF_READER, &device, cmd, &i, cmdcount)
+					&&	!out123_open(ao, driver, device)
+					);
+					free(device);
+					free(driver);
+					if(success)
+					{
+						xfermem_putcmd(my_fd, XF_CMD_OK);
+						if(  write_string(ao, XF_READER, ao->driver)
+						  || write_string(ao, XF_READER, ao->device) )
+							return 2;
+					}
+					else
+					{
+						xfermem_putcmd(my_fd, XF_CMD_ERROR);
+						/* Again, no sense to bitch around about communication errors,
+						   just quit. */
+						if(!GOOD_WRITEVAL(my_fd, ao->errcode))
+							return 2;
+					}
+				}
+				break;
+				case BUF_CMD_CLOSE:
+					intflag = FALSE;
+					out123_close(ao);
+					xfermem_putcmd(my_fd, XF_CMD_OK);
+				break;
+				case BUF_CMD_AUDIOCAP:
+				{
+					int encodings;
+
+					intflag = FALSE;
+					if(
+						!GOOD_READVAL_BUF(my_fd, ao->channels)
+					||	!GOOD_READVAL_BUF(my_fd, ao->rate)
+					)
+						return 2;
+					encodings = out123_encodings(ao, ao->channels, ao->rate);
+					if(encodings >= 0)
+					{
+						xfermem_putcmd(my_fd, XF_CMD_OK);
+						if(!GOOD_WRITEVAL(my_fd, encodings))
+							return 2;
+					}
+					else
+					{
+						xfermem_putcmd(my_fd, XF_CMD_ERROR);
+						if(!GOOD_WRITEVAL(my_fd, ao->errcode))
+							return 2;
+					}
+				}
+				break;
+				case BUF_CMD_START:
+					intflag = FALSE;
+					if(
+						!GOOD_READVAL_BUF(my_fd, ao->format)
+					||	!GOOD_READVAL_BUF(my_fd, ao->channels)
+					||	!GOOD_READVAL_BUF(my_fd, ao->rate)
+					)
+						return 2;
+					if(!out123_start(ao, ao->format, ao->channels, ao->rate))
+					{
+						preloading = TRUE;
+						xfermem_putcmd(my_fd, XF_CMD_OK);
+					}
+					else
+					{
+						xfermem_putcmd(my_fd, XF_CMD_ERROR);
+						if(!GOOD_WRITEVAL(my_fd, ao->errcode))
+							return 2;
+					}
+				break;
+				case BUF_CMD_STOP:
+					intflag = FALSE;
+					if(ao->state == play_live)
+					{ /* Drain is implied! */
+						size_t bytes;
+						while((bytes = xfermem_get_usedspace(xf)))
+							buffer_play(ao, bytes);
+					}
+					out123_stop(ao);
+					xfermem_putcmd(my_fd, XF_CMD_OK);
+				break;
+				case XF_CMD_CONTINUE:
+					intflag = FALSE;
+					out123_continue(ao);
 					preloading = TRUE;
 					xfermem_putcmd(my_fd, XF_CMD_OK);
-				}
-				else
-				{
-					xfermem_putcmd(my_fd, XF_CMD_ERROR);
-					if(!GOOD_WRITEVAL(my_fd, ao->errcode))
-						return 2;
-				}
-			break;
-			case BUF_CMD_STOP:
-				intflag = FALSE;
-				if(ao->state == play_live)
-				{ /* Drain is implied! */
-					size_t bytes;
-					while((bytes = xfermem_get_usedspace(xf)))
-						buffer_play(ao, bytes);
-				}
-				out123_stop(ao);
-				xfermem_putcmd(my_fd, XF_CMD_OK);
-			break;
-			case XF_CMD_CONTINUE:
-				intflag = FALSE;
-				out123_continue(ao);
-				preloading = TRUE;
-				xfermem_putcmd(my_fd, XF_CMD_OK);
-			break;
-			case XF_CMD_IGNLOW:
-				intflag = FALSE;
-				preloading = FALSE;
-				xfermem_putcmd(my_fd, XF_CMD_OK);
-			break;
-			case XF_CMD_DRAIN:
-				intflag = FALSE;
-				if(ao->state == play_live)
-				{
-					size_t bytes;
-					while((bytes = xfermem_get_usedspace(xf)))
-						buffer_play(ao, bytes);
-					out123_drain(ao);
-				}
-				xfermem_putcmd(my_fd, XF_CMD_OK);
-			break;
-			case XF_CMD_TERMINATE:
-				intflag = FALSE;
-				/* Will that response always reach the writer? Well, at worst,
-				   it's an ignored error on xfermem_getcmd(). */
-				xfermem_putcmd(my_fd, XF_CMD_OK);
-				return 0;
-			case XF_CMD_PAUSE:
-				intflag = FALSE;
-				out123_pause(ao);
-				xfermem_putcmd(my_fd, XF_CMD_OK);
-			break;
-			case XF_CMD_DROP:
-				intflag = FALSE;
-				xf->readindex = xf->freeindex;
-				out123_drop(ao);
-				xfermem_putcmd(my_fd, XF_CMD_OK);
-			break;
-			default:
-				if(!AOQUIET)
-				{
-					if(cmd < 0)
-						error1("Reading a command returned %i, my link is broken.", cmd);
-					else
-						error1("Unknown command %i encountered. Confused Suicide!", cmd);
-				}
-				return 1;
+				break;
+				case XF_CMD_IGNLOW:
+					intflag = FALSE;
+					preloading = FALSE;
+					xfermem_putcmd(my_fd, XF_CMD_OK);
+				break;
+				case XF_CMD_DRAIN:
+					intflag = FALSE;
+					if(ao->state == play_live)
+					{
+						size_t bytes;
+						while((bytes = xfermem_get_usedspace(xf)))
+							buffer_play(ao, bytes);
+						out123_drain(ao);
+					}
+					xfermem_putcmd(my_fd, XF_CMD_OK);
+				break;
+				case XF_CMD_TERMINATE:
+					intflag = FALSE;
+					/* Will that response always reach the writer? Well, at worst,
+					   it's an ignored error on xfermem_getcmd(). */
+					xfermem_putcmd(my_fd, XF_CMD_OK);
+					return 0;
+				case XF_CMD_PAUSE:
+					intflag = FALSE;
+					out123_pause(ao);
+					xfermem_putcmd(my_fd, XF_CMD_OK);
+				break;
+				case XF_CMD_DROP:
+					intflag = FALSE;
+					xf->readindex = xf->freeindex;
+					out123_drop(ao);
+					xfermem_putcmd(my_fd, XF_CMD_OK);
+				break;
+				default:
+					if(!AOQUIET)
+						error1("Unknown command %u encountered. Confused Suicide!", cmd[i]);
+					return 1;
+#undef GOOD_READVAL_BUF
+			}
 		} /* Ensure that an interrupt-giving command has been received. */
-		while(intflag && (cmd=xfermem_getcmd(my_fd, 0)));
+		while(intflag);
 		if(intflag && !AOQUIET)
 			error("buffer: The intflag should not be set anymore.");
 		intflag = FALSE; /* Any possible harm by _not_ ensuring that the flag is cleared here? */

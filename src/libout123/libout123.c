@@ -271,18 +271,22 @@ int write_parameters(audio_output_t *ao, int fd)
 		return -1;
 }
 
-int read_parameters(audio_output_t *ao, int fd)
+int read_parameters(audio_output_t *ao
+,	int fd, byte *prebuf, int *preoff, int presize)
 {
+#define GOOD_READVAL_BUF(fd, val) \
+	!read_buf(fd, &val, sizeof(val), prebuf, preoff, presize)
 	if(
-		GOOD_READVAL(fd, ao->flags)
-	&&	GOOD_READVAL(fd, ao->preload)
-	&&	GOOD_READVAL(fd, ao->gain)
-	&&	GOOD_READVAL(fd, ao->device_buffer)
-	&&	GOOD_READVAL(fd, ao->verbose)
+		GOOD_READVAL_BUF(fd, ao->flags)
+	&&	GOOD_READVAL_BUF(fd, ao->preload)
+	&&	GOOD_READVAL_BUF(fd, ao->gain)
+	&&	GOOD_READVAL_BUF(fd, ao->device_buffer)
+	&&	GOOD_READVAL_BUF(fd, ao->verbose)
 	)
 		return 0;
 	else
 		return -1;
+#undef GOOD_READVAL_BUF
 }
 
 int out123_open(audio_output_t *ao, const char* driver, const char* device)
@@ -703,6 +707,7 @@ static void check_output_module( audio_output_t *ao
 	{ /* Try to open the device. I'm only interested in actually working modules. */
 		ao->format = -1;
 		result = ao->open(ao);
+		debug1("ao->open() = %i", result);
 		ao->close(ao);
 	}
 	else if(!AOQUIET)
@@ -710,7 +715,7 @@ static void check_output_module( audio_output_t *ao
 
 	ao->auxflags &= ~OUT123_QUIET;
 
-	if(!result)
+	if(result >= 0)
 		return;
 
 check_output_module_cleanup:
