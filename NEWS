@@ -1,9 +1,5 @@
 TODO:
 
-- Settle/fix logic of erstwhile reset_output() usage, keeping
-output device open between tracks, only do out123_stop() / out123_start()
-when format changes. This is for normal mpg123 and control_generic.c!
-
 - Fix jumping in terminal mode with buffer for small seeks. One should
   be able to seek _in_ buffer.
 
