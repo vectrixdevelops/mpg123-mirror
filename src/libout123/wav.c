@@ -165,6 +165,7 @@ static int testEndian(void)
 /* return: 0 is good, -1 is bad */
 static int open_file(struct wavdata *wdat, char *filename)
 {
+	debug2("open_file(%p, %s)", wdat, filename ? filename : "<nil>");
 	if(!wdat)
 		return -1;
 #if defined(HAVE_SETUID) && defined(HAVE_GETUID)
@@ -173,7 +174,7 @@ static int open_file(struct wavdata *wdat, char *filename)
 	   In case this program is setuid, create files owned by original user. */
 	setuid(getuid());
 #endif
-	if(!filename || !strcmp("-",filename) || strcmp("", filename))
+	if(!filename || !strcmp("-",filename) || !strcmp("", filename))
 	{
 		wdat->wavfp = stdout;
 #ifdef WIN32
