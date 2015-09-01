@@ -77,6 +77,9 @@ int buffer_init(audio_output_t *ao, size_t bytes)
 	buffer_exit(ao);
 	if(bytes < outburst) bytes = 2*outburst;
 
+#ifdef DONT_CATCH_SIGNALS
+#error I really need to catch signals here!
+#endif
 	xfermem_init(&ao->buffermem, bytes, 0, 0);
 	/* Is catch_child() really useful? buffer_exit() does waitpid().
 	   And if buffer_exit() is not called, the main process might be
