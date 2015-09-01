@@ -520,16 +520,18 @@ int buffer_loop(audio_output_t *ao)
 		}
 		/* Now always check for a pending command, in a blocking way if there is
 		   no playback. */
+		debug("Buffer cmd?");
 		cmd = xfermem_getcmd( my_fd
 		,	(preloading || intflag || (ao->state != play_live)) );
-		/* The writer only ever signals before sending a command and also waiting for
-		   a response. So, this is the right place to clear the flag, before giving
-		   that response */
-		intflag = FALSE;
-		/* These actions should rely heavily on calling the normal out123
-		   API functions, just with some parameter passing and error checking
-		   wrapped around. If there is much code here, it is wrong. */
-		switch(cmd)
+		/*
+			The writer only ever signals before sending a command and also waiting for
+			a response. So, the right place to reset the flag is any time before
+			giving the response.
+			These actions should rely heavily on calling the normal out123
+			API functions, just with some parameter passing and error checking
+			wrapped around. If there is much code here, it is wrong.
+		*/
+		do switch(cmd)
 		{
 			case 0:
 				debug("no command pending");
@@ -538,6 +540,7 @@ int buffer_loop(audio_output_t *ao)
 				debug("got new data");
 			break;
 			case XF_CMD_PING:
+				intflag = FALSE;
 				/* Expecting ping-pong only while playing! Otherwise, the writer
 				   could get stuck waiting for free space forever. */
 				if(ao->state == play_live)
@@ -552,6 +555,7 @@ int buffer_loop(audio_output_t *ao)
 				}
 			break;
 			case BUF_CMD_PARAM:
+				intflag = FALSE;
 				/* If that does not work, communication is broken anyway and
 				   writer will notice soon enough. */
 				read_parameters(ao, my_fd);
@@ -562,6 +566,8 @@ int buffer_loop(audio_output_t *ao)
 				char *driver  = NULL;
 				char *device  = NULL;
 				int success;
+
+				intflag = FALSE;
 				success = (
 					!read_string(ao, XF_READER, &driver)
 				&&	!read_string(ao, XF_READER, &device)
@@ -587,12 +593,15 @@ int buffer_loop(audio_output_t *ao)
 			}
 			break;
 			case BUF_CMD_CLOSE:
+				intflag = FALSE;
 				out123_close(ao);
 				xfermem_putcmd(my_fd, XF_CMD_OK);
 			break;
 			case BUF_CMD_AUDIOCAP:
 			{
 				int encodings;
+
+				intflag = FALSE;
 				if(
 					!GOOD_READVAL(my_fd, ao->channels)
 				||	!GOOD_READVAL(my_fd, ao->rate)
@@ -614,6 +623,7 @@ int buffer_loop(audio_output_t *ao)
 			}
 			break;
 			case BUF_CMD_START:
+				intflag = FALSE;
 				if(
 					!GOOD_READVAL(my_fd, ao->format)
 				||	!GOOD_READVAL(my_fd, ao->channels)
@@ -633,6 +643,7 @@ int buffer_loop(audio_output_t *ao)
 				}
 			break;
 			case BUF_CMD_STOP:
+				intflag = FALSE;
 				if(ao->state == play_live)
 				{ /* Drain is implied! */
 					size_t bytes;
@@ -643,15 +654,18 @@ int buffer_loop(audio_output_t *ao)
 				xfermem_putcmd(my_fd, XF_CMD_OK);
 			break;
 			case XF_CMD_CONTINUE:
+				intflag = FALSE;
 				out123_continue(ao);
 				preloading = TRUE;
 				xfermem_putcmd(my_fd, XF_CMD_OK);
 			break;
 			case XF_CMD_IGNLOW:
+				intflag = FALSE;
 				preloading = FALSE;
 				xfermem_putcmd(my_fd, XF_CMD_OK);
 			break;
 			case XF_CMD_DRAIN:
+				intflag = FALSE;
 				if(ao->state == play_live)
 				{
 					size_t bytes;
@@ -662,17 +676,21 @@ int buffer_loop(audio_output_t *ao)
 				xfermem_putcmd(my_fd, XF_CMD_OK);
 			break;
 			case XF_CMD_TERMINATE:
+				intflag = FALSE;
 				/* Will that response always reach the writer? Well, at worst,
 				   it's an ignored error on xfermem_getcmd(). */
 				xfermem_putcmd(my_fd, XF_CMD_OK);
 				return 0;
 			case XF_CMD_PAUSE:
+				intflag = FALSE;
 				out123_pause(ao);
 				xfermem_putcmd(my_fd, XF_CMD_OK);
 			break;
 			case XF_CMD_DROP:
+				intflag = FALSE;
 				xf->readindex = xf->freeindex;
 				out123_drop(ao);
+				xfermem_putcmd(my_fd, XF_CMD_OK);
 			break;
 			default:
 				if(!AOQUIET)
@@ -683,6 +701,10 @@ int buffer_loop(audio_output_t *ao)
 						error1("Unknown command %i encountered. Confused Suicide!", cmd);
 				}
 				return 1;
-		}
+		} /* Ensure that an interrupt-giving command has been received. */
+		while(intflag && (cmd=xfermem_getcmd(my_fd, 0)));
+		if(intflag && !AOQUIET)
+			error("buffer: The intflag should not be set anymore.");
+		intflag = FALSE; /* Any possible harm by _not_ ensuring that the flag is cleared here? */
 	}
 }
