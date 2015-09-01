@@ -7,6 +7,7 @@
 */
 
 #include "mpg123app.h"
+#include "out123.h"
 #include <sys/stat.h>
 #include "common.h"
 
@@ -24,27 +25,6 @@ static const int samples_per_frame[4][4] =
 	{ -1,384,1152,576 },	/* MPEG 2.5 */
 	{ -1,-1,-1,-1 },		/* Unknown */
 };
-
-
-#if (!defined(WIN32) || defined (__CYGWIN__)) && defined(HAVE_SIGNAL_H)
-void (*catchsignal(int signum, void(*handler)()))()
-{
-  struct sigaction new_sa;
-  struct sigaction old_sa;
-
-#ifdef DONT_CATCH_SIGNALS
-  fprintf (stderr, "Not catching any signals.\n");
-  return ((void (*)()) -1);
-#endif
-
-  new_sa.sa_handler = handler;
-  sigemptyset(&new_sa.sa_mask);
-  new_sa.sa_flags = 0;
-  if (sigaction(signum, &new_sa, &old_sa) == -1)
-    return ((void (*)()) -1);
-  return (old_sa.sa_handler);
-}
-#endif
 
 /* concurring to print_rheader... here for control_generic */
 const char* remote_header_help = "S <mpeg-version> <layer> <sampling freq> <mode(stereo/mono/...)> <mode_ext> <framesize> <stereo> <copyright> <error_protected> <emphasis> <bitrate> <extension> <vbr(0/1=yes/no)>";
@@ -222,7 +202,7 @@ void print_stat(mpg123_handle *fr, long offset, audio_output_t *ao)
 	off_t rno, no;
 	double basevol, realvol;
 	char *icy;
-	long buffsize = audio_buffered_bytes(ao);
+	long buffsize = out123_buffered(ao);
 #ifndef WIN32
 #ifndef GENERIC
 /* Only generate new stat line when stderr is ready... don't overfill... */

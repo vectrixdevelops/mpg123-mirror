@@ -1,3 +1,7 @@
+TODO: Settle/fix logic of erstwhile reset_output() usage, keeping
+output device open between tracks, only do out123_stop() / out123_start()
+when format changes. This is for normal mpg123 and control_generic.c!
+
 1.23.0
 ---
 - Added mpg123 --no-infoframe.
@@ -8,6 +12,9 @@
 - Warning messages also start with a line break now to better fit in with
   verbose playback.
 - Reporting of clipped samples also includes a line break now.
+- Default for --preload now is 0.2 instead of 1 (fill whole buffer before
+  playback). The maximum is 0.5 . This is mandated by corrected buffer
+  interaction in libout123.
 
 1.22.3
 - Fix UTF-16 surrogate detection because that used to falsely detect

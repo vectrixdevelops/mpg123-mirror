@@ -164,12 +164,12 @@ void safe_exit(int code)
 	exit(code);
 }
 
-void check_fatal(int code)
+static void check_fatal(int code)
 {
 	if(code) safe_exit(code);
 }
 
-void check_fatal_output(int code)
+static void check_fatal_output(int code)
 {
 	if(code)
 	{
@@ -180,7 +180,6 @@ void check_fatal_output(int code)
 	}
 }
 
-/* returns 1 if reset_audio needed instead */
 static void set_output_module( char *arg )
 {
 	unsigned int i;

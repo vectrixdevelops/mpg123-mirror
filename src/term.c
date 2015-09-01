@@ -252,7 +252,7 @@ static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 	switch(tolower(val))
 	{
 	case MPG123_BACK_KEY:
-		audio_drop(ao);
+		out123_drop(ao);
 		if(paused) pause_cycle=(int)(LOOP_CYCLES/mpg123_tpf(fr));
 
 		if(mpg123_seek_frame(fr, 0, SEEK_SET) < 0)
@@ -261,7 +261,7 @@ static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 		framenum=0;
 	break;
 	case MPG123_NEXT_KEY:
-		audio_drop(ao);
+		out123_drop(ao);
 		next_track();
 	break;
 	case MPG123_QUIT_KEY:
@@ -269,11 +269,7 @@ static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 		if(stopped)
 		{
 			stopped = 0;
-			if(param.usebuffer)
-			{
-				audio_drop(ao);
-				audio_start(ao);
-			}
+			out123_drop(ao);
 		}
 		set_intflag();
 		offset = 0;
@@ -286,7 +282,6 @@ static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 				 This jumps in audio output, but has direct reaction to pausing loop. */
 			out123_drop(ao);
 			out123_param(ao, OUT123_PRELOAD, 0, 0.);
-			if(param.usebuffer) audio_drop(ao);
 
 			pause_recycle(fr);
 		}
