@@ -196,13 +196,25 @@ static void settle_time(double tim, unsigned long *times, char *sep)
 	}
 }
 
+/* Note about position info with buffering:
+   Negative positions mean that the previous track is still playing from the
+   buffer. It's a countdown. The frame counter always relates to the last
+   decoded frame, what entered the buffer right now. */
 void print_stat(mpg123_handle *fr, long offset, audio_output_t *ao)
 {
-	double tim[2];
+	double tim[3];
 	off_t rno, no;
 	double basevol, realvol;
 	char *icy;
-	long buffsize = out123_buffered(ao);
+	size_t buffsize;
+	off_t sample_pos;
+	long rate;
+	int framesize;
+
+
+	buffsize = out123_buffered(ao);
+	if(out123_getformat(ao, &rate, NULL, NULL, &framesize))
+		return;
 #ifndef WIN32
 #ifndef GENERIC
 /* Only generate new stat line when stderr is ready... don't overfill... */
@@ -220,15 +232,16 @@ void print_stat(mpg123_handle *fr, long offset, audio_output_t *ao)
 	}
 #endif
 #endif
-	if(    MPG123_OK == mpg123_position(fr, offset, buffsize, &no, &rno, tim, tim+1)
-	    && MPG123_OK == mpg123_getvolume(fr, &basevol, &realvol, NULL) )
+	if(  MPG123_OK == mpg123_position(fr, offset, buffsize, &no, &rno, tim, tim+1)
+	  && MPG123_OK == mpg123_getvolume(fr, &basevol, &realvol, NULL) )
 	{
 		int ti;
 		/* Deal with overly long times. */
 		unsigned long times[2][3];
-		char timesep[2];
-		char sign[2] = {' ', ' '};
-		for(ti=0; ti<2; ++ti)
+		char timesep[3];
+		char sign[3] = {' ', ' ', ' '};
+		tim[2] = (double)(buffsize/framesize)/rate;
+		for(ti=0; ti<3; ++ti)
 		{
 			if(tim[ti] < 0.){ sign[ti] = '-'; tim[ti] = -tim[ti]; }
 			settle_time(tim[ti], times[ti], &timesep[ti]);
@@ -240,7 +253,9 @@ void print_stat(mpg123_handle *fr, long offset, audio_output_t *ao)
 		        sign[1],
 		        times[1][0], times[1][1], timesep[1], times[1][2],
 		        rva_name[param.rva], roundui(basevol*100), roundui(realvol*100) );
-		if(param.usebuffer) fprintf(stderr,", [%8ld] ",(long)buffsize);
+		if(param.usebuffer)
+			fprintf( stderr," [%02lu:%02lu%c%02lu] "
+			,  times[2][0], times[2][1], timesep[2], times[2][2] );
 	}
 	/* Check for changed tags here too? */
 	if( mpg123_meta_check(fr) & MPG123_NEW_ICY && MPG123_OK == mpg123_icy(fr, &icy) )
