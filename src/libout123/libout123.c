@@ -384,6 +384,8 @@ void out123_close(audio_output_t *ao)
 		return;
 	ao->errcode = 0;
 
+	out123_drain(ao);
+
 #ifndef NOXFERMEM
 	if(have_buffer(ao))
 		buffer_close(ao);
