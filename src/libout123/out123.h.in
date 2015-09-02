@@ -404,6 +404,7 @@ void out123_drain(audio_output_t *ao);
  *
  * \param bytes limit of buffered bytes to drain
  * \return number of bytes drained from buffer
+ */
 void out123_ndrain(audio_output_t *ao, size_t bytes);
 
 /** Get an indication of how many bytes reside in the optional buffer.
