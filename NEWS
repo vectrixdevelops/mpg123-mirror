@@ -1,6 +1,8 @@
 - Activate terminal control automatically if run in an interactive terminal.
   Provide switch to _deactivate_ terminal control.
 
+- reverse order of arguments for out123_start() again, matching mpg123_getformat()
+
 1.23.0
 ---
 - Added mpg123 --no-infoframe.
