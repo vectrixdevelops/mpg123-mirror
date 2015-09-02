@@ -178,26 +178,27 @@ void prev_track(void)
 /* Drain output device/buffer, but still give the option to interrupt things. */
 static void controlled_drain(void)
 {
-	int channels;
-	int encoding;
+	int framesize;
 	size_t drain_block;
 
-	if(intflag)
+	if(intflag || !out123_buffered(ao))
 		return;
-	if(mpg123_getformat(mh, NULL, &channels, &encoding) != MPG123_OK)
+	if(out123_getformat(ao, NULL, NULL, NULL, &framesize))
 		return;
-	drain_block = 20*1152*out123_samplesize(encoding)*channels;
+	drain_block = 1152*framesize;
 	do
 	{
 		out123_ndrain(ao, drain_block);
 		if(param.verbose)
-			print_stat(mh,0,ao); 
+			print_buf("Draining buffer: ", ao);
 #ifdef HAVE_TERMIOS
 		if(param.term_ctrl)
 			term_control(mh, ao);
 #endif
 	}
 	while(!intflag && out123_buffered(ao));
+	if(param.verbose)
+		fprintf(stderr, "\n");
 }
 
 void safe_exit(int code)
@@ -205,11 +206,11 @@ void safe_exit(int code)
 	char *dummy, *dammy;
 
 	dump_close();
+	controlled_drain();
 #ifdef HAVE_TERMIOS
 	if(param.term_ctrl)
 		term_restore();
 #endif
-	controlled_drain();
 	if(intflag)
 		out123_drop(ao);
 	out123_del(ao);

@@ -13,7 +13,7 @@
 
 #include "debug.h"
 
-const char* rva_name[3] = { "off", "mix", "album" };
+const char* rva_name[3] = { "v", "m", "a" }; /* vanilla, mix, album */
 static const char *modes[5] = {"Stereo", "Joint-Stereo", "Dual-Channel", "Single-Channel", "Invalid" };
 static const char *smodes[5] = { "stereo", "joint-stereo", "dual-channel", "mono", "invalid" };
 static const char *layers[4] = { "Unknown" , "I", "II", "III" };
@@ -196,6 +196,25 @@ static void settle_time(double tim, unsigned long *times, char *sep)
 	}
 }
 
+/* Print output buffer fill. */
+void print_buf(const char* prefix, audio_output_t *ao)
+{
+	long rate;
+	int framesize;
+	double tim;
+	unsigned long times[3];
+	char timesep;
+	size_t buffsize;
+
+	buffsize = out123_buffered(ao);
+	if(out123_getformat(ao, &rate, NULL, NULL, &framesize))
+		return;
+	tim = (double)(buffsize/framesize)/rate;
+	settle_time(tim, times, &timesep);
+	fprintf( stderr, "\r%s[%02lu:%02lu%c%02lu]"
+	,	prefix, times[0], times[1], timesep, times[2] );
+}
+
 /* Note about position info with buffering:
    Negative positions mean that the previous track is still playing from the
    buffer. It's a countdown. The frame counter always relates to the last
@@ -207,7 +226,6 @@ void print_stat(mpg123_handle *fr, long offset, audio_output_t *ao)
 	double basevol, realvol;
 	char *icy;
 	size_t buffsize;
-	off_t sample_pos;
 	long rate;
 	int framesize;
 
@@ -237,7 +255,7 @@ void print_stat(mpg123_handle *fr, long offset, audio_output_t *ao)
 	{
 		int ti;
 		/* Deal with overly long times. */
-		unsigned long times[2][3];
+		unsigned long times[3][3];
 		char timesep[3];
 		char sign[3] = {' ', ' ', ' '};
 		tim[2] = (double)(buffsize/framesize)/rate;
@@ -246,7 +264,7 @@ void print_stat(mpg123_handle *fr, long offset, audio_output_t *ao)
 			if(tim[ti] < 0.){ sign[ti] = '-'; tim[ti] = -tim[ti]; }
 			settle_time(tim[ti], times[ti], &timesep[ti]);
 		}
-		fprintf(stderr, "\rFrame# %5"OFF_P" [%5"OFF_P"], Time:%c%02lu:%02lu%c%02lu%c[%02lu:%02lu%c%02lu], RVA:%6s, Vol: %3u(%3u)",
+		fprintf(stderr, "\rf# %5"OFF_P"[%5"OFF_P"] %c%02lu:%02lu%c%02lu[%c%02lu:%02lu%c%02lu] V(%s)=%3u(%3u)",
 		        (off_p)no, (off_p)rno,
 		        sign[0],
 		        times[0][0], times[0][1], timesep[0], times[0][2],

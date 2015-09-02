@@ -174,7 +174,7 @@ void pause_uncycle(void)
 off_t term_control(mpg123_handle *fr, audio_output_t *ao)
 {
 	offset = 0;
-debug1("control for frame: %li", (long)mpg123_tellframe(fr));
+	debug2("control for frame: %li, enable: %i", (long)mpg123_tellframe(fr), term_enable);
 	if(!term_enable) return 0;
 
 	if(paused)
@@ -262,6 +262,7 @@ static int get_key(int do_delay, char *val)
 
 static void term_handle_key(mpg123_handle *fr, audio_output_t *ao, char val)
 {
+	debug1("term_handle_key: %c", val);
 	switch(tolower(val))
 	{
 	case MPG123_BACK_KEY:
