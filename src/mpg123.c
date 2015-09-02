@@ -175,6 +175,31 @@ void prev_track(void)
 	next_track();
 }
 
+/* Drain output device/buffer, but still give the option to interrupt things. */
+static void controlled_drain(void)
+{
+	int channels;
+	int encoding;
+	size_t drain_block;
+
+	if(intflag)
+		return;
+	if(mpg123_getformat(mh, NULL, &channels, &encoding) != MPG123_OK)
+		return;
+	drain_block = 20*1152*out123_samplesize(encoding)*channels;
+	do
+	{
+		out123_ndrain(ao, drain_block);
+		if(param.verbose)
+			print_stat(mh,0,ao); 
+#ifdef HAVE_TERMIOS
+		if(param.term_ctrl)
+			term_control(mh, ao);
+#endif
+	}
+	while(!intflag && out123_buffered(ao));
+}
+
 void safe_exit(int code)
 {
 	char *dummy, *dammy;
@@ -184,9 +209,9 @@ void safe_exit(int code)
 	if(param.term_ctrl)
 		term_restore();
 #endif
+	controlled_drain();
 	if(intflag)
 		out123_drop(ao);
-	/* drains, closes */
 	out123_del(ao);
 
 	if(mh != NULL) mpg123_delete(mh);
@@ -1041,7 +1066,7 @@ int main(int sys_argc, char ** sys_argv)
 		}
 		if(param.delay > 0)
 		{
-			out123_drain(ao);
+			controlled_drain();
 			/* One should enable terminal control during that sleeping phase! */
 			if(param.verbose > 2) fprintf(stderr, "Note: pausing %i seconds before next track.\n", param.delay);
 #ifdef WIN32
@@ -1178,7 +1203,7 @@ int main(int sys_argc, char ** sys_argv)
 		}
 
 	if(!param.smooth && !intflag)
-		out123_drain(ao);
+		controlled_drain();
 	if(param.verbose) print_stat(mh,0,ao); 
 
 	if(!param.quiet)

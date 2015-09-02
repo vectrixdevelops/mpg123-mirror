@@ -1,10 +1,3 @@
-TODO:
-
-- Draining of the buffer needs to be interruptible. It can take a long time
-  and no amount of SIGINT helps currently.
-  So, there should be a out123_drain_max() or out123_drain_partial() to limit
-  the amount of samples written and to be able to react in between.
-
 - Activate terminal control automatically if run in an interactive terminal.
   Provide switch to _deactivate_ terminal control.
 
