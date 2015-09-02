@@ -186,10 +186,11 @@ debug1("control for frame: %li", (long)mpg123_tellframe(fr));
 
 	do
 	{
+		off_t old_offset = offset;
 		term_handle_input(fr, ao, stopped|seeking);
 		if((offset < 0) && (-offset > framenum)) offset = - framenum;
-		if(param.verbose && offset != 0)
-		print_stat(fr,offset,ao);
+		if(param.verbose && offset != old_offset)
+			print_stat(fr,offset,ao);
 	} while (stopped);
 
 	/* Make the seeking experience with buffer less annoying.
