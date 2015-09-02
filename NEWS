@@ -3,6 +3,8 @@
 
 - reverse order of arguments for out123_start() again, matching mpg123_getformat()
 
+- fancy: do progress bar on terminal by reversing text colors on status line
+
 1.23.0
 ---
 - Added mpg123 --no-infoframe.
