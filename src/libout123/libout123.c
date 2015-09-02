@@ -763,6 +763,9 @@ int out123_drivers(audio_output_t *ao, char ***names, char ***descr)
 	int count;
 	int i;
 
+	if(!ao)
+		return -1;
+
 	debug3("out123_drivers(%p, %p, %p)", (void*)ao, (void*)names, (void*)descr);
 	/* Wrap the call to isolate the lower levels from the user not being
 	   interested in both lists. it's a bit wasteful, but the code looks
@@ -857,4 +860,24 @@ size_t out123_buffered(audio_output_t *ao)
 	else
 #endif
 		return 0;
+}
+
+int out123_getformat( audio_output_t *ao
+,	long *rate, int *channels, int *encoding, int *framesize )
+{
+	if(!ao)
+		return OUT123_ERR;
+
+	if(!(ao->state == play_paused || ao->state == play_live))
+		return out123_seterr(ao, OUT123_NOT_LIVE);
+
+	if(rate)
+		*rate = ao->rate;
+	if(channels)
+		*channels = ao->channels;
+	if(encoding)
+		*encoding = ao->format;
+	if(framesize)
+		*framesize = ao->framesize;
+	return OUT123_OK;
 }

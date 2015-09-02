@@ -413,10 +413,17 @@ void out123_ndrain(audio_output_t *ao, size_t bytes);
  */
 size_t out123_buffered(audio_output_t *ao);
 
-/* Pausing stuff relates mostly to the buffer process, but should work
-   properly with direct output, too. There are drivers that don't like
-   the client app just stopping to provide data. */
-
+/** Extract currently used audio format from handle.
+ *  TODO: make the order of out123_start() match the arguments here,
+ *  matching mpg123_getformat().
+ *  Given return addresses may be NULL to indicate no interest.
+ * \param rate address for sample rate
+ * \param channels address for channel count
+ * \param encoding address for encoding
+ * \param size of a full PCM frame (for convenience)
+ */
+int out123_getformat( audio_output_t *ao
+,	long *rate, int *channels, int *encoding, int *framesize );
 
 #if 0 /* Old stuff following. */
 
