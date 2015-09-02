@@ -125,11 +125,7 @@ enum out123_flags
 audio_output_t *out123_new(void);
 
 /** Delete output handle.
- * If there is an output module/device open, it is closed as quickly
- * as possible. This might swallow audio that did not yet reach the
- * speakers.
- * TODO: Settle if out123_close() should do that, too, always requiring
- * out123_drain() when you do not want to loose anything.
+ *  This implies out123_close().
  */
 void out123_del(audio_output_t *ao);
 
@@ -268,7 +264,13 @@ int out123_open(audio_output_t *ao, const char* driver, const char* device);
  */
 int out123_driver_info(audio_output_t *ao, char **driver, char **device);
 
-/** Close the current output device and driver. */
+/** Close the current output device and driver.
+ *  This implies out123_drain() to ensure no data is lost.
+ *  With a buffer, that might cause considerable delay during
+ *  which your main application is blocked waiting.
+ *  Call out123_drop() beforehand if you want to end things
+ *  quickly.
+ */
 void out123_close(audio_output_t *ao);
 
 /** Get supported audio encodings for given rate and channel count,
@@ -310,8 +312,6 @@ int out123_encodings(audio_output_t *ao, int channels, long rate);
 					?	8 \
 					:	0 \
 )	)	)	)	)
-
-
 
 /** Start playback with a certain output format
  *  It might be a good idea to have audio data handy to feed after this
@@ -392,12 +392,26 @@ void out123_drop(audio_output_t *ao);
   */
 void out123_drain(audio_output_t *ao);
 
+/** Drain the output, but only partially up to the given number of
+ *  bytes. This gives you the opportunity to do something while
+ *  the optional buffer is writing remaining data instead of having
+ *  one atomic API call for it all.
+ *
+ *  It is wholly expected that the return value of out123_buffered()
+ *  before and after calling this has a bigger difference than the
+ *  provided limit, as the buffer is writing all the time in the
+ *  background.
+ *
+ * \param bytes limit of buffered bytes to drain
+ * \return number of bytes drained from buffer
+void out123_ndrain(audio_output_t *ao, size_t bytes);
+
 /** Get an indication of how many bytes reside in the optional buffer.
  * This might get extended to tell the number of bytes queued up in the
  * audio backend, too.
- * \return number of bytes in out123 library buffer, -1 on error.
+ * \return number of bytes in out123 library buffer
  */
-long out123_buffered(audio_output_t *ao);
+size_t out123_buffered(audio_output_t *ao);
 
 /* Pausing stuff relates mostly to the buffer process, but should work
    properly with direct output, too. There are drivers that don't like

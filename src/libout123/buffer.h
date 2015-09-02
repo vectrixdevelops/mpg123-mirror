@@ -28,6 +28,7 @@ int buffer_sync_param(audio_output_t *ao);
 int buffer_open(audio_output_t *ao, const char* driver, const char* device);
 int buffer_encodings(audio_output_t *ao);
 int buffer_start(audio_output_t *ao);
+void buffer_ndrain(audio_output_t *ao, size_t bytes);
 
 /* Simple messages to be deal with after playback. */
 
@@ -48,7 +49,7 @@ void buffer_drop(audio_output_t *ao);
 size_t buffer_write(audio_output_t *ao, void *buffer, size_t bytes);
 
 /* Thin wrapper over xfermem giving the current buffer fill. */
-long buffer_fill(audio_output_t *ao);
+size_t buffer_fill(audio_output_t *ao);
 
 /* Special handler to safely read values from command channel with
    an additional buffer handed in. Exported for read_parameters(). */

@@ -579,6 +579,24 @@ void out123_drain(audio_output_t *ao)
 		ao->drain(ao);
 }
 
+void out123_ndrain(audio_output_t *ao, size_t bytes)
+{
+	debug2("out123_ndrain(%p, %"SIZE_P")", (void*)ao, (size_p)bytes);
+	if(!ao)
+		return;
+	ao->errcode = 0;
+	if(ao->state != play_live)
+		return;
+#ifndef NO_XFERMEM
+	if(have_buffer(ao))
+		buffer_ndrain(ao, bytes);
+	else
+#endif
+	if(ao->drain)
+		ao->drain(ao);
+}
+
+
 /* A function that does nothing and returns nothing. */
 static void builtin_nothing(audio_output_t *ao){}
 static int test_open(audio_output_t *ao)
@@ -827,11 +845,11 @@ int out123_encodings(audio_output_t *ao, int channels, long rate)
 	}
 }
 
-long out123_buffered(audio_output_t *ao)
+size_t out123_buffered(audio_output_t *ao)
 {
 	debug1("out123_buffered(%p)", (void*)ao);
 	if(!ao)
-		return OUT123_ERR;
+		return 0;
 	ao->errcode = 0;
 #ifndef NOXFERMEM
 	if(have_buffer(ao))

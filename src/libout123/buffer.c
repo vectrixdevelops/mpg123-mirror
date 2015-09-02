@@ -42,6 +42,7 @@
 #define BUF_CMD_STOP     XF_CMD_CUSTOM4
 #define BUF_CMD_AUDIOCAP XF_CMD_CUSTOM5
 #define BUF_CMD_PARAM    XF_CMD_CUSTOM6
+#define BUF_CMD_NDRAIN   XF_CMD_CUSTOM7
 
 /* TODO: Dynamically allocate that to allow multiple instances. */
 int outburst = 32768;
@@ -313,9 +314,31 @@ void name(audio_output_t *ao) \
 BUFFER_SIGNAL_CONTROL(buffer_pause, XF_CMD_PAUSE)
 BUFFER_SIGNAL_CONTROL(buffer_drop, XF_CMD_DROP)
 
-long buffer_fill(audio_output_t *ao)
+size_t buffer_fill(audio_output_t *ao)
 {
 	return xfermem_get_usedspace(ao->buffermem);
+}
+
+void buffer_ndrain(audio_output_t *ao, size_t bytes)
+{
+	size_t oldfill;
+	int writerfd = ao->buffermem->fd[XF_WRITER];
+
+	oldfill = buffer_fill(ao);
+	if(xfermem_putcmd(writerfd, BUF_CMD_NDRAIN) != 1)
+	{
+		ao->errcode = OUT123_BUFFER_ERROR;
+		return;
+	}
+	/* Now shoving over the parameters for opening the device. */
+	if(  !GOOD_WRITEVAL(writerfd, bytes)
+	  || !GOOD_WRITEVAL(writerfd, oldfill) )
+	{
+		ao->errcode = OUT123_BUFFER_ERROR;
+		return;
+	}
+
+	buffer_cmd_finish(ao);
 }
 
 /* The workhorse: Send data to the buffer with some synchronization and even
@@ -722,11 +745,42 @@ int buffer_loop(audio_output_t *ao)
 					if(ao->state == play_live)
 					{
 						size_t bytes;
-						while((bytes = xfermem_get_usedspace(xf)))
+						while(
+							(bytes = xfermem_get_usedspace(xf))
+						&&	bytes > ao->framesize
+						)
 							buffer_play(ao, bytes);
 						out123_drain(ao);
 					}
 					xfermem_putcmd(my_fd, XF_CMD_OK);
+				break;
+				case BUF_CMD_NDRAIN:
+				{
+					size_t limit;
+					size_t oldfill;
+
+					intflag = FALSE;
+					if(
+						!GOOD_READVAL_BUF(my_fd, limit)
+					||	!GOOD_READVAL_BUF(my_fd, oldfill)
+					)
+						return 2;
+					if(ao->state == play_live)
+					{
+						size_t bytes;
+						while(
+							(bytes = xfermem_get_usedspace(xf))
+						&&	bytes > ao->framesize
+						&&	oldfill >= bytes /* paranoia, overflow would handle it anyway */
+						&&	(oldfill-bytes) < limit
+						)
+							buffer_play(ao, bytes > limit ? limit : bytes);
+						out123_drain(ao);
+						debug2( "buffer drained %"SIZE_P" / %"SIZE_P
+						,	oldfill-bytes, limit );
+					}
+					xfermem_putcmd(my_fd, XF_CMD_OK);
+				}
 				break;
 				case XF_CMD_TERMINATE:
 					intflag = FALSE;
