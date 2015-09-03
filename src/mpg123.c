@@ -186,6 +186,8 @@ static void controlled_drain(void)
 	if(out123_getformat(ao, NULL, NULL, NULL, &framesize))
 		return;
 	drain_block = 1152*framesize;
+	if(param.verbose)
+		fprintf(stderr, "\n");
 	do
 	{
 		out123_ndrain(ao, drain_block);
