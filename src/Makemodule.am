@@ -48,6 +48,8 @@ src_mpg123_SOURCES = \
   src/audio.h \
   src/common.c \
   src/common.h \
+  src/sysutil.c \
+  src/sysutil.h \
   src/compat.c \
   src/compat/compat.h \
   src/compat/compat_impl.h \

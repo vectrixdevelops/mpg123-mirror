@@ -10,6 +10,7 @@
 #include "mpg123app.h"
 #include "out123.h"
 #include "common.h"
+#include "sysutil.h"
 
 #ifdef HAVE_SYS_WAIT_H
 #include <sys/wait.h>
