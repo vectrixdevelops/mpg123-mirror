@@ -1,6 +1,12 @@
 1.23.7
 ------
-- Fix the bad RPM spec file (broken since out123 addition).
+- Fix the bad RPM spec file (broken since out123 addition, thanks
+  to Srikanth Rao for noticing).
+- More out123_pause() in generic control mode, working around
+  bug 236. The coreaudio output needs to be more robust, though.
+- Do not undef MPG123_EXPORT in the headers, rather be prepared for it
+  being defined already. This fixes MSVC builds, broken since 1.23.0
+  (bug 239).
 
 1.23.6
 ------
