@@ -8,12 +8,12 @@ dnl Require autoconf version >= 2.57
 AC_PREREQ(2.57)
 
 dnl ############# Initialisation
-AC_INIT([mpg123], [1.23.7], [maintainer@mpg123.org])
+AC_INIT([mpg123], [1.23.8], [maintainer@mpg123.org])
 dnl Increment API_VERSION when the API gets changes (new functions).
 
 dnl libmpg123
 API_VERSION=42
-LIB_PATCHLEVEL=2
+LIB_PATCHLEVEL=3
 
 dnl libout123
 OUTAPI_VERSION=1
