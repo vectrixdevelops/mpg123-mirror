@@ -106,20 +106,19 @@ dnl ############# Use Libtool for dynamic module loading
 modules=auto
 OUTPUT_OBJ="module.\$(OBJEXT)"
 AC_ARG_ENABLE(modules,
-[  --enable-modules=[no/yes] dynamically loadable output modules],
+[  --enable-modules=[no/yes/ltdl/unix/win32] dynamically loadable output modules],
 [
-	if test "x$enableval" = xyes
-	then
-		modules=enabled
+	if test "x$enableval" = "xyes" -o "x$enableval" = "xauto"; then
+		modules=ltdl
 	else
-		modules=disabled
+		modules="$enableval"
 	fi
 ],
 [
 	if test "x$be_static" = "xyes"; then
-		modules=disabled
+		modules=no
 	else
-		modules=auto
+		modules=ltdl
 	fi
 ])
 
@@ -128,7 +127,7 @@ AC_DISABLE_STATIC
 AC_ENABLE_SHARED
 
 if test x"$enable_shared" = xno; then
-	modules=disabled
+	modules=no
 	LT_LDFLAGS=
 else
 	AC_DEFINE(DYNAMIC_BUILD, 1, [ Define if building with dynamcally linked libmpg123])
@@ -137,58 +136,46 @@ fi
 dnl We need the windows header also for checking the module mechanism.
 AC_CHECK_HEADERS([windows.h])
 
-if test x"$modules" = xdisabled
-then
-  echo "Modules disabled, not checking for dynamic loading."
-else
-  have_dl=no
-  # The dlopen() API is either in libc or in libdl.
-  if test x$ac_cv_header_windows_h = xyes; then
-    AC_MSG_CHECKING([if LoadLibrary should be used])
-    AC_LINK_IFELSE([AC_LANG_SOURCE([
+AC_MSG_CHECKING([how to load modules])
+AS_CASE(["$modules"],
+	[no], [AC_MSG_RESULT([disabled])],
+	[unix], [AC_MSG_RESULT([unix])
+		AC_SEARCH_LIBS([dlopen], [dl dld],
+			[AC_DEFINE([USE_MODULES_UNIX], [1], [Use dlopen to load modules])],
+			[AC_MSG_ERROR([unable to find the dlopen() function])])],
+	[win32], [AC_MSG_RESULT([win32])
+		AC_CHECK_LIB([shlwapi], [main])
+		AC_LINK_IFELSE([AC_LANG_SOURCE([
 
 #ifdef __CYGWIN__
 #error Cygwin should use dlopen
 #endif
 
 #include <windows.h>
+#include <shlwapi.h>
 
 int main() {
   LoadLibraryW(0);
   GetProcAddress(0, 0);
   FreeLibrary(0);
+  PathCombineW(0,0,0);
   return 0;
 }
-    ])], [
-    have_dl=yes
-    AC_MSG_RESULT([Using LoadLibrary])
-    AC_DEFINE([USE_LOADLIBRARY], [1], [Use Windows LoadLibrary for loading plugins])],
-  [AC_MSG_RESULT([no])])
-  else
-    AC_SEARCH_LIBS(dlopen, dl)
-    AC_CHECK_HEADER(dlfcn.h)
-    AC_CHECK_FUNCS(dlopen dlsym dlclose, [have_dl=yes])
-  fi
-  if test x"$modules" = xenabled -a x"$have_dl" = xno; then
-    AC_MSG_ERROR([Modules enabled but no runtime loader found! This will not work...])
-  fi
-  if test x"$modules" = xauto; then
-    if test x"$have_dl" = xyes; then
-      modules=enabled
-      echo "We found a runtime loader: Modules enabled."
-    else
-      echo "We did not find a runtime loader: Modules disabled."
-      modules=disabled
-    fi
-  fi
-fi
+		])], [AC_DEFINE([USE_MODULES_WIN32], [1], [Use LoadLibrary to load modules])],
+		[AC_MSG_ERROR([unable to find the LoadLibrary function])])],
+	[ltdl], [AC_MSG_RESULT([libtool])
+		AC_SEARCH_LIBS([lt_dlopen], [ltdl],
+			[AC_DEFINE([USE_MODULES_LTDL], [1], [Use libtool to load modules])],
+			[AC_MSG_ERROR([unable to find the lt_dlopen function])])],
+	[AC_MSG_ERROR([Unknown module mode "$modules"])
+])
 
 dnl Configure libtool
 
 AC_LIBTOOL_WIN32_DLL
 AM_PROG_LIBTOOL
 
-if test x"$modules" = xdisabled
+if test x"$modules" = xno
 then
   echo "Modules disabled."
 else
@@ -197,7 +184,7 @@ else
   # Export the module file suffix as LT_MODULE_EXT
   LT_SYS_MODULE_EXT
 fi
-AM_CONDITIONAL( [HAVE_MODULES], [test "x$modules" = xenabled] )
+AM_CONDITIONAL( [HAVE_MODULES], [test "x$modules" != xno] )
 
 AC_SUBST(LT_LDFLAGS)
 AC_SUBST(EXEC_LT_LDFLAGS)
@@ -1789,7 +1776,7 @@ int main(){
 				 -a "x${ac_cv_header_CoreServices_CoreServices_h}" = "xyes" \
 				 -a "x${ac_cv_header_AudioToolbox_AudioToolbox_h}" = "xyes";
 			then
-				if test x"$modules" = xdisabled; then
+				if test x"$modules" = xno; then
 					AC_MSG_WARN([Disabling buffer because of directly linked CoreAudio! Use the module if you need the buffer.])
 					buffer=disabled
 				fi
@@ -2068,7 +2055,7 @@ AM_CONDITIONAL([BUILD_SGI], [ test "sgi" = $default_output_module ])
 AM_CONDITIONAL([BUILD_MINT], [ test "mint" = $default_output_module ])
 AM_CONDITIONAL([BUILD_OPENAL], [ test "openal" = $default_output_module ])
 
-if test "x$modules" = xenabled
+if test "x$modules" = xyes
 then
 
   # Now make a comma-separated list again... eliminating the possible duplicate and dummy.
@@ -2446,7 +2433,7 @@ echo "  Checked audio modules ... $check_modules
   Detected audio support ..$output_modules
   Default output module ... $default_output_module
 "
-if test x"$modules" = xdisabled; then
+if test x"$modules" = xno; then
 echo "The _single_ active output module is being statically linked in.
 "
 fi
