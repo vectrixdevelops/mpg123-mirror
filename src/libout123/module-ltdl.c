@@ -25,28 +25,6 @@
 #error This is a build without modules. Why am I here?
 #endif
 
-#if defined(HAVE_DLOPEN) && defined(HAVE_DLSYM) && defined(HAVE_DLCLOSE)
-#  ifdef HAVE_DLFCN_H
-#    include <dlfcn.h>
-#  endif
-#  define DLOPEN(a) dlopen((a), RTLD_NOW)
-#  define DLSYM     dlsym
-#  define DLCLOSE   dlclose
-#else
-#  if defined(HAVE_LOADLIBRARY) \
-   && defined(HAVE_GETPROCADDRESS) \
-   && defined(HAVE_FREELIBRARY)
-#    ifdef HAVE_WINDOWS_H
-#      include <windows.h>
-#    endif
-#    define DLOPEN    LoadLibrary
-#    define DLSYM     GetProcAddress
-#    define DLCLOSE   FreeLibrary
-#  else
-#    error No dynamic loading mechanism available.
-#  endif
-#endif
-
 #define MODULE_SYMBOL_PREFIX 	"mpg123_"
 #define MODULE_SYMBOL_SUFFIX 	"_module_info"
 
@@ -62,6 +40,13 @@ static const char* modulesearch[] =
 	,"../libout123/modules/.libs"
 	,"../libout123/modules"
 };
+
+#ifdef USE_MODULES_UNIX
+
+#include <dlfcn.h>
+#define DLOPEN(a) dlopen((a), RTLD_NOW)
+#define DLSYM     dlsym
+#define DLCLOSE   dlclose
 
 static char *get_the_cwd(int verbose); /* further down... */
 static char *get_module_dir(int verbose, const char* bindir)
@@ -386,4 +371,4 @@ int list_modules( const char *type, char ***names, char ***descr, int verbose
 	return count;
 }
 
-
+#endif /* USE_MODULES_UNIX */

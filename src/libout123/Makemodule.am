@@ -40,7 +40,10 @@ src_libout123_libmodule_la_SOURCES = src/libout123/module.h
  
 if HAVE_MODULES
 
-src_libout123_libmodule_la_SOURCES += src/libout123/module.c
+src_libout123_libmodule_la_SOURCES += \
+  src/libout123/module-ltdl.c \
+  src/libout123/module-unix.c \
+  src/libout123/module-win32.c
 
 else
 
