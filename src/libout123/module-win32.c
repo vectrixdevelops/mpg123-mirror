@@ -41,12 +41,15 @@ static const WWC* modulesearch[] =
 #include <pathcch.h>
 #include <stdlib.h>
 
+/* This variation of combinepath can work with UNC paths, but is not officially exposed in any DLLs,
+ * It also allocates all its buffers internally via LocalAlloc, avoiding buffer overflow problems
+ */
 static HRESULT (*__stdcall mypac)(const wchar_t *in, const wchar_t* more, unsigned long flags, wchar_t **out);
 
 void close_module(mpg123_module_t* module, int verbose) {
   int err = FreeLibrary(module->handle);
   if(!err && verbose > -1)
-    error("Failed to close module.");
+    error1("Failed to close module. GetLastError: %u", GetLastError());
 }
 
 static WWC* getplugdir(const char *root) {
@@ -123,8 +126,7 @@ end:
   return ret;
 }
 
-mpg123_module_t* open_module(const char* type, const char* name, int verbose
-,const char* bindir) {
+mpg123_module_t* open_module(const char* type, const char* name, int verbose, const char* bindir) {
   WWC *plugdir, *dllname;
   char *symbol;
   size_t dllnamelen, symbollen;
@@ -175,10 +177,23 @@ mpg123_module_t* open_module(const char* type, const char* name, int verbose
   }
   snprintf(symbol, symbollen, "%s%s%s", MODULE_SYMBOL_PREFIX, type, MODULE_SYMBOL_SUFFIX);
   ret = (mpg123_module_t*) GetProcAddress(dll, symbol);
+  ret->handle = dll;
 
-  if(verbose)
-    debug1("Found symbol at %p\n", ret);
+  if (!ret) {
+      error2("Cannot load symbol %s, error %u", symbol, GetLastError());
+      close_module(ret, 0);
+      ret = NULL;
+      goto end2;
+  }
 
+  if (MPG123_MODULE_API_VERSION != ret->api_version) {
+    error2( "API version of module does not match (got %i, expected %i).", ret->api_version, MPG123_MODULE_API_VERSION);
+    close_module(ret, 0);
+    ret = NULL;
+    goto end2;
+  }
+
+end2:
   free(symbol);
 end1:
   free(dllname);
@@ -187,14 +202,19 @@ end:
   return ret;
 }
 
-static int list_modulesW(const char *type, char ***names, char ***descr, int verbose, const char* bindir) {
+int list_modules(const char *type, char ***names, char ***descr, int verbose, const char* bindir) {
   size_t sz;
-  wchar_t *plugdir, *plugdirdot, *pattern;
+  wchar_t *plugdir, *plugdirdot, *pattern, *name;
+  char *nameA;
   WIN32_FIND_DATAW d;
   HANDLE ffn;
+  int next, ret;
+  mpg123_module_t* module;
+
+  *names = *descr = NULL;
+  ret = 0;
 
   plugdir = getplugdir(bindir);
-
   if(!plugdir)
     return -1;
 
@@ -206,16 +226,47 @@ static int list_modulesW(const char *type, char ***names, char ***descr, int ver
   plugdirdot = calloc(sz + 1, sizeof(*plugdirdot));
   snwprintf(plugdirdot, sz, L"%ws\\%ws", plugdir, pattern);
   free(pattern);
-  LocalFree(plugdir);
 
   ffn = FindFirstFileW(plugdirdot, &d);
-  if (ffn == INVALID_HANDLE_VALUE)
-    return -2;
+  if (ffn == INVALID_HANDLE_VALUE) {
+    error1("FindFirstFileW failed %u!", GetLastError());
+    goto end;
+  }
+  next = 1;
 
-  while(FindNextFileW(ffn, &d));
+  ret = 0;
+  for (; next; next = FindNextFileW(ffn, &d)) {
+    PathRemoveExtensionW(d.cFileName);
+    name = wcschr(d.cFileName, L'_');
+    if(!name || name[1] == L'\0')
+      continue;
+    name++;
+
+    win32_wide_utf8(name, &nameA, NULL);
+    if(!nameA)
+      continue;
+    module = open_module(type, nameA, verbose, bindir);
+    if(!module) {
+      error1("Unable to load %s!", nameA);
+      free(nameA);
+      continue;
+    }
+
+    if( stringlists_add( names, descr,
+      module->name, module->description, &ret) )
+      if(verbose > -1)
+        error("OOM");
+
+    close_module(module, verbose);
+    free(nameA);
+  }
 
   FindClose(ffn);
-  return 0;
+
+end:
+  LocalFree(plugdir);
+  FindClose(ffn);
+  return ret;
 }
 
 #endif
