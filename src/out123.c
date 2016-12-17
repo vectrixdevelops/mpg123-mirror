@@ -37,6 +37,10 @@
 
 #include "debug.h"
 
+#ifdef HAVE_WINDOWS_H
+#include "win32_support.h"
+#endif
+
 /* be paranoid about setpriority support */
 #ifndef PRIO_PROCESS
 #undef HAVE_SETPRIORITY
