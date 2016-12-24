@@ -914,6 +914,7 @@ out123_drivers(out123_handle *ao, char ***names, char ***descr)
 	if(!ao)
 		return -1;
 
+	tmpnames = tmpdescr = NULL;
 	debug3("out123_drivers(%p, %p, %p)", (void*)ao, (void*)names, (void*)descr);
 	/* Wrap the call to isolate the lower levels from the user not being
 	   interested in both lists. it's a bit wasteful, but the code looks
