@@ -20,8 +20,7 @@
 #define WW(x) L##x
 #define WWC wchar_t
 #else
-#define WW(x) x
-#define WWC char
+#error No windows modules without Unicode.
 #endif
 
 static const WWC* modulesearch[] =
@@ -64,13 +63,6 @@ static WWC* getplugdir(const char *root, int verbose) {
   if(env) {
     isdir = GetFileAttributesW(env);
   }
-#else
-  env = getenv("MPG123_MODDIR");
-  if(verbose > 1)
-    fprintf(stderr, "Trying module directory from environment: %s\n", env);
-  if(env) {
-    isdir = GetFileAttributesA(env);
-  }
 #endif
 
   if(isdir != INVALID_FILE_ATTRIBUTES && isdir & FILE_ATTRIBUTE_DIRECTORY) {
@@ -78,10 +70,6 @@ static WWC* getplugdir(const char *root, int verbose) {
     sz = wcslen(env);
     ret = LocalAlloc(LPTR, (sz + 1) * sizeof(*ret));
     wcsncpy(ret, env, sz);
-#else
-    sz = strlen(env);
-    ret = LocalAlloc(LPTR, (sz + 1) * sizeof(*ret));
-    strncpy(ret, env, sz);
 #endif
    return ret;
   }
@@ -101,16 +89,11 @@ static WWC* getplugdir(const char *root, int verbose) {
     if (pathcch)
       mypac = (void *)GetProcAddress(pathcch, "PathAllocCombine");
   }
-
-#else
-  sz = strlen(root);
 #endif
 
   for(ptr = 0; modulesearch[ptr]; ptr++) {
 #ifdef WANT_WIN32_UNICODE
     szd = wcslen(modulesearch[ptr]);
-#else
-    szd = strlen(modulesearch[ptr]);
 #endif
    if (!mypac) {
       ret = LocalAlloc(LPTR, (sz + szd + 2) * sizeof(*ret));
@@ -137,9 +120,6 @@ static WWC* getplugdir(const char *root, int verbose) {
   }
 
     isdir = GetFileAttributesW(ret);
-#else
-    PathCombineA(ret, root, modulesearch[ptr]);
-    isdir = GetFileAttributesA(ret);
 #endif
     if(isdir != INVALID_FILE_ATTRIBUTES && isdir & FILE_ATTRIBUTE_DIRECTORY)
       break;
@@ -169,8 +149,6 @@ mpg123_module_t* open_module(const char* type, const char* name, int verbose, co
 
 #ifdef WANT_WIN32_UNICODE
   dllnamelen = snwprintf(NULL, 0, L"%s\\%S_%S%S", plugdir, type, name, LT_MODULE_EXT);
-#else
-  dllnamelen = snprintf(NULL, 0, "%s\\%s_%s%s", plugdir, type, name, LT_MODULE_EXT);
 #endif
 
   dllname = calloc(dllnamelen + 1, sizeof(*dllname));
@@ -183,17 +161,11 @@ mpg123_module_t* open_module(const char* type, const char* name, int verbose, co
 #ifdef WANT_WIN32_UNICODE
   snwprintf(dllname, dllnamelen, L"%ws\\%S_%S%S", plugdir, type, name, LT_MODULE_EXT);
   if(verbose) debug1("Trying to load plugin! %S\n", dllname);
-#else
-  snprintf(dllname, dllnamelen, "%s\\%s_%s%s", plugdir, type, name, LT_MODULE_EXT);
-  if(verbose) debug1("Trying to load plugin! %s\n", dllname);
 #endif
 
 #ifdef WANT_WIN32_UNICODE
   dll = LoadLibraryW(dllname);
   if(!dll) debug1("Failed to load plugin! %S\n", dllname);
-#else
-  dll = LoadLibraryA(dllname);
-  if(!dll) debug1("Failed to load plugin! %s\n", dllname);
 #endif
 
   symbollen = strlen( MODULE_SYMBOL_PREFIX ) + strlen( type ) + strlen( MODULE_SYMBOL_SUFFIX ) + 1;
@@ -252,8 +224,6 @@ int list_modules(const char *type, char ***names, char ***descr, int verbose, co
   }
   snwprintf(plugdir, sz, L"%S", tmp);
   LocalFree(tmp);
-#else
-  plugdir = getplugdir(bindir, verbose);
 #endif
 
   if(!plugdir)
