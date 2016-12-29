@@ -40,11 +40,6 @@ static const WWC* modulesearch[] =
 #include <pathcch.h>
 #include <stdlib.h>
 
-/* This variation of combinepath can work with UNC paths, but is not officially exposed in any DLLs,
- * It also allocates all its buffers internally via LocalAlloc, avoiding buffer overflow problems
- */
-static HRESULT (*__stdcall mypac)(const wchar_t *in, const wchar_t* more, unsigned long flags, wchar_t **out);
-
 void close_module(mpg123_module_t* module, int verbose) {
   int err = FreeLibrary(module->handle);
   if(!err && verbose > -1)
@@ -52,6 +47,12 @@ void close_module(mpg123_module_t* module, int verbose) {
 }
 
 static WWC* getplugdir(const char *root, int verbose) {
+  // This variation of combinepath can work with UNC paths, but is not
+  // officially exposed in any DLLs, It also allocates all its buffers
+  // internally via LocalAlloc, avoiding buffer overflow problems.
+  HRESULT (*__stdcall mypac)(const wchar_t *in, const wchar_t* more
+  , unsigned long flags, wchar_t **out) = NULL;
+
   size_t sz, szd, ptr;
   WWC *env, *ret;
   int isdir = 0;
