@@ -213,20 +213,7 @@ int list_modules(const char *type, char ***names, char ***descr, int verbose, co
   int next, ret = 0;
   *names = *descr = NULL;
 
-#ifndef WANT_WIN32_UNICODE
-  char *tmp = getplugdir(bindir, verbose);
-  if(!tmp)
-    return 0;
-  sz = strlen(tmp);
-  plugdir = LocalAlloc(LPTR, (sz + 1) * sizeof(plugdir));
-  if(!plugdir) {
-    LocalFree(tmp);
-    return 0;
-  }
-  snwprintf(plugdir, sz, L"%S", tmp);
-  LocalFree(tmp);
-#endif
-
+  plugdir = getplugdir(bindir, verbose);
   if(!plugdir)
     return 0;
 
