@@ -16,22 +16,19 @@
 #define MODULE_SYMBOL_PREFIX 	"mpg123_"
 #define MODULE_SYMBOL_SUFFIX 	"_module_info"
 
-#ifdef WANT_WIN32_UNICODE
-#define WW(x) L##x
-#define WWC wchar_t
-#else
+#ifndef WANT_WIN32_UNICODE
 #error No windows modules without Unicode.
 #endif
 
-static const WWC* modulesearch[] =
+static const wchar_t* modulesearch[] =
 {
-	WW("..\\lib\\mpg123"),
-	WW("plugins"),
-	WW("libout123\\modules\\.libs"),
-	WW("libout123\\modules"),
-	WW("..\\libout123\\modules\\.libs"),
-	WW("..\\libout123\\modules"),
-	NULL
+	L"..\\lib\\mpg123"
+,	L"plugins"
+,	L"libout123\\modules\\.libs"
+,	L"libout123\\modules"
+,	L"..\\libout123\\modules\\.libs"
+,	L"..\\libout123\\modules"
+,	NULL
 };
 
 #ifdef USE_MODULES_WIN32
@@ -46,7 +43,7 @@ void close_module(mpg123_module_t* module, int verbose) {
     error1("Failed to close module. GetLastError: %u", GetLastError());
 }
 
-static WWC* getplugdir(const char *root, int verbose) {
+static wchar_t* getplugdir(const char *root, int verbose) {
   // This variation of combinepath can work with UNC paths, but is not
   // officially exposed in any DLLs, It also allocates all its buffers
   // internally via LocalAlloc, avoiding buffer overflow problems.
@@ -54,28 +51,23 @@ static WWC* getplugdir(const char *root, int verbose) {
   , unsigned long flags, wchar_t **out) = NULL;
 
   size_t sz, szd, ptr;
-  WWC *env, *ret;
+  wchar_t *env, *ret;
   int isdir = 0;
 
-#ifdef WANT_WIN32_UNICODE
   env = _wgetenv(L"MPG123_MODDIR");
   if(verbose > 1)
     fwprintf(stderr, L"Trying module directory from environment: %s\n", env);
   if(env) {
     isdir = GetFileAttributesW(env);
   }
-#endif
 
   if(isdir != INVALID_FILE_ATTRIBUTES && isdir & FILE_ATTRIBUTE_DIRECTORY) {
-#ifdef WANT_WIN32_UNICODE
     sz = wcslen(env);
     ret = LocalAlloc(LPTR, (sz + 1) * sizeof(*ret));
     wcsncpy(ret, env, sz);
-#endif
    return ret;
   }
 
-#ifdef WANT_WIN32_UNICODE
   wchar_t *rootw;
   wchar_t *unc;
   win32_utf8_wide(root, &rootw, NULL);
@@ -90,19 +82,15 @@ static WWC* getplugdir(const char *root, int verbose) {
     if (pathcch)
       mypac = (void *)GetProcAddress(pathcch, "PathAllocCombine");
   }
-#endif
 
   for(ptr = 0; modulesearch[ptr]; ptr++) {
-#ifdef WANT_WIN32_UNICODE
     szd = wcslen(modulesearch[ptr]);
-#endif
-   if (!mypac) {
+    if (!mypac) {
       ret = LocalAlloc(LPTR, (sz + szd + 2) * sizeof(*ret));
       if (!ret)
         goto end;
     }
 
-#ifdef WANT_WIN32_UNICODE
     if(mypac)
       mypac(rootw, modulesearch[ptr], PATHCCH_ALLOW_LONG_PATHS, &ret);
     else
@@ -121,7 +109,6 @@ static WWC* getplugdir(const char *root, int verbose) {
   }
 
     isdir = GetFileAttributesW(ret);
-#endif
     if(isdir != INVALID_FILE_ATTRIBUTES && isdir & FILE_ATTRIBUTE_DIRECTORY)
       break;
     LocalFree(ret);
@@ -129,14 +116,12 @@ static WWC* getplugdir(const char *root, int verbose) {
   }
 
 end:
-#ifdef WANT_WIN32_UNICODE
   free(rootw);
-#endif
   return ret;
 }
 
 mpg123_module_t* open_module(const char* type, const char* name, int verbose, const char* bindir) {
-  WWC *plugdir, *dllname;
+  wchar_t *plugdir, *dllname;
   char *symbol;
   size_t dllnamelen, symbollen;
   HMODULE dll;
@@ -148,9 +133,7 @@ mpg123_module_t* open_module(const char* type, const char* name, int verbose, co
   if(!plugdir)
     return ret;
 
-#ifdef WANT_WIN32_UNICODE
   dllnamelen = snwprintf(NULL, 0, L"%s\\%S_%S%S", plugdir, type, name, LT_MODULE_EXT);
-#endif
 
   dllname = calloc(dllnamelen + 1, sizeof(*dllname));
   if(!dllname) {
@@ -159,15 +142,11 @@ mpg123_module_t* open_module(const char* type, const char* name, int verbose, co
     goto end;
   }
 
-#ifdef WANT_WIN32_UNICODE
   snwprintf(dllname, dllnamelen, L"%ws\\%S_%S%S", plugdir, type, name, LT_MODULE_EXT);
   if(verbose) debug1("Trying to load plugin! %S\n", dllname);
-#endif
 
-#ifdef WANT_WIN32_UNICODE
   dll = LoadLibraryW(dllname);
   if(!dll) debug1("Failed to load plugin! %S\n", dllname);
-#endif
 
   symbollen = strlen( MODULE_SYMBOL_PREFIX ) + strlen( type ) + strlen( MODULE_SYMBOL_SUFFIX ) + 1;
   symbol = calloc(symbollen + 1, sizeof(*symbol));
