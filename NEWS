@@ -11,6 +11,8 @@
   OS whitelist, anyway.
 - out123: Fix stupid crash with verbose mode and tone generation (print
   the string if the pointer is non-null, not if it is null).
+- Finally provide position-independent code for x86 with assembly optimisations.
+  The textrels are gone thanks to Won Kyu Park.
 
 1.24.0
 ------
