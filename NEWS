@@ -1,5 +1,7 @@
 1.25.1: Hot Fuzz
 -------
+- libmpg123:
+-- Avoid memset(NULL, 0, 0) to calm down the paranoid.
 
 1.25.0: MP3 now patent-free worldwide!
 -------
