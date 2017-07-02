@@ -1,14 +1,16 @@
 /*
 	compat: Some compatibility functions and header inclusions.
-	Basic standard C stuff, that may barely be above/around C89.
+	Basic standard C stuff, that may barely be above/around C89. We are using
+	some C99 features now, like // comments.
 
-	The mpg123 code is determined to keep it's legacy. A legacy of old, old UNIX.
-	It is envisioned to include this compat header instead of any of the "standard" headers, to catch compatibility issues.
+	Generally, the mpg123 code is determined to keep it's legacy. A legacy of
+	old, old UNIX. It is envisioned to include this compat header instead
+	of any of the "standard" headers, to catch compatibility issues.
 	So, don't include stdlib.h or string.h ... include compat.h.
 
-	copyright 2007-8 by the mpg123 project - free software under the terms of the LGPL 2.1
-	see COPYING and AUTHORS files in distribution or http://mpg123.org
-	initially written by Thomas Orgis
+	copyright 2007-17 by the mpg123 project, free software under the terms of
+	the LGPL 2.1, see COPYING and AUTHORS files in distribution or
+	http://mpg123.org, initially written by Thomas Orgis
 */
 
 #ifndef MPG123_COMPAT_H
@@ -16,14 +18,6 @@
 
 #include "config.h"
 #include "intsym.h"
-
-/* For --nagging compilation with -std=c89, we need
-   to disable the inline keyword. */
-#ifdef PLAIN_C89
-#ifndef inline
-#define inline
-#endif
-#endif
 
 #include <errno.h>
 
@@ -120,7 +114,7 @@ char* compat_strdup(const char *s);
 /* If we have the size checks enabled, try to derive some sane printfs.
    Simple start: Use max integer type and format if long is not big enough.
    I am hesitating to use %ll without making sure that it's there... */
-#if !(defined PLAIN_C89) && (defined SIZEOF_OFF_T) && (SIZEOF_OFF_T > SIZEOF_LONG) && (defined PRIiMAX)
+#if (defined SIZEOF_OFF_T) && (SIZEOF_OFF_T > SIZEOF_LONG) && (defined PRIiMAX)
 # define OFF_P PRIiMAX
 typedef intmax_t off_p;
 #else
@@ -128,7 +122,7 @@ typedef intmax_t off_p;
 typedef long off_p;
 #endif
 
-#if !(defined PLAIN_C89) && (defined SIZEOF_SIZE_T) && (SIZEOF_SIZE_T > SIZEOF_LONG) && (defined PRIuMAX)
+#if (defined SIZEOF_SIZE_T) && (SIZEOF_SIZE_T > SIZEOF_LONG) && (defined PRIuMAX)
 # define SIZE_P PRIuMAX
 typedef uintmax_t size_p;
 #else
@@ -136,7 +130,7 @@ typedef uintmax_t size_p;
 typedef unsigned long size_p;
 #endif
 
-#if !(defined PLAIN_C89) && (defined SIZEOF_SSIZE_T) && (SIZEOF_SSIZE_T > SIZEOF_LONG) && (defined PRIiMAX)
+#if (defined SIZEOF_SSIZE_T) && (SIZEOF_SSIZE_T > SIZEOF_LONG) && (defined PRIiMAX)
 # define SSIZE_P PRIuMAX
 typedef intmax_t ssize_p;
 #else

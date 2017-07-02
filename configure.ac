@@ -1238,7 +1238,7 @@ fi
 # gcc specific...
 if test x"$GCC" = xyes; then
 	if test x"$nagging" = xenabled; then
-		ADD_CFLAGS="$ADD_CFLAGS -Wall -Werror -std=c89 -pedantic -DPLAIN_C89"
+		ADD_CFLAGS="$ADD_CFLAGS -Wall -Werror -std=c99 -pedantic"
 	fi
 fi
 

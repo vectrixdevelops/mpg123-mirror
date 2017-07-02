@@ -1,3 +1,9 @@
+1.26.0
+------
+- Generally assume C99 now. We are not using all features, but at
+  least //-style comments, for example. The --enable-nagging build
+  now uses gcc -std=c99 -pedantic.
+
 1.25.0: MP3 now patent-free worldwide!
 -------
 - Silence test for artsc-config if it is not there.
