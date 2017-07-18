@@ -1,6 +1,12 @@
+1.25.3
+------
+- libmpg123:
+-- Better checks for xrpnt overflow in III_dequantize_sample() before each
+   use, avoiding false positives and catching cases that were rendered
+   harmless by alignment-enlarged buffers.
+
 1.25.2
 ------
-
 - libmpg123:
 -- Extend pow tables for layer III to properly handle files with i-stereo and
    5-bit scalefactors. Never observed them for real, just as fuzzed input to
