@@ -8,7 +8,7 @@ dnl Require autoconf version >= 2.57
 AC_PREREQ(2.57)
 
 dnl ############# Initialisation
-AC_INIT([mpg123], [1.25.3], [maintainer@mpg123.org])
+AC_INIT([mpg123], [1.25.4], [maintainer@mpg123.org])
 dnl Increment API_VERSION when the API gets changes (new functions).
 
 dnl libmpg123
@@ -586,7 +586,7 @@ case $host in
   *-*-linux*|*-*-kfreebsd*-gnu)
     cpu_type="generic_fpu"
   ;;
-  i386-apple-darwin10*)
+  i?86-apple-darwin10*)
     AC_MSG_CHECKING([if CPU type supports x86-64])
     case `sysctl -n hw.optional.x86_64` in
       1)
@@ -600,7 +600,7 @@ case $host in
       ;;
     esac
   ;;
-  i386-apple-darwin*)
+  i?86-apple-darwin*)
     cpu_type="x86"
     newoldwritesample=enabled
   ;;
