@@ -64,7 +64,8 @@ struct parameter param = {
   NULL,   /* output device */
   0,      /* destination (headphones, ...) */
 #ifdef HAVE_TERMIOS
-  FALSE , /* term control */
+  FALSE,  /* term control */
+  TRUE,   /* term visuals */
   MPG123_TERM_USR1,
   MPG123_TERM_USR2,
 #endif
@@ -1590,6 +1591,7 @@ static void long_usage(int err)
 	#ifdef HAVE_TERMIOS
 	fprintf(o," -C     --control          enable terminal control keys (else auto detect)\n");
 	fprintf(o,"        --no-control       disable terminal control keys (disable auto detect)\n");
+TERM=dumb\n");
 	fprintf(o,"        --ctrlusr1 <c>     control key (characer) to map to SIGUSR1\n");
 	fprintf(o,"                           (default is for stop/start)\n");
 	fprintf(o,"        --ctrlusr2 <c>     control key (characer) to map to SIGUSR2\n");

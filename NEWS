@@ -1,3 +1,8 @@
+1.25.7
+------
+- mpg123: Do not play with cursor and inverse video for progress bar
+  when TERM=dumb.
+
 1.25.6
 ------
 - Hotfix for bug 255: Overflow reading frame data bits in layer II decoding.
