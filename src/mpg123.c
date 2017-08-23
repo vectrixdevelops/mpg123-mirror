@@ -1591,7 +1591,6 @@ static void long_usage(int err)
 	#ifdef HAVE_TERMIOS
 	fprintf(o," -C     --control          enable terminal control keys (else auto detect)\n");
 	fprintf(o,"        --no-control       disable terminal control keys (disable auto detect)\n");
-TERM=dumb\n");
 	fprintf(o,"        --ctrlusr1 <c>     control key (characer) to map to SIGUSR1\n");
 	fprintf(o,"                           (default is for stop/start)\n");
 	fprintf(o,"        --ctrlusr2 <c>     control key (characer) to map to SIGUSR2\n");
