@@ -1,7 +1,9 @@
 1.26.0
 ------
 - Default build with proper integer rounding (--enable-int-quality) now.
-- mpg123: Print out MPEG header info for each frame for mpg123 -vvvv.
+- mpg123:
+-- Print out MPEG header info for each frame for mpg123 -vvvv.
+-- Added --no-visual to disable cursor/inverse video games explicitly.
 - libout123:
 -- Removed change of effective user ID in the WAV/RAW/AU/CDR writer.
    This was intended as a safeguard to avoid creating files with root
@@ -14,6 +16,31 @@
 - out123: Changed output of --test-encodings to list of encoding names
   instead of raw bitmask value.
 - libout123: Added hex and txt (plain text) printout.
+
+1.25.7
+------
+- mpg123:
+-- Do not play with cursor and inverse video for progress bar
+   when TERM=dumb.
+-- Fix parsing of host port for numerical IPv6 addresses (just did
+   not work before, only for textual host names).
+- libmpg123: Proper fix for the xrpnt overflow problems by correctly
+  initialising certain tables for MPEG 2.x layer III. The checks that
+  catch the resulting overflow are still in place, but likely superfluous
+  now. Note that this means certain valid files would have been misdecoded
+  before, if anyone actually produced them. Thanks to Robert Hegemann for
+  the fix!
+
+1.25.6
+------
+- Hotfix for bug 255: Overflow reading frame data bits in layer II decoding.
+  Now, all-zero data is returned if the frame data is exhausted. This might
+  have a slight impact on performance, but not easily measurable so far.
+
+1.25.5
+------
+- Avoid another buffer read overflow in the ID3 parser on 32 bit platforms
+  (bug 254).
 
 1.25.4
 ------
