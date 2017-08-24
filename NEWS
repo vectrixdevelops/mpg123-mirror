@@ -16,6 +16,9 @@
 - out123: Changed output of --test-encodings to list of encoding names
   instead of raw bitmask value.
 - libout123: Added hex and txt (plain text) printout.
+- libmpg123:
+-- Add special value 0 for all standard rates in mpg123_format() and
+   mpg123_fmt().
 
 1.25.7
 ------

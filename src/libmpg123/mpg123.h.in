@@ -208,6 +208,8 @@ enum mpg123_param_flags
 	 *  the stream is assumed as non-seekable unless overridden.
 	 */
 	,MPG123_FORCE_SEEKABLE = 0x40000 /**< 19th bit: Force the stream to be seekable. */
+	,MPG123_STORE_RAW_ID3  = 0x80000 /**< store raw ID3 data during parsing */
+	,MPG123_STORE_INFO    = 0x100000 /**< store raw Info/VBR frame */
 };
 
 /** choices for MPG123_RVA */
@@ -475,7 +477,8 @@ MPG123_EXPORT int mpg123_format_all(mpg123_handle *mh);
 
 /** Set the audio format support of a mpg123_handle in detail:
  *  \param mh handle
- *  \param rate The sample rate value (in Hertz).
+ *  \param rate The sample rate value (in Hertz). Special value 0 means
+ *              all standard rates (since mpg123 1.26.0).
  *  \param channels A combination of MPG123_STEREO and MPG123_MONO.
  *  \param encodings A combination of accepted encodings for rate and channels, p.ex MPG123_ENC_SIGNED16 | MPG123_ENC_ULAW_8 (or 0 for no support). Please note that some encodings may not be supported in the library build and thus will be ignored here.
  *  \return MPG123_OK on success, MPG123_ERR if there was an error. */
@@ -1253,6 +1256,20 @@ MPG123_EXPORT void mpg123_meta_free(mpg123_handle *mh);
 MPG123_EXPORT int mpg123_id3( mpg123_handle *mh
 ,	mpg123_id3v1 **v1, mpg123_id3v2 **v2 );
 
+#if 0
+/** Return pointers to and size of stored raw ID3 data if storage has
+ *  been configured with MPG123_RAW_ID3. Null value with zero size is
+ *  a possibility!
+ *  */
+MPG123_EXPORT int mpg123_id3_raw( mpg123_handle *mh
+,	unsigned char **v1, size_t *v1_size
+,	unsigned char **v2, size_t *v2_size );
+
+/** Return pointer to and size of 
+MPG123_EXPORT int mpg123_infoframe( mpg123_handle *mh
+,	unsigned char **i_data, size_t *i_size );
+#endif
+
 /** Point icy_meta to existing data structure wich may change on any next read/decode function call.
  *  \param mh handle
  *  \param icy_meta return address for ICY meta string (set to NULL if nothing there)
@@ -1327,7 +1344,8 @@ MPG123_EXPORT int mpg123_fmt_all(mpg123_pars *mp);
 
 /** Set the audio format support of a mpg123_pars in detail:
  * \param mp parameter handle
- * \param rate The sample rate value (in Hertz).
+ * \param rate The sample rate value (in Hertz). Special value 0 means
+ *             all standard rates (since mpg123 1.26.0).
  * \param channels A combination of MPG123_STEREO and MPG123_MONO.
  * \param encodings A combination of accepted encodings for rate and channels,
  *                  p.ex MPG123_ENC_SIGNED16|MPG123_ENC_ULAW_8 (or 0 for no
