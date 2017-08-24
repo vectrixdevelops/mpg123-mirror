@@ -1265,7 +1265,7 @@ MPG123_EXPORT int mpg123_id3_raw( mpg123_handle *mh
 ,	unsigned char **v1, size_t *v1_size
 ,	unsigned char **v2, size_t *v2_size );
 
-/** Return pointer to and size of 
+/** Return pointer to and size of Info frame. */
 MPG123_EXPORT int mpg123_infoframe( mpg123_handle *mh
 ,	unsigned char **i_data, size_t *i_size );
 #endif
