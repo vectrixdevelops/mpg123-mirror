@@ -420,7 +420,7 @@ int attribute_align_arg mpg123_fmt(mpg123_pars *mp, long rate, int channels, int
 	else
 	{
 		r1 = 0;
-		r2 = MPG123_RATES;
+		r2 = MPG123_RATES+1; /* including forced rate */
 	}
 	
 	if(r1 < 0) return MPG123_BAD_RATE;
