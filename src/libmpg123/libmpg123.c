@@ -571,6 +571,7 @@ int decode_update(mpg123_handle *mh)
 	do_rva(mh);
 	debug3("done updating decoder structure with native rate %li and af.rate %li and down_sample %i", frame_freq(mh), mh->af.rate, mh->down_sample);
 
+	mh->decoder_change = 0;
 	return 0;
 }
 
@@ -637,9 +638,9 @@ static int get_next_frame(mpg123_handle *mh)
 			else return MPG123_ERR; /* Some real error. */
 		}
 		/* Now, there should be new data to decode ... and also possibly new stream properties */
-		if(mh->header_change > 1)
+		if(mh->header_change > 1 || mh->decoder_change)
 		{
-			debug("big header change");
+			debug("big header or decoder change");
 			change = 1;
 			mh->header_change = 0;
 			/* Need to update decoder structure right away since frame might need to
@@ -667,7 +668,6 @@ static int get_next_frame(mpg123_handle *mh)
 	   All other situations resulted in returns from the loop. */
 	if(change)
 	{
-		mh->decoder_change = 0;
 		if(mh->fresh)
 		{
 #ifdef GAPLESS
@@ -846,6 +846,8 @@ int attribute_align_arg mpg123_decode_frame(mpg123_handle *mh, off_t *num, unsig
 			if(num != NULL) *num = mh->num;
 			debug("decoding");
 
+			if(mh->decoder_change && decode_update(mh) < 0)
+				return MPG123_ERR;
 			decode_the_frame(mh);
 
 			mh->to_decode = mh->to_ignore = FALSE;
@@ -947,6 +949,11 @@ int attribute_align_arg mpg123_decode(mpg123_handle *mh, const unsigned char *in
 			if(mh->buffer.size - mh->buffer.fill < mh->outblock)
 			{
 				ret = MPG123_NO_SPACE;
+				goto decodeend;
+			}
+			if(mh->decoder_change && decode_update(mh) < 0)
+			{
+				ret = MPG123_ERR;
 				goto decodeend;
 			}
 			decode_the_frame(mh);

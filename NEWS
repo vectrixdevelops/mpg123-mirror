@@ -19,6 +19,8 @@
 - libmpg123:
 -- Add special value 0 for all standard rates in mpg123_format() and
    mpg123_fmt().
+-- Fix changing of decoder (and output format along with that) after stream
+   opening. This was never recommened and only now should work at all.
 
 1.25.7
 ------
