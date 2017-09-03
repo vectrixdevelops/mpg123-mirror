@@ -832,18 +832,21 @@ int attribute_align_arg mpg123_decode_frame(mpg123_handle *mh, off_t *num, unsig
 	if(mh == NULL) return MPG123_BAD_HANDLE;
 	if(mh->buffer.size < mh->outblock) return MPG123_NO_SPACE;
 	mh->buffer.fill = 0; /* always start fresh */
+	/* Be nice: Set these also for sensible values in case of error. */
+	if(audio) *audio = NULL;
+	if(bytes) *bytes = 0;
 	while(TRUE)
 	{
 		/* decode if possible */
 		if(mh->to_decode)
 		{
+			if(num != NULL) *num = mh->num;
 			if(mh->new_format)
 			{
 				debug("notifiying new format");
 				mh->new_format = 0;
 				return MPG123_NEW_FORMAT;
 			}
-			if(num != NULL) *num = mh->num;
 			debug("decoding");
 
 			if(mh->decoder_change && decode_update(mh) < 0)

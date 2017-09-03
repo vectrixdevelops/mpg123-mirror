@@ -21,6 +21,8 @@
    mpg123_fmt().
 -- Fix changing of decoder (and output format along with that) after stream
    opening. This was never recommened and only now should work at all.
+-- Also mpg123_decode_frame() now sets return buffer to NULL and returned byte
+   count to zero in case of MPG123_NEED_MORE (or any other early abort).
 
 1.25.7
 ------
