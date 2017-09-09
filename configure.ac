@@ -405,6 +405,19 @@ if test "x$feeder" = "xdisabled"; then
   AC_DEFINE(NO_FEEDER, 1, [ Define to disable feeder and buffered readers. ])
 fi
 
+moreinfo=enabled
+AC_ARG_ENABLE(moreinfo,
+              [  --disable-moreinfo=[no/yes] no extra information for frame analyzers ],
+              [
+                if test "x$enableval" = xno; then
+                  moreinfo="disabled"
+                fi
+              ], [])
+
+if test "x$moreinfo" = "xdisabled"; then
+  AC_DEFINE(NO_MOREINFO, 1, [ Define to disable analyzer info. ])
+fi
+
 messages=enabled
 AC_ARG_ENABLE(messages,
               [  --disable-messages=[no/yes] no error/warning messages on the console ],

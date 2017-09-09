@@ -14,6 +14,7 @@
 /* Want accurate rounding function regardless of decoder setup. */
 #define FORCE_ACCURATE
 #include "sample.h"
+#include "parse.h"
 
 #define SEEKFRAME(mh) ((mh)->ignoreframe < 0 ? 0 : (mh)->ignoreframe)
 
@@ -49,6 +50,7 @@ int attribute_align_arg mpg123_init(void)
 void attribute_align_arg mpg123_exit(void)
 {
 	/* nothing yet, but something later perhaps */
+	/* Nope. This is dead space. */
 }
 
 /* create a new handle with specified decoder, decoder can be "", "auto" or NULL for auto-detection */
@@ -384,6 +386,15 @@ int attribute_align_arg mpg123_getstate(mpg123_handle *mh, enum mpg123_state key
 			theval = mh->state_flags & FRAME_FRESH_DECODER;
 			mh->state_flags &= ~FRAME_FRESH_DECODER;
 		break;
+		case MPG123_ENC_DELAY:
+			theval = mh->enc_delay;
+		break;
+		case MPG123_ENC_PADDING:
+			theval = mh->enc_padding;
+		break;
+		case MPG123_DEC_DELAY:
+			theval = mh->lay == 3 ? GAPLESS_DELAY : -1;
+		break;
 		default:
 			mh->err = MPG123_BAD_KEY;
 			ret = MPG123_ERR;
@@ -394,6 +405,7 @@ int attribute_align_arg mpg123_getstate(mpg123_handle *mh, enum mpg123_state key
 
 	return ret;
 }
+
 int attribute_align_arg mpg123_eq(mpg123_handle *mh, enum mpg123_channels channel, int band, double val)
 {
 #ifndef NO_EQUALIZER
@@ -1469,6 +1481,23 @@ int attribute_align_arg mpg123_id3(mpg123_handle *mh, mpg123_id3v1 **v1, mpg123_
 		mh->metaflags |= MPG123_ID3;
 		mh->metaflags &= ~MPG123_NEW_ID3;
 	}
+	return MPG123_OK;
+}
+
+int attribute_align_arg mpg123_id3_raw( mpg123_handle *mh
+,	unsigned char **v1, size_t *v1_size
+,	unsigned char **v2, size_t *v2_size )
+{
+	if(!mh)
+		return MPG123_ERR;
+	if(v1 != NULL)
+		*v1 = mh->id3buf[0] ? mh->id3buf : NULL;
+	if(v1_size != NULL)
+		*v1_size = mh->id3buf[0] ? 128 : 0;
+	if(v2 != NULL)
+		*v2 = mh->id3v2_raw;
+	if(v2_size != NULL)
+		*v2_size = mh->id3v2_size;
 	return MPG123_OK;
 }
 
